@@ -938,7 +938,7 @@ Build these only if a test or decision calls for one. Each has the same no-keys 
 
 - **Input:** `ToolChat` gains a streaming send that yields sentences.
 - **Output:** `run_turn` takes an `on_sentence` callback that calls `voice.say` per sentence, and the word cap applies across them.
-- **Watch out for:** tool-call parts must still be collected whole, with signatures, and a barge-in must cancel the rest.
+- **Watch out for:** tool-call parts must still be collected whole, with signatures. A barge-in must cancel the rest, except in a turn that has started a slow tool: its sentences wait for silence instead, like its single reply does now.
 
 ### Cartesia backup
 

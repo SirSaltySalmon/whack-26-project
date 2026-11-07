@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (on-demand vision, pointing, deep reasoning). Claude Haiku 5.5 (paid): continuous screen reports |
+| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, deep reasoning). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it |
 | Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
@@ -159,7 +159,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 
 **Wired, not yet run live**
 - [ ] Player turns use tools: look closer, point, wiki, note a question, think hard
-- [ ] Director runs speech in its own slot, cancels on barge-in and has a question budget
+- [ ] Director runs speech in its own slot, cancels on barge-in unless a slow tool is running, and has a question budget
 - [ ] Overlay shows subtitles, memory toasts, questions and settings
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
