@@ -86,9 +86,21 @@ Trust rules are in [CLAUDE.md](../CLAUDE.md#rules-that-must-hold). The reasoning
 
 ## Wiki research
 
-The research client takes any MediaWiki `api.php` base URL, so it isn't tied to Fandom. Finding a game's wiki from its title is still an open problem, because research turned up no documented Fandom lookup.
+The research client takes any MediaWiki `api.php` base URL, so it isn't tied to Fandom. `brain/research/discovery.py` finds the wiki from the game title in this order:
 
-A sensible order is to try known wiki hosts (wiki.gg, then Fandom), then fall back to Exa. For Terraria, `https://terraria.wiki.gg/api.php?action=parse&page=Eye_of_Cthulhu&prop=sections&format=json` returned valid JSON on 2026-11-07.
+1. A configured override URL.
+2. `<slug>.wiki.gg`, then `<slug>.wiki`.
+3. Exa, if a key is set. The `api.php` is read from the result page's standard `EditURI` link.
+4. `<slug>.fandom.com`, last, because Fandom often hosts unofficial forks.
+
+A candidate counts only if it returns real siteinfo JSON whose name matches the game. Unknown wiki.gg subdomains return a 401 HTML page.
+
+Checked live on 2026-11-07:
+
+- Terraria resolves to terraria.wiki.gg, Minecraft to minecraft.wiki, and Hollow Knight to Fandom.
+- Stardew Valley's official wiki is stardewvalleywiki.com, so without Exa it falls back to Fandom.
+
+Lookups fetch only section 0 (`action=parse&section=0`), which is the intro plus the infobox. Exact titles go straight to the page; anything else goes through wiki search with question filler removed. `sanitize.py` turns the HTML into plain text: it reads both `th`/`td` infoboxes and Fandom portable infoboxes. Sanitized cards are cached in the `wiki_cache` SQLite table. Try it with `python -m scripts.wiki_lookup Terraria "Eye of Cthulhu"`.
 
 Fandom's limits are undocumented and at least one third-party source calls its API inconsistent, so cache pages and send one request at a time.
 
