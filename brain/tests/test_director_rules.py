@@ -1,4 +1,4 @@
-from brain.director.rules import AskTalker, DirectorState, Say, decide
+from brain.director.rules import AskTalker, DirectorState, ReactToEvent, Say, decide
 from brain.events import GameEvent, OverlayConnected, PlayerSpeech
 
 
@@ -15,6 +15,13 @@ def test_player_speech_is_answered_even_when_not_proactive() -> None:
 
 def test_game_events_stay_quiet_when_not_proactive() -> None:
     assert decide(GameEvent("death", ts=1.0), DirectorState(), False) == []
+
+
+def test_game_events_go_to_the_talker_with_their_details() -> None:
+    event = GameEvent("danger_started", {"level": "high"}, ts=1.0)
+    assert decide(event, DirectorState(), True) == [
+        ReactToEvent("danger_started", {"level": "high"})
+    ]
 
 
 def test_barks_respect_the_cooldown() -> None:

@@ -2,13 +2,16 @@
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import FrameSource, default_live_source
+from brain.capture.window import GameWindow
 from brain.config import WS_HOST, Settings
 from brain.director.director import Director
 from brain.events import EventBus
@@ -18,6 +21,8 @@ from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
+from brain.perception.observer import Observer
+from brain.perception.tracker import ObservationTracker
 from brain.replay.source import ReplayFrameSource
 from brain.server import OverlayLink, create_app
 from brain.voice.pipeline import create_voice
@@ -32,6 +37,34 @@ def _talker(settings: Settings) -> TextLLM | None:
     except LLMUnavailableError as exc:
         log.warning("Talker disabled: %s", exc)
         return None
+
+
+def _observer(
+    settings: Settings, buffer: RingBuffer, link: OverlayLink, bus: EventBus
+) -> Observer | None:
+    try:
+        vision = LLMFactory(settings).observer()
+    except LLMUnavailableError as exc:
+        log.warning("Not watching the screen: %s", exc)
+        return None
+    return Observer(
+        buffer,
+        link,
+        vision,
+        bus,
+        ObservationTracker(),
+        settings.observer_interval_s,
+        settings.ai_image_max_edge_px,
+        settings.mask_padding_px,
+    )
+
+
+async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
+    """Keeps a failure in an optional part, such as no audio device, from ending the brain."""
+    try:
+        await work
+    except Exception:
+        log.exception("%s stopped; carrying on without it", name)
 
 
 async def run(settings: Settings, replay_dir: Path | None = None) -> None:
@@ -54,7 +87,21 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
     await memory.start()
     link.settings = await memory.load_settings(OverlaySettings)
 
+    source: FrameSource = ReplayFrameSource(replay_dir) if replay_dir else default_live_source()
+    buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
+    window = None if replay_dir else GameWindow(settings.game_process)
+    capture = CaptureLoop(source, buffer, link, settings.capture_fps, window)
+    # Replays are tests and fallbacks, so they never spend money on vision.
+    observer = None if replay_dir else _observer(settings, buffer, link, bus)
+
     voice = create_voice(settings, bus, link)
+
+    async def talker_context(query: str) -> str:
+        # What the partner hears and sees now, on top of what memory knows. Mood goes first
+        # because it's short and memory cuts this to a fixed length.
+        live = {**voice.live_state(), **(observer.live_state() if observer else {})}
+        return await memory.context(live, query)
+
     director = Director(
         bus,
         voice,
@@ -62,11 +109,9 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
         talker=_talker(settings),
         personality=lambda: link.settings.personality,
         max_words=settings.talker_max_words,
+        context=talker_context,
+        on_spoken=memory.record_partner_turn,
     )
-
-    source: FrameSource = ReplayFrameSource(replay_dir) if replay_dir else default_live_source()
-    capacity = settings.capture_fps * settings.ring_buffer_seconds
-    capture = CaptureLoop(source, RingBuffer(capacity), link, settings.capture_fps)
 
     config = uvicorn.Config(
         create_app(link), host=WS_HOST, port=settings.brain_port, log_level="warning"
@@ -79,7 +124,9 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
             tasks.create_task(server.serve())
             tasks.create_task(director.run())
             tasks.create_task(capture.run())
-            tasks.create_task(voice.run())
+            tasks.create_task(_survive("Voice", voice.run()))
+            if observer:
+                tasks.create_task(_survive("Observer", observer.run()))
             tasks.create_task(memory.run())
     finally:
         database.close()

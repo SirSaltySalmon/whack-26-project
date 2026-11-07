@@ -21,6 +21,8 @@ class Voice(Protocol):
 
     async def run(self) -> None: ...
 
+    def live_state(self) -> dict[str, str]: ...
+
 
 class SubtitleOnlyVoice:
     def __init__(self, link: OverlayLink) -> None:
@@ -35,22 +37,23 @@ class SubtitleOnlyVoice:
     async def run(self) -> None:
         return
 
+    def live_state(self) -> dict[str, str]:
+        return {}
+
 
 def create_voice(settings: Settings, bus: EventBus, link: OverlayLink) -> Voice:
-    missing = [
-        name
-        for name, value in (
-            ("DEEPGRAM_API_KEY", settings.deepgram_api_key),
-            ("ELEVENLABS_API_KEY", settings.elevenlabs_api_key),
-            ("ELEVENLABS_VOICE_ID", settings.elevenlabs_voice_id),
-        )
-        if value is None
-    ]
-    if missing:
-        log.warning("Voice is subtitles only; set %s for speech", ", ".join(missing))
+    if settings.deepgram_api_key is None:
+        log.warning("Not listening or speaking: set DEEPGRAM_API_KEY to hear the player")
         return SubtitleOnlyVoice(link)
+    if settings.elevenlabs_api_key is None or settings.elevenlabs_voice_id is None:
+        log.warning("Listening, but replying in subtitles: set the ElevenLabs keys for speech")
 
-    # Imported here so tests and key-less runs don't need PyAudio or the Pipecat services.
-    from brain.voice.pipecat_voice import PipecatVoice
+    try:
+        # Imported here so tests and key-less runs don't need PyAudio or the Pipecat services.
+        from brain.voice.pipecat_voice import PipecatVoice
 
-    return PipecatVoice(settings, bus, link)
+        return PipecatVoice(settings, bus, link)
+    except Exception:
+        # A missing audio device shouldn't stop the partner from watching the game.
+        log.exception("Voice failed to start; falling back to subtitles")
+        return SubtitleOnlyVoice(link)

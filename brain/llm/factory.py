@@ -4,6 +4,7 @@ from google.genai import types
 
 from brain.config import Settings
 from brain.llm.base import LLMUnavailableError, RateLimiter
+from brain.llm.claude import ClaudeClient
 from brain.llm.gemini import GeminiClient
 
 DEFAULT_RPM = 5
@@ -34,6 +35,13 @@ class LLMFactory:
 
     def vision(self) -> GeminiClient:
         return self._build(self._settings.vision_model, types.ThinkingLevel.LOW)
+
+    def observer(self) -> ClaudeClient:
+        model = self._settings.observer_model
+        key = self._settings.anthropic_api_key
+        if key is None:
+            raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
+        return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
 
     def deep(self) -> GeminiClient:
         return self._build(self._settings.deep_model, types.ThinkingLevel.HIGH)

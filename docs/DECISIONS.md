@@ -2,6 +2,35 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: Haiku watches the screen continuously, and only agreeing frames count
+
+**Status:** accepted by Track 2's owner, for the team to review. Replaces "call vision only on a trigger" for screen awareness. Applies to `brain/perception/`, `brain/llm/` and the director.
+
+The partner needs to stay aware of what's on screen and notice anything important, in any game. Waiting for a trigger can't do that, because something has to notice the trigger first.
+
+**Model.** Claude Haiku 5.5 reports on the newest frame every 0.8 s, using 1280-wide images and structured output. We compared it with Moondream 3.1 on 30 screenshots from five games. Haiku noticed all 14 fights and read all 10 health values. Moondream, even with focused prompts and crops, noticed 4 fights and read no health values, while needing five calls per frame. It costs about $1.85 an hour, and only runs with `ANTHROPIC_API_KEY` set and the game in front. Gemini's free tier can't sustain the request rate.
+
+**Confirmation.** The model hallucinates, so a report only counts once consecutive frames agree (`brain/perception/tracker.py`). We asked about 12 tricky frames five times each:
+
+| | Fight frames | Calm frames |
+|---|---|---|
+| Single read at medium or high danger | 20 of 20 | 3 of 40 |
+| Two reads in a row at medium or high | 80 of 80 | 2 of 160 |
+
+So it removes flicker without missing fights. It doesn't remove stubborn mistakes: one frame gave a friendly NPC as a "Blue Slime" threat in 5 of 5 reads, and a Hades coin counter was probably read as "23 / 100" health in 5 of 5. Confirmed therefore means stable, not true:
+
+- Only medium or high danger raises an event. Low danger stays quiet.
+- Threat names must match between frames before they're used.
+- Danger clears after three calm frames, so a brief lull doesn't end a fight and restart it.
+- The talker is told its eyes can be wrong. Reports stay in RAM as live state and don't become stored facts.
+
+**Effect on tracks.**
+- **Track 2:** the observer is the source of live state until compiled readers exist. Readers remain the path to reactions under a second, because a confirmed report is about 2.4 s old.
+- **Track 3:** confirmed changes arrive as `GameEvent`s named `danger_started`, `danger_high`, `danger_ended`, `health_low` and `player_died`. The director now sends them to the talker with the live context, rather than speaking a placeholder. Pre-generated barks can replace that where they fit.
+- **Track 4:** those events reach session notes as usual. The live-state character cap went from 200 to 340, since sight and mood both land there.
+
+**Voice additions.** Flux has no sentiment, so `brain/voice/sentiment.py` scores the live transcript with VADER and adds loudness and speech rate. It's a rough signal that colours replies and decides nothing. The voice also publishes partial transcripts, listens without ElevenLabs keys, and can't take the brain down if it fails to start.
+
 ## 2026-11-07: Replay runs start from a fixed memory snapshot
 
 **Status:** accepted. Applies to `brain/memory/` and `brain/app.py`.

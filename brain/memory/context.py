@@ -41,7 +41,8 @@ class ContextLimits:
 
     total_chars: int = 1200
     game_chars: int = 300
-    now_chars: int = 200
+    # Sight and mood both land here, and a voice reply often depends on them.
+    now_chars: int = 340
     session_chars: int = 320
     last_session_chars: int = 200
     player_chars: int = 400
