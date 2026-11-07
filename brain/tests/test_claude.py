@@ -1,0 +1,59 @@
+from types import SimpleNamespace
+
+import pytest
+from pydantic import BaseModel
+
+from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, RateLimiter
+from brain.llm.claude import ClaudeClient
+
+
+class Answer(BaseModel):
+    value: str
+
+
+class FakeMessages:
+    def __init__(self, text: str | None, stop_reason: str = "end_turn") -> None:
+        self.text = text
+        self.stop_reason = stop_reason
+        self.kwargs: dict[str, object] = {}
+
+    async def create(self, **kwargs: object) -> SimpleNamespace:
+        self.kwargs = kwargs
+        content = [] if self.text is None else [SimpleNamespace(type="text", text=self.text)]
+        return SimpleNamespace(content=content, stop_reason=self.stop_reason)
+
+
+def client(messages: FakeMessages, limit: int = 5) -> ClaudeClient:
+    built = ClaudeClient("test-model", "test-key", RateLimiter(limit))
+    built._client = SimpleNamespace(messages=messages)  # type: ignore[assignment]
+    return built
+
+
+async def ask(built: ClaudeClient) -> Answer:
+    return await built.vision_json("Look.", b"image", "image/jpeg", Answer, 100)
+
+
+async def test_returns_the_parsed_schema_and_asks_for_structured_output() -> None:
+    messages = FakeMessages('{"value": "seen"}')
+    assert (await ask(client(messages))).value == "seen"
+    assert messages.kwargs["model"] == "test-model"
+    assert messages.kwargs["system"] == "Look."
+    assert messages.kwargs["output_config"]["format"]["type"] == "json_schema"  # type: ignore[index]
+
+
+async def test_refuses_over_the_local_limit_without_calling_out() -> None:
+    messages = FakeMessages('{"value": "seen"}')
+    with pytest.raises(LLMUnavailableError):
+        await ask(client(messages, limit=0))
+    assert messages.kwargs == {}
+
+
+@pytest.mark.parametrize("stop_reason", ["refusal", "max_tokens"])
+async def test_incomplete_replies_are_errors(stop_reason: str) -> None:
+    with pytest.raises(LLMEmptyResponseError):
+        await ask(client(FakeMessages('{"value": "s', stop_reason)))
+
+
+async def test_no_text_is_an_error() -> None:
+    with pytest.raises(LLMEmptyResponseError):
+        await ask(client(FakeMessages(None)))

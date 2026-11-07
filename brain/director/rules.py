@@ -3,7 +3,8 @@
 TODO(track 3): add priorities, speech budgets and the question budget.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from brain.events import Event, GameEvent, OverlayConnected, PlayerSpeech
 
@@ -22,7 +23,15 @@ class AskTalker:
     transcript: str
 
 
-Action = Say | AskTalker
+@dataclass(frozen=True)
+class ReactToEvent:
+    """Have the fast LLM comment on something seen in the game."""
+
+    name: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+Action = Say | AskTalker | ReactToEvent
 
 
 @dataclass
@@ -48,7 +57,7 @@ def decide(event: Event, state: DirectorState, proactive: bool) -> list[Action]:
             if cooling:
                 return []
             state.last_bark_at = event.ts
-            # TODO(track 3): choose from the personality's pre-generated barks.
-            return [Say(f"Saw {event.name}.")]
+            # TODO(track 3): use the personality's pre-generated barks where they fit.
+            return [ReactToEvent(event.name, event.data)]
         case _:
             return []

@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 log = logging.getLogger(__name__)
 
 
@@ -33,6 +35,22 @@ class PlayerSpeech(Event):
 
 
 @dataclass(frozen=True)
+class PlayerSpeechPartial(Event):
+    """The turn so far, while the player is still talking. It can change until PlayerSpeech."""
+
+    transcript: str
+
+
+@dataclass(frozen=True)
+class PlayerMood(Event):
+    """A rough read of the player's mood from their words and voice."""
+
+    label: str
+    valence: float
+    intensity: float
+
+
+@dataclass(frozen=True)
 class PlayerStartedSpeaking(Event):
     """Barge-in signal from Deepgram Flux's StartOfTurn."""
 
@@ -43,9 +61,25 @@ class CardClosedByPlayer(Event):
 
 
 @dataclass(frozen=True)
+class CardPageChanged(Event):
+    """The wiki window's page changed. The URL and title are untrusted website data."""
+
+    card_id: str
+    url: str
+    title: str | None = None
+
+
+@dataclass(frozen=True)
 class QuestionAnswered(Event):
     question_id: str
     answer: str
+
+
+@dataclass(frozen=True)
+class SettingsChanged(Event):
+    """The player changed a setting. Typed loosely so this module stays free of the protocol."""
+
+    settings: BaseModel
 
 
 class EventBus:

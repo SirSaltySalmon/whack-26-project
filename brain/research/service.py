@@ -7,21 +7,25 @@ means no card, never a stalled loop. Results are tentative reference data, not m
 import asyncio
 import logging
 import re
-import sqlite3
 import uuid
 from collections.abc import Iterable
 
 import httpx
 
-from brain.research.cache import WikiCache, query_key
 from brain.research.discovery import WikiSite, discover_wiki
 from brain.research.mediawiki import MediaWikiClient
 from brain.research.models import WikiCard
 from brain.research.sanitize import clean_text, parse_article, truncate_sentences
 from brain.research.websearch import WebSearch
+from brain.research.wiki_cache import WikiCache
 from shared.protocol.messages import CardShow
 
 log = logging.getLogger(__name__)
+
+
+def query_key(query: str) -> str:
+    return " ".join(query.replace("_", " ").casefold().split())
+
 
 MAX_STATS = 6
 MAX_STAT_CHARS = 80
@@ -89,19 +93,19 @@ class WikiResearch:
     def __init__(
         self,
         site: WikiSite,
-        conn: sqlite3.Connection | None = None,
+        cache: WikiCache | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.site = site
-        self._client = MediaWikiClient(site.api_url, transport)
-        self._cache = WikiCache(conn) if conn is not None else None
+        # The page cache persists raw pages; cards are cheap to rebuild from them.
+        self._client = MediaWikiClient(site.api_url, transport, cache)
         self._memo: dict[str, WikiCard | None] = {}  # Includes misses, so we don't re-ask.
 
     @classmethod
     async def for_game(
         cls,
         game_title: str,
-        conn: sqlite3.Connection | None = None,
+        cache: WikiCache | None = None,
         *,
         override_api_url: str | None = None,
         web_search: WebSearch | None = None,
@@ -113,7 +117,7 @@ class WikiResearch:
             web_search=web_search,
             transport=transport,
         )
-        return cls(site, conn, transport) if site else None
+        return cls(site, cache, transport) if site else None
 
     async def lookup(self, query: str) -> WikiCard | None:
         key = query_key(query)
@@ -121,9 +125,6 @@ class WikiResearch:
             return None
         if key in self._memo:
             return self._memo[key]
-        if self._cache is not None and (cached := self._cache.get(self.site.api_url, query)):
-            self._memo[key] = cached
-            return cached
         try:
             card = await self._fetch(query)
         except (httpx.HTTPError, LookupError, KeyError, TypeError, ValueError):
@@ -131,8 +132,6 @@ class WikiResearch:
             log.exception("Wiki lookup failed for %r on %s", query, self.site.api_url)
             return None
         self._memo[key] = card
-        if card is not None and self._cache is not None:
-            self._cache.put(self.site.api_url, query, card)
         return card
 
     async def _fetch(self, query: str) -> WikiCard | None:

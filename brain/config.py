@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     deepgram_api_key: SecretStr | None = None
     elevenlabs_api_key: SecretStr | None = None
     exa_api_key: SecretStr | None = None
@@ -22,20 +23,56 @@ class Settings(BaseSettings):
     talker_model: str = "gemini-3.5-flash-lite"
     vision_model: str = "gemini-3.6-flash"
     deep_model: str = "gemini-3.6-flash"
+    # Reports on what is on screen. Paid, so it only runs with ANTHROPIC_API_KEY set.
+    observer_model: str = "claude-haiku-5-5"
+    observer_interval_s: float = 0.8
 
     # Requests per minute we allow ourselves, per model. These are cautious placeholders: Google
     # doesn't publish free-tier numbers, so set them from your project's AI Studio rate limit page.
     rpm_by_model: dict[str, int] = Field(
-        default_factory=lambda: {"gemini-3.5-flash-lite": 10, "gemini-3.6-flash": 6}
+        default_factory=lambda: {
+            "gemini-3.5-flash-lite": 10,
+            "gemini-3.6-flash": 6,
+            # One frame per 0.8 s is 75 a minute. This is our own spending cap, not a quota.
+            "claude-haiku-5-5": 90,
+        }
     )
 
     tts_model: str = "eleven_flash_v2_5"
+    elevenlabs_voice_id: str | None = None
     talker_max_words: int = 12
 
+    stt_model: str = "flux-general-en"
+    # Flux's defaults are 0.7 and 5000 ms. A shorter timeout keeps a trailing "um" from holding
+    # the turn open for five seconds.
+    stt_eot_threshold: float = 0.7
+    stt_eot_timeout_ms: int = 3000
+    # Words to boost in transcription, such as boss and item names.
+    stt_keyterms: list[str] = Field(default_factory=list)
+    # For playing without headphones: mute the mic while the partner talks so it can't hear and
+    # interrupt itself. Costs barge-in. The tail covers speaker latency and room echo.
+    voice_half_duplex: bool = False
+    voice_echo_tail_ms: int = 400
+    # PyAudio device indices; None uses the system default.
+    mic_device_index: int | None = None
+    speaker_device_index: int | None = None
+
+    # The game's process name, such as Terraria. Live capture stays off until this is set, because
+    # capturing without a window to crop to would send the whole desktop onward.
+    game_process: str = ""
     capture_fps: int = 5
     ring_buffer_seconds: int = 10
     ai_image_max_edge_px: int = 1280
     mask_padding_px: int = 8
 
+    # Names what memory is filed under. It's data, so the brain has no game-specific logic.
+    game_title: str = "Unknown game"
+
     db_path: Path = Path("data/brain.sqlite3")
     sessions_dir: Path = Path("sessions")
+    # One-way export for reading. SQLite stays the source of truth.
+    vault_dir: Path = Path("data/vault")
+    replay_snapshot: Path = Path("fixtures/replay_memory.sql")
+
+    note_interval_s: float = 300.0
+    note_min_new_events: int = 5

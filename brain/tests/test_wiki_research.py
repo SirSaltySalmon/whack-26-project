@@ -1,12 +1,13 @@
 import logging
-import sqlite3
 
 import httpx
 import pytest
 
+from brain.memory.db import Database, connect
 from brain.research.discovery import WikiSite
 from brain.research.mediawiki import SiteInfo
 from brain.research.service import WikiResearch, best_title, card_message, search_terms
+from brain.research.wiki_cache import WikiCache
 
 SITE = WikiSite("https://wiki.test/api.php", SiteInfo("Test Wiki", "https://wiki.test", "/wiki/$1"))
 PAGE_HTML = (
@@ -48,18 +49,20 @@ async def test_lookup_builds_card_and_falls_back_to_search() -> None:
     await research.aclose()
 
 
-async def test_sqlite_cache_survives_restart() -> None:
-    conn = sqlite3.connect(":memory:")
+async def test_page_cache_survives_restart() -> None:
+    database = Database(connect(":memory:"))
     calls: list[dict[str, str]] = []
-    first = WikiResearch(SITE, conn, httpx.MockTransport(wiki_handler(calls)))
+    first = WikiResearch(SITE, WikiCache(database), httpx.MockTransport(wiki_handler(calls)))
     assert await first.lookup("Eye") is not None
     await first.aclose()
     made = len(calls)
 
-    second = WikiResearch(SITE, conn, httpx.MockTransport(wiki_handler(calls)))
-    assert (await second.lookup("eye")) is not None
+    second = WikiResearch(SITE, WikiCache(database), httpx.MockTransport(wiki_handler(calls)))
+    card = await second.lookup("Eye")
+    assert card is not None and card.stats == [("Max Life", "2800")]
     assert len(calls) == made
     await second.aclose()
+    database.close()
 
 
 async def test_misses_are_remembered_and_failures_degrade(caplog: pytest.LogCaptureFixture) -> None:

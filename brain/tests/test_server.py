@@ -1,10 +1,11 @@
 import json
+from unittest.mock import ANY
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from brain.events import EventBus, OverlayConnected
+from brain.events import CardPageChanged, EventBus, OverlayConnected
 from brain.server import OverlayLink, create_app
 from shared.protocol import PROTOCOL_VERSION
 
@@ -46,6 +47,19 @@ def test_rects_are_stored_and_invalid_messages_do_not_disconnect() -> None:
         socket.send_text(ready())
         socket.receive_json()
         assert link.rects[0].width == 3
+
+
+def test_page_changes_reach_the_bus() -> None:
+    client, _, bus = make()
+    events = bus.subscribe()
+    page = {"type": "card.navigated", "card_id": "wiki", "url": "https://a.example/", "title": "A"}
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(json.dumps(page))
+        socket.send_text(ready())
+        socket.receive_json()
+    assert events.get_nowait() == CardPageChanged(
+        card_id="wiki", url="https://a.example/", title="A", ts=ANY
+    )
 
 
 def test_websites_are_refused() -> None:

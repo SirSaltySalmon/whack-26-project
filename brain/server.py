@@ -6,10 +6,18 @@ import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
-from brain.events import CardClosedByPlayer, EventBus, OverlayConnected, QuestionAnswered
+from brain.events import (
+    CardClosedByPlayer,
+    CardPageChanged,
+    EventBus,
+    OverlayConnected,
+    QuestionAnswered,
+    SettingsChanged,
+)
 from shared.protocol import PROTOCOL_VERSION, BrainMessage, OverlayMessageAdapter
 from shared.protocol.messages import (
     CardClosed,
+    CardNavigated,
     OverlayReady,
     OverlayRects,
     QuestionAnswer,
@@ -79,6 +87,10 @@ class OverlayLink:
                 self.rects = tuple(item.rect for item in message.rects)
             case CardClosed():
                 self._bus.publish(CardClosedByPlayer(card_id=message.card_id))
+            case CardNavigated():
+                self._bus.publish(
+                    CardPageChanged(card_id=message.card_id, url=message.url, title=message.title)
+                )
             case QuestionAnswer():
                 self._bus.publish(
                     QuestionAnswered(question_id=message.question_id, answer=message.answer)
@@ -86,6 +98,7 @@ class OverlayLink:
             case SettingsUpdate():
                 self.settings = message.settings
                 await self.send(SettingsState(settings=self.settings))
+                self._bus.publish(SettingsChanged(settings=message.settings))
 
 
 def create_app(link: OverlayLink) -> FastAPI:
