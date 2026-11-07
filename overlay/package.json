@@ -2,6 +2,16 @@
   "name": "overlay",
   "version": "0.1.0",
   "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "format": "prettier --write .",
+    "gen:protocol": "python ../scripts/gen_protocol.py && json2ts -i ../shared/protocol/schema.json -o src/lib/protocol.generated.ts --no-additionalProperties"
+  },
   "dependencies": {
     "motion": "14.10.1",
     "react": "19.3.1",

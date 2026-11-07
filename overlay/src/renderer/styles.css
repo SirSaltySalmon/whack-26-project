@@ -1,0 +1,370 @@
+:root {
+  --surface: #14161e;
+  --surface-raised: #2a2e3c;
+  --border: rgba(255, 255, 255, 0.16);
+  --text: #eef0f6;
+  --text-muted: #a9aebd;
+  --accent: #6ee7b7;
+  --idle: #7c8db5;
+  --listening: #60a5fa;
+  --talking: #6ee7b7;
+  --reacting: #fbbf24;
+  --bar-height: 34px;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  /* The window is transparent, so anything painted here would cover the game. */
+  background: transparent;
+}
+
+body {
+  color: var(--text);
+  font:
+    13px/1.45 system-ui,
+    "Segoe UI",
+    sans-serif;
+  user-select: none;
+}
+
+/* Frames report the exact size the player set, so borders must count inside it. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Character */
+.avatar {
+  position: absolute;
+  z-index: 5;
+}
+
+.avatar-art {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--idle);
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+.avatar-art[data-state="listening"] {
+  background: var(--listening);
+  outline: 3px solid var(--listening);
+  outline-offset: 6px;
+  animation-duration: 1.6s;
+}
+
+.avatar-art[data-state="talking"] {
+  background: var(--talking);
+  animation: talk 0.42s ease-in-out infinite alternate;
+}
+
+.avatar-art[data-state="reacting"] {
+  background: var(--reacting);
+  animation: react 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes breathe {
+  50% {
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+
+@keyframes talk {
+  to {
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+}
+
+@keyframes react {
+  to {
+    transform: translate(-50%, -58%) scale(1.06);
+  }
+}
+
+/* Fades in on hover. Showing these doesn't catch clicks: only the marked controls do. */
+.avatar-controls {
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.avatar-hovered .avatar-controls {
+  opacity: 1;
+}
+
+.avatar-grip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 56px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transform: translateX(-50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.avatar-grip:active {
+  cursor: grabbing;
+}
+
+.avatar-wiki {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.resize-corner {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  border-right: 3px solid var(--text-muted);
+  border-bottom: 3px solid var(--text-muted);
+  border-bottom-right-radius: 6px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+/* Pointer */
+.pointer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  width: 0;
+  height: 0;
+  /* Never in the way of a click, and elementFromPoint looks straight through it. */
+  pointer-events: none;
+}
+
+.pointer-body {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  width: max-content;
+  gap: 2px;
+}
+
+.pointer-body.flip-x {
+  right: 0;
+  left: auto;
+  flex-direction: row-reverse;
+}
+
+.pointer-body.flip-y {
+  top: auto;
+  bottom: 0;
+  align-items: flex-start;
+}
+
+.pointer-arrow {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  fill: var(--accent);
+  stroke: #0b0d12;
+  stroke-width: 2;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+.flip-x .pointer-arrow {
+  transform: scaleX(-1);
+}
+
+.flip-y .pointer-arrow {
+  transform: scaleY(-1);
+}
+
+.flip-x.flip-y .pointer-arrow {
+  transform: scale(-1);
+}
+
+.pointer-label {
+  max-width: 210px;
+  padding: 2px 10px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Cards and the wiki window */
+.card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Not display: none, which can make a webview reload. */
+.card-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.card-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--bar-height);
+  gap: 6px;
+  padding: 0 6px;
+  background: var(--surface-raised);
+  cursor: grab;
+  touch-action: none;
+}
+
+.card-bar:active {
+  cursor: grabbing;
+}
+
+.card-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-buttons {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.card-buttons button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.card-buttons button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.card-buttons button:disabled {
+  color: var(--text-muted);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.card-buttons button.active {
+  color: #0b0d12;
+  background: var(--accent);
+}
+
+.card-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.card-page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+/* A webview swallows pointer events, which would end a drag the moment the cursor crossed it. */
+.gesturing .card-page {
+  pointer-events: none;
+}
+
+.card-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  animation: loading 1s ease-in-out infinite alternate;
+}
+
+@keyframes loading {
+  from {
+    opacity: 0.2;
+  }
+}
+
+.card-text {
+  position: absolute;
+  inset: 0;
+  padding: 10px 14px 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.card-fallback {
+  background: var(--surface);
+}
+
+.card-fallback-note {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+}
+
+/* Sits above the content, which would otherwise catch the press first. */
+.card > .resize-corner {
+  z-index: 1;
+}
+
+.minimized-tab {
+  position: absolute;
+  z-index: 6;
+  width: 180px;
+  height: 32px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
