@@ -50,7 +50,7 @@ Overlay reports element rectangles back to the brain ─► used for masking
 | **Web research** | MediaWiki `action=parse` on the game's wiki; Exa as fallback | Researches the title at startup to pre-fill the game brief, then prefetches during downtime. Pages are cached as lookup material, not stored as memory | Perplexity (slow) |
 | **Director / event bus** | Plain Python: asyncio queues and a rules module | Deterministic, instant, testable | An LLM deciding when to talk |
 | **Tilt meter (stretch)** | Mic loudness and pitch, death streaks, profanity in transcripts | Cheap, and the behavior change is easy to see | Hume in the critical path |
-| **Demo safety** | Replay mode recording frames, audio and events | Fallback if the network or game fails on stage, and the main test harness | — |
+| **Demo safety** | Replay mode recording frames, events and sent messages, and replaying them with no live services | Fallback if the network or game fails on stage, and the main test harness | — |
 | **Export** | One-way export of session notes and facts to an Obsidian vault | Shows off what it remembers | Obsidian as the store |
 
 ## Overlay and capture

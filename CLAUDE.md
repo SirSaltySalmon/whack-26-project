@@ -99,7 +99,10 @@ pip install -r requirements-dev.txt
 python -m brain --live                     # run against the live game
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
-python -m brain --replay <session-dir>     # run from a recorded session
+python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
+python -m brain --replay <session-dir>     # run from a recorded session: no game, mic, keys or network
+python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
+python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
 python scripts/save_screenshots.py        # save test screenshots of the game
@@ -114,7 +117,7 @@ python scripts/overlay_demo.py             # drives the overlay with no game, mi
 ```
 
 ## Testing
-What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are in `brain/tests/fakes.py`, so use those rather than writing new ones. Replay mode is meant to be the main test harness: it records frames, audio and events to disk and feeds them back through the same pipeline. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
+What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are in `brain/tests/fakes.py`, so use those rather than writing new ones. Replay mode is the main test harness: `--record` saves frames, events and sent messages to disk, and `--replay` feeds them back through the same pipeline, answering with the recorded lines in subtitles only. Build test sessions with `brain/tests/replay_rig.py`. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
 
 ## Coding Standards
 - **Python:** type hints at module boundaries, Pydantic for anything crossing a process boundary, ruff for lint and format.
@@ -169,11 +172,11 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [x] Shared fakes and the test plan's automated tests (WP1). WP8's tests come with WP8
 - [x] Typed turns and the extended overlay demo (WP2)
 - [x] Stage 0, apart from what needs a mouse or a visible window
+- [x] Recorder and replay (WP3). Not yet run on a real recording
 
 **Not started**
 - [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
 - [ ] Learner: game brief, learned regions, compiled readers (Track 4)
-- [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
 - [ ] Pre-generated bark audio per personality. Filler lines go through TTS for now (Track 3)
 - [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
 - [ ] Agree personality boundaries, and which voice goes with each (all)

@@ -48,8 +48,9 @@ All of these need no game, mic or paid calls. Everything the test plan listed is
 | Shared contract | `test_profile_schema.py`, `test_personalities.py` |
 | Voice | `test_voice.py`, `test_voice_processors.py` |
 | Test tools | `test_typed.py`, `test_overlay_demo.py` |
+| Recorder and replay (WP3) | `test_replay_format.py`, `test_recorder.py`, `test_replay.py`, `test_scripted_talker.py`, `test_replay_compare.py`, and `test_replay_app.py`, which records a live run through the real wiring and replays it twice |
 
-Overlay logic is tested beside its code, in `overlay/src/renderer/logic/*.test.ts`. Shared helpers are `fakes.py`, `director_rig.py`, `agent_rig.py` and `fake_gemini.py`.
+Overlay logic is tested beside its code, in `overlay/src/renderer/logic/*.test.ts`. Shared helpers are `fakes.py`, `director_rig.py`, `agent_rig.py`, `fake_gemini.py` and `replay_rig.py`, which writes small sessions to disk.
 
 ### Still to write, with WP8
 
@@ -68,6 +69,14 @@ Overlay logic is tested beside its code, in `overlay/src/renderer/logic/*.test.t
 ## 2. Test tooling
 
 **Typed turns: `python -m brain --live --type`.** Each typed line becomes `PlayerStartedSpeaking` and then `PlayerSpeech`, the same events real voice sends, so turns can be tested with no mic or Deepgram key. A prefix like `5: what's that` waits 5 seconds first, so there's time to switch back to the game. Capture stops while the terminal is in front, and `look_closer` says it can't see once capture has been stopped for longer than `look_max_frame_age_s`.
+
+**Record and replay: `python -m brain --live --record`,** then `python -m brain --replay sessions/<name>`. Recording saves frames, events and every message sent to the overlay under `sessions/`, which is gitignored because it holds screen data. A replay needs no game, mic, keys or network:
+- It answers with the recorded lines, speaks in subtitles only, and never opens the mic.
+- `--speed 4` plays faster, and `--exit-when-done` stops at the end.
+- `--write-messages run.jsonl` saves what it sent, so `python scripts/compare_replay.py a.jsonl b.jsonl` can compare two runs, ignoring timing, IDs and positions.
+- A recording's own `messages.jsonl` can be compared with a replay's.
+
+Replay doesn't show the game, so the overlay draws over whatever is on screen. Use it to test the brain's behaviour, and the backup OBS recording as the stage fallback for the game.
 
 **Overlay demo: `python scripts/overlay_demo.py`,** then `npm --prefix overlay run dev` in another terminal. Each pass shows the avatar's states, the pointer, subtitles both ways, a toast for each source, and a question with and without options. Clicking an answer moves on, and otherwise a question holds for 31 s. The terminal logs what the overlay reports back, including the rectangles to mask. The settings panel gets the real personalities, and two fake voices if `VOICE_OPTIONS` isn't set.
 
@@ -129,11 +138,13 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] Pointer accuracy on HUD and on moving world targets, with `pointer_ttl_ms` tuned
 - [ ] Terraria's pixel font reads well in an enlarged `look_closer` crop
 - [ ] A 30-minute session: no drift in replies, cost near the estimate, and notes appear in the vault
+- [ ] Record a few minutes with `--record`. The log's MB/s at the end is near the 1-2 MB/s estimate, and `dropped_frames` in `manifest.json` stays at 0
+- [ ] Replay that session twice with `--exit-when-done --write-messages`. `compare_replay.py` finds no difference between the two runs, or between either run and the recording's `messages.jsonl`
+- [ ] Replay with the overlay open: recorded pointers and cards appear, and subtitles show the recorded lines
 
 ## Known gaps these tests won't close
 
 These are out of scope for the wiring pass:
 - **Must-have 3:** learned regions and compiled readers don't exist, so confirmed events stay about 2.4 s old
-- **Replay:** `--replay` has no recorder or frame source, so it's neither a test harness nor a stage fallback yet
 - **Game brief:** nothing writes it yet, so the talker's context has no game description
 - **Barks:** filler lines go through TTS instead of pre-generated audio, so the 300 ms bark budget isn't met yet

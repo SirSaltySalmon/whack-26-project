@@ -2,6 +2,23 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: A replay uses no live services unless asked
+
+**Status:** accepted by Track 2's owner, for the team to review. Applies to `brain/replay/` and `brain/app.py`. Details are under WP3 in [REMAINING_WORK.md](REMAINING_WORK.md).
+
+Replay is the test harness, so the same recording has to give the same result every time, on any machine, whatever is in `.env`.
+
+| # | Decision | Effect |
+|---|---|---|
+| 1 | **Replies come from the recording** | `ScriptedTalker` hands out the recorded lines in order, leaving out questions, which the director asks itself. `REPLAY_LIVE_TALKER=true` asks the real talker instead |
+| 2 | **Subtitles only, always** | Replay never opens the mic, so live speech can't mix with recorded speech, and it never spends TTS characters |
+| 3 | **Session notes call no model** | Memory's recap would otherwise call Gemini when a replay ends. A replay's memory is thrown away anyway |
+| 4 | **The recording's scale and settings win** | Masks use the recorded display scale even if a live overlay connects at another, and the partner speaks with the recorded personality and hints setting |
+
+**Stays the same:** replay starts from `fixtures/replay_memory.sql` in memory, makes no vision calls, offers no tools, and doesn't show the game. The backup OBS recording is still the stage fallback for the game itself.
+
+**Known limit:** lines come out in order, so if director rules change which events get a reply, later lines can answer the wrong thing. `compare_replay.py` shows where.
+
 
 ## 2026-11-07: Look less often by default, and faster for a few seconds when it matters
 

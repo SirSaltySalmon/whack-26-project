@@ -15,7 +15,7 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP0](#wp0-shared-contract) | Shared types and file splits | Lets the rest run in parallel | **Done** | Shared | Nothing |
 | [WP1](#wp1-test-fakes-and-tests) | Fakes and the tests in the test plan | `CLAUDE.md` testing rule | **Done**, apart from WP8's tests | All | WP0 |
 | [WP2](#wp2-test-tooling) | Typed turns, overlay demo | Testing with no mic | **Done** | Shared, 1 | WP0 |
-| [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | Required | 2 | WP0 |
+| [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | **Done** | 2 | WP0 |
 | [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | Required | 2 | WP0 |
 | [WP5](#wp5-learner) | Game brief, regions, reader specs | Must-have 3 | Required | 4 | WP0, works with WP4 |
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | Required | 3 | WP0 |
@@ -50,7 +50,7 @@ Must-haves 1, 2, 4, 5, 6 and 7 are wired but haven't run live, so WP7 and the te
 | `brain/memory/service.py` | 298 | Don't add to it. New work uses `ProfileStore` through `Database.run` directly |
 | `brain/agent/handlers.py` | 242 | WP8's tool goes in a new file if this would pass 300. Prompts and models go in `schemas.py` |
 | `brain/director/director.py` | 232 | WP6 and WP8 both add to it, so watch the total |
-| `brain/voice/pipecat_voice.py` | 215 | WP3's mic hook and WP6's `play` both land here |
+| `brain/voice/pipecat_voice.py` | 225 | WP6's `play` lands here |
 
 ## Coordinates and clocks
 
@@ -293,11 +293,26 @@ def parse_typed_line(line: str) -> tuple[float, str] | None:
 
 ## WP3: Recorder and replay
 
+**Status: done.** This section now describes existing code. Mic audio isn't recorded, and isn't needed: transcripts and mood readings are recorded as events, and replay feeds those back. The recorder can still write `audio.wav` if a hook in `PipecatVoice` ever calls `on_mic_audio`, which would only matter for testing the voice pipeline itself.
+
 **Purpose:** record a session to disk and feed it back through the same pipeline, with no game, mic, keys or network. It's the main test harness.
+
+**Changed while building:**
+
+| Change | Why |
+|---|---|
+| The manifest stores the overlay `settings` from the start of the recording, and a replayed `SettingsChanged` also updates `link.settings` | The director reads personality and hints from `link.settings`, not from events, so a replay would otherwise speak with whatever settings memory held |
+| `partner_lines` leaves out lines that were sent as `question.ask` | The director speaks questions itself, from memory, without the talker. Handing their text to `ScriptedTalker` would shift every later reply |
+| `OverlayLink.pinned_display_scale`. Replay pins the recorded scale | Recorded rectangles are in DIPs at the recorded scale. A live overlay connecting mid-replay at another scale would otherwise move every mask |
+| Replay speaks in subtitles only, through `SubtitleOnlyVoice`, whatever keys are set | With keys in `.env`, replay would open the real mic and mix live speech into the recording, and spend TTS characters. Word-timed subtitles would also stop two runs comparing equal |
+| Replay's session notes get no model (`no_note_model`) | Memory writes a recap with the deep model when a run ends, so a replay with `GEMINI_API_KEY` set would call Gemini. A replay's memory is thrown away anyway |
+| Replayed observer events honour `suppressed_events`, like the live observer | Once readers provide an event, a recording made before them would otherwise raise it twice |
+| Frames are JPEGs with no chroma subsampling | The default blurs colour edges, which could smear a thin HUD bar for a reader |
+| Replay helpers live in `brain/replay/wiring.py`, and the comparison in `brain/replay/compare.py` | Keeps `app.py` near 250 lines, with room for WP4-WP8, and keeps the comparison testable |
 
 **It doesn't show the game by itself.** The overlay would draw over whatever is on screen, and our OpenCV build is headless. The on-stage fallback for the game is still the backup OBS recording. Replay proves the brain's behaviour.
 
-**Files:** new `brain/replay/recorder.py`, `brain/replay/format.py` and `brain/replay/scripted.py`. Replace the stub in `brain/replay/source.py`. Also `brain/app.py`, `brain/__main__.py`, and a small hook in `brain/server.py`.
+**Files:** `brain/replay/format.py` (the on-disk contract), `recorder.py`, `writer.py` (the writer thread and `MessageLog`), `source.py` (`ReplayLoop`), `scripted.py`, `compare.py` and `wiring.py`. Also `brain/app.py`, `brain/__main__.py`, two hooks in `brain/server.py`, and `scripts/compare_replay.py`.
 
 ### Session format
 
@@ -327,7 +342,8 @@ sessions/<yyyymmdd-hhmmss>-<game-slug>/
   "audio_sample_rate": 16000,
   "duration_s": 123.4,
   "dropped_frames": 0,
-  "complete": true
+  "complete": true,
+  "settings": {"proactive": true, "personality": "supportive", "voice_id": null}
 }
 ```
 
@@ -388,9 +404,9 @@ class SessionRecorder:
 
 **Hooks to add:**
 
-- `brain/server.py`: `OverlayLink.on_send: Callable[[BrainMessage], None] | None`, called at the top of `send()` before the connected check.
-- `brain/voice/pipecat_voice.py`: an optional mic listener, called from `on_mic_audio`.
-- `brain/app.py`: wrap `on_spoken` so `recorder.on_partner_said` also runs.
+- `brain/server.py`: `OverlayLink.on_send: Callable[[BrainMessage], None] | None`, called at the top of `send()` before the connected check. A failing hook logs and the message is still sent.
+- `brain/voice/pipecat_voice.py`: **not added.** An optional mic listener called from `on_mic_audio` would fill `audio.wav`. It's Track 3's file, and audio was first to cut.
+- `brain/app.py`: wraps `on_spoken` so `recorder.on_partner_said` also runs.
 
 ### Replay
 
@@ -419,6 +435,8 @@ class ScriptedTalker:
 | **Output** | `Frame(ts=clock(), image, overlay_rects, region)` into the ring buffer and recorded events onto the bus, merged in `t` order. Also sets `link.display_scale` from the manifest, and sends recorded `pointer.`* and `card.*` messages so the overlay behaves as it did |
 | **Decode** | In a worker thread |
 | **Talker** | `ScriptedTalker` by default. A real model only with `REPLAY_LIVE_TALKER=true` |
+| **Voice** | `SubtitleOnlyVoice`, always. No mic, no TTS |
+| **Scale and settings** | Pins `link.display_scale` to the manifest's, and applies the manifest's settings |
 | **Missing or bad session** | Logs and continues without frames, as capture failure does today |
 
 The `ReplayFrameSource` stub goes away, because a `FrameSource` only returns an image and replay needs each frame's recorded region and rectangles.
@@ -444,10 +462,12 @@ The replay rule stays the same: memory starts from `fixtures/replay_memory.sql` 
 
 **Done when:**
 
-- A test builds a tiny session in `tmp_path` and replays it at high speed. Frames reach the buffer with their regions, events arrive in order and the fake voice says the recorded lines.
-- A replay run with no keys produces the same `messages.jsonl` twice, apart from timing.
-- A reader's event comes from the frames, not the recording.
-- Readers and `look_closer` masking work on replayed frames.
+- [x] A test builds a tiny session in `tmp_path` and replays it at high speed. Frames reach the buffer with their regions, events arrive in order and the fake voice says the recorded lines.
+- [x] A replay run with no keys produces the same `messages.jsonl` twice, apart from timing. `test_replay_app.py` records a live run through the real wiring, replays it twice, and checks both against the recording too.
+- [ ] A reader's event comes from the frames, not the recording. Recorded reader events are already left out, so this test comes with WP4's readers.
+- [x] `look_closer` masking works on replayed frames, with a region offset and 1.5 scaling. Readers on replayed frames come with WP4.
+
+**Watch out for:** a frame is skipped undecoded whenever the next one is already due, so a very high `--speed` drops most frames. Replays meant to exercise readers should use a moderate speed.
 
 **Known limit:** `ScriptedTalker` returns lines in order, so changing director rules can shift which line answers what. Only `compare_replay.py` output needs reviewing in that case.
 
@@ -1023,7 +1043,7 @@ WP0 ─┬─► WP1 (start right away, grows as others land)
 | WP6 | `BarkBank` | `bank.prepare(voice_id)`. Also `barks=` and `bark_events=` on the `Director` |
 | WP8 | `OpenPage` | `open_page.run()`, live only. Also `page_excerpt=` on the `Director` |
 
-`app.py` is about 190 lines. If this pushes it past 300, move object construction into `brain/assembly.py`.
+`app.py` is about 250 lines after WP3. If this pushes it past 300, move object construction into `brain/assembly.py`.
 
 **GameEvent names in use.** Add new ones here. They must describe any game.
 
