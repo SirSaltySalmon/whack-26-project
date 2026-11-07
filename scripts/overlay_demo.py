@@ -3,12 +3,20 @@
 Usage: python scripts/overlay_demo.py   then, in another terminal: npm --prefix overlay run dev
 
 Uses the real brain server, so origin checks and message validation behave as they do in a real run.
+
+Each pass shows the avatar's states, the pointer, subtitles both ways, a toast for each source and a
+question with and without options, so Stage 0 of docs/TEST_PLAN.md can be checked by eye. Clicking
+an answer moves on straight away. The terminal logs what the overlay reports back, including the
+rectangles it wants masked.
 """
 
 import asyncio
 import logging
 import sys
+import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Protocol
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -16,22 +24,140 @@ sys.path.insert(0, str(ROOT))
 import uvicorn  # noqa: E402
 
 from brain.config import WS_HOST, Settings  # noqa: E402
-from brain.events import Event, EventBus, OverlayConnected  # noqa: E402
+from brain.director.personalities import load_personalities  # noqa: E402
+from brain.events import Event, EventBus, OverlayConnected, QuestionAnswered  # noqa: E402
 from brain.server import OverlayLink, create_app  # noqa: E402
+from shared.protocol import BrainMessage  # noqa: E402
 from shared.protocol.messages import (  # noqa: E402
     AvatarState,
     CardShow,
+    MemoryToast,
     PointerFly,
+    QuestionAsk,
     Rect,
+    SubtitleChunk,
+    VoiceOption,
 )
 
 WIKI_URL = "https://terraria.wiki.gg/wiki/Eye_of_Cthulhu"
 log = logging.getLogger("overlay_demo")
 
+# How long the overlay keeps each thing up, plus a moment, so nothing is cut off by what comes next
+# and its rectangle can be seen leaving in the log. See useCompanionFeed.ts and Toasts.tsx.
+SUBTITLE_HOLD_S = 3.0  # SUBTITLE_LINGER_MS is 2500
+TOAST_HOLD_S = 4.5  # TOAST_MS is 4000
+QUESTION_HOLD_S = 31.0  # QUESTION_MS is 30000
 
-async def play(link: OverlayLink) -> None:
-    await asyncio.sleep(1)
-    await link.send(
+WORD_GAP_S = 0.3
+TOAST_GAP_S = 1.0
+ANSWER_POLL_S = 0.25
+
+# Bare words and separate punctuation, because real word timings can arrive like this.
+SPOKEN_WORDS = ("That", "looks", "like", "a", "tough", "fight", ",", "so", "stay", "sharp", ".")
+WHOLE_LINE = "With no voice keys, the whole line arrives in one chunk."
+TOASTS = (
+    MemoryToast(text="Remembered: player class: summoner", source="player"),
+    MemoryToast(text="Updated: base location: east of spawn", source="observed"),
+    MemoryToast(text="Remembered: slime weakness: fire", source="wiki"),
+)
+QUESTIONS = (
+    QuestionAsk(
+        question_id="demo-choice",
+        text="What are you after next?",
+        options=["explore", "fight", "build"],
+    ),
+    QuestionAsk(question_id="demo-open", text="What's that glowing thing for?"),
+)
+# Nothing speaks in this demo, so picking one of these is harmless.
+DEMO_VOICES = [
+    VoiceOption(name="Demo voice A", id="demo-voice-a"),
+    VoiceOption(name="Demo voice B", id="demo-voice-b"),
+]
+
+Sleep = Callable[[float], Awaitable[None]]
+
+
+class Overlay(Protocol):
+    async def send(self, message: BrainMessage) -> None: ...
+
+
+def offer_settings(link: OverlayLink, settings: Settings) -> None:
+    """Gives the settings panel something to show. The overlay gets this when it connects."""
+    link.personalities = load_personalities().names
+    link.voices = settings.voice_options or DEMO_VOICES
+
+
+async def show_avatar_states(overlay: Overlay, sleep: Sleep) -> None:
+    for state in ("listening", "talking", "reacting", "idle"):
+        await overlay.send(AvatarState(state=state))
+        await sleep(1)
+
+
+async def show_pointer(overlay: Overlay, sleep: Sleep) -> None:
+    await overlay.send(PointerFly(x=800, y=500, label="A point on screen", ttl_ms=3000))
+    await sleep(4)
+    box = Rect(x=500, y=200, width=200, height=80)
+    await overlay.send(PointerFly(x=600, y=240, label="Beside this box", target=box, ttl_ms=3000))
+    await sleep(5)
+
+
+async def show_subtitles(overlay: Overlay, sleep: Sleep) -> None:
+    """The two shapes the brain sends: real voice word by word, subtitles-only mode all at once."""
+    log.info("Subtitles: word by word")
+    utterance = uuid.uuid4().hex
+    await overlay.send(AvatarState(state="talking"))
+    for word in SPOKEN_WORDS:
+        await overlay.send(SubtitleChunk(utterance_id=utterance, text=word))
+        await sleep(WORD_GAP_S)
+    await overlay.send(SubtitleChunk(utterance_id=utterance, text="", final=True))
+    await overlay.send(AvatarState(state="idle"))
+    await sleep(SUBTITLE_HOLD_S)
+
+    log.info("Subtitles: one chunk")
+    await overlay.send(AvatarState(state="talking"))
+    await overlay.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=WHOLE_LINE, final=True))
+    await overlay.send(AvatarState(state="idle"))
+    await sleep(SUBTITLE_HOLD_S)
+
+
+async def show_toasts(overlay: Overlay, sleep: Sleep) -> None:
+    log.info("Toasts: one for each source")
+    for toast in TOASTS:
+        await overlay.send(toast)
+        await sleep(TOAST_GAP_S)
+    await sleep(TOAST_HOLD_S)
+
+
+async def ask(
+    overlay: Overlay, question: QuestionAsk, answered: asyncio.Event, sleep: Sleep
+) -> None:
+    """Holds until it's answered or the overlay has dropped it, so nothing replaces it too soon.
+
+    "Not now" only closes the question on the overlay's side and a question with no options can't
+    be answered without a mic, so in both of those cases the demo waits out the hold.
+    """
+    answered.clear()
+    await overlay.send(question)
+    log.info("Question: %r. Waiting up to %.0f s for an answer", question.text, QUESTION_HOLD_S)
+    waited = 0.0
+    while waited < QUESTION_HOLD_S and not answered.is_set():
+        await sleep(ANSWER_POLL_S)
+        waited += ANSWER_POLL_S
+
+
+async def one_pass(overlay: Overlay, answered: asyncio.Event, sleep: Sleep = asyncio.sleep) -> None:
+    await show_avatar_states(overlay, sleep)
+    await show_pointer(overlay, sleep)
+    await show_subtitles(overlay, sleep)
+    await show_toasts(overlay, sleep)
+    for question in QUESTIONS:
+        await ask(overlay, question, answered, sleep)
+        await sleep(1)
+
+
+async def play(overlay: Overlay, answered: asyncio.Event, sleep: Sleep = asyncio.sleep) -> None:
+    await sleep(1)
+    await overlay.send(
         CardShow(
             card_id="wiki",
             title="Eye of Cthulhu",
@@ -40,30 +166,31 @@ async def play(link: OverlayLink) -> None:
             page_url=WIKI_URL,
         )
     )
-    await link.send(
+    await overlay.send(
         CardShow(card_id="note", title="Text card", body="Sanitized plain text in a card.")
     )
     while True:
-        for state in ("listening", "talking", "reacting", "idle"):
-            await link.send(AvatarState(state=state))
-            await asyncio.sleep(1)
-        await link.send(PointerFly(x=800, y=500, label="A point on screen", ttl_ms=3000))
-        await asyncio.sleep(4)
-        box = Rect(x=500, y=200, width=200, height=80)
-        await link.send(PointerFly(x=600, y=240, label="Beside this box", target=box, ttl_ms=3000))
-        await asyncio.sleep(5)
+        await one_pass(overlay, answered, sleep)
 
 
-async def watch(bus: EventBus, link: OverlayLink) -> None:
+async def watch(bus: EventBus, overlay: Overlay, sleep: Sleep = asyncio.sleep) -> None:
     events: asyncio.Queue[Event] = bus.subscribe()
+    answered = asyncio.Event()
     player: asyncio.Task[None] | None = None
-    while True:
-        event = await events.get()
-        log.info("Event: %s", event)
-        if isinstance(event, OverlayConnected):
-            if player:
-                player.cancel()
-            player = asyncio.create_task(play(link))
+    try:
+        while True:
+            event = await events.get()
+            log.info("Event: %s", event)
+            match event:
+                case OverlayConnected():
+                    if player:
+                        player.cancel()
+                    player = asyncio.create_task(play(overlay, answered, sleep))
+                case QuestionAnswered():
+                    answered.set()
+    finally:
+        if player:
+            player.cancel()
 
 
 async def report_rects(link: OverlayLink) -> None:
@@ -80,6 +207,7 @@ async def main() -> None:
     bus = EventBus()
     link = OverlayLink(bus)
     settings = Settings()
+    offer_settings(link, settings)
     config = uvicorn.Config(
         create_app(link), host=WS_HOST, port=settings.brain_port, log_level="warning"
     )

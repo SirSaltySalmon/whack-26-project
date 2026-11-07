@@ -1,4 +1,7 @@
-"""Entry point: `python -m brain --live` or `python -m brain --replay <session-dir>`."""
+"""Entry point: `python -m brain --live` or `python -m brain --replay <session-dir>`.
+
+Add `--type` to take player turns typed on stdin as well, which needs no mic or Deepgram key.
+"""
 
 import argparse
 import asyncio
@@ -17,11 +20,17 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--live", action="store_true", help="capture the live screen")
     mode.add_argument("--replay", type=Path, metavar="SESSION_DIR", help="feed a recorded session")
+    parser.add_argument(
+        "--type",
+        action="store_true",
+        dest="typed",
+        help="also take player turns typed on stdin, such as `5: what's that` to wait 5 s first",
+    )
     args = parser.parse_args()
 
     configure_logging()
     try:
-        asyncio.run(run(Settings(), replay_dir=args.replay))
+        asyncio.run(run(Settings(), replay_dir=args.replay, typed=args.typed))
     except KeyboardInterrupt:
         log.info("Stopped by user")
 

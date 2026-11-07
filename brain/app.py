@@ -31,6 +31,7 @@ from brain.research import ExaSearch, WikiResearch
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
 from brain.voice.pipeline import create_voice
+from brain.voice.typed import typed_turns
 from shared.protocol.messages import Settings as OverlaySettings
 
 log = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
         log.exception("%s stopped; carrying on without it", name)
 
 
-async def run(settings: Settings, replay_dir: Path | None = None) -> None:
+async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = False) -> None:
     bus = EventBus()
     link = OverlayLink(bus)
     # One factory, because limiters are per model and vision and deep notes can share a model.
@@ -181,6 +182,8 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
             tasks.create_task(memory.run())
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
+            if typed:
+                tasks.create_task(_survive("Typing", typed_turns(bus)))
     finally:
         if tools and tools.research:
             await tools.research.aclose()
