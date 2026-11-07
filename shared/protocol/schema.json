@@ -1,0 +1,568 @@
+{
+  "$defs": {
+    "AvatarState": {
+      "properties": {
+        "state": {
+          "enum": [
+            "idle",
+            "listening",
+            "talking",
+            "reacting"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "type": {
+          "const": "avatar.state",
+          "default": "avatar.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "AvatarState",
+      "type": "object"
+    },
+    "CardClose": {
+      "properties": {
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "card.close",
+          "default": "card.close",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "card_id"
+      ],
+      "title": "CardClose",
+      "type": "object"
+    },
+    "CardClosed": {
+      "properties": {
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "card.closed",
+          "default": "card.closed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "card_id"
+      ],
+      "title": "CardClosed",
+      "type": "object"
+    },
+    "CardShow": {
+      "description": "Body is sanitized plain text. Never put live web pages or raw HTML here.",
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Url"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "card.show",
+          "default": "card.show",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "card_id",
+        "title",
+        "body"
+      ],
+      "title": "CardShow",
+      "type": "object"
+    },
+    "CardUpdate": {
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "type": {
+          "const": "card.update",
+          "default": "card.update",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "card_id"
+      ],
+      "title": "CardUpdate",
+      "type": "object"
+    },
+    "ElementRect": {
+      "properties": {
+        "element_id": {
+          "title": "Element Id",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        }
+      },
+      "required": [
+        "element_id",
+        "rect"
+      ],
+      "title": "ElementRect",
+      "type": "object"
+    },
+    "MemoryToast": {
+      "properties": {
+        "source": {
+          "enum": [
+            "player",
+            "observed",
+            "wiki"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "toast.memory",
+          "default": "toast.memory",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "source"
+      ],
+      "title": "MemoryToast",
+      "type": "object"
+    },
+    "OverlayReady": {
+      "properties": {
+        "display_scale": {
+          "title": "Display Scale",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "protocol_version": {
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "type": {
+          "const": "overlay.ready",
+          "default": "overlay.ready",
+          "title": "Type",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "display_scale",
+        "width",
+        "height"
+      ],
+      "title": "OverlayReady",
+      "type": "object"
+    },
+    "OverlayRects": {
+      "description": "Every visible element. The brain masks these so the AI can't read its own UI.",
+      "properties": {
+        "rects": {
+          "items": {
+            "$ref": "#/$defs/ElementRect"
+          },
+          "title": "Rects",
+          "type": "array"
+        },
+        "type": {
+          "const": "overlay.rects",
+          "default": "overlay.rects",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rects"
+      ],
+      "title": "OverlayRects",
+      "type": "object"
+    },
+    "PointerFly": {
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "const": "pointer.fly",
+          "default": "pointer.fly",
+          "title": "Type",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "PointerFly",
+      "type": "object"
+    },
+    "PointerHide": {
+      "properties": {
+        "type": {
+          "const": "pointer.hide",
+          "default": "pointer.hide",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "PointerHide",
+      "type": "object"
+    },
+    "QuestionAnswer": {
+      "properties": {
+        "answer": {
+          "title": "Answer",
+          "type": "string"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "question.answer",
+          "default": "question.answer",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_id",
+        "answer"
+      ],
+      "title": "QuestionAnswer",
+      "type": "object"
+    },
+    "QuestionAsk": {
+      "properties": {
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "question_id": {
+          "title": "Question Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "question.ask",
+          "default": "question.ask",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_id",
+        "text"
+      ],
+      "title": "QuestionAsk",
+      "type": "object"
+    },
+    "Rect": {
+      "properties": {
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Rect",
+      "type": "object"
+    },
+    "Settings": {
+      "properties": {
+        "personality": {
+          "default": "supportive",
+          "title": "Personality",
+          "type": "string"
+        },
+        "proactive": {
+          "default": true,
+          "title": "Proactive",
+          "type": "boolean"
+        },
+        "voice_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Id"
+        }
+      },
+      "title": "Settings",
+      "type": "object"
+    },
+    "SettingsState": {
+      "properties": {
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "type": {
+          "const": "settings.state",
+          "default": "settings.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "settings"
+      ],
+      "title": "SettingsState",
+      "type": "object"
+    },
+    "SettingsUpdate": {
+      "properties": {
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "type": {
+          "const": "settings.update",
+          "default": "settings.update",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "settings"
+      ],
+      "title": "SettingsUpdate",
+      "type": "object"
+    },
+    "SubtitleChunk": {
+      "properties": {
+        "final": {
+          "default": false,
+          "title": "Final",
+          "type": "boolean"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "subtitle.chunk",
+          "default": "subtitle.chunk",
+          "title": "Type",
+          "type": "string"
+        },
+        "utterance_id": {
+          "title": "Utterance Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "utterance_id",
+        "text"
+      ],
+      "title": "SubtitleChunk",
+      "type": "object"
+    }
+  },
+  "description": "Exists only so one JSON Schema document can describe both directions.",
+  "properties": {
+    "brain": {
+      "discriminator": {
+        "mapping": {
+          "avatar.state": "#/$defs/AvatarState",
+          "card.close": "#/$defs/CardClose",
+          "card.show": "#/$defs/CardShow",
+          "card.update": "#/$defs/CardUpdate",
+          "pointer.fly": "#/$defs/PointerFly",
+          "pointer.hide": "#/$defs/PointerHide",
+          "question.ask": "#/$defs/QuestionAsk",
+          "settings.state": "#/$defs/SettingsState",
+          "subtitle.chunk": "#/$defs/SubtitleChunk",
+          "toast.memory": "#/$defs/MemoryToast"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SubtitleChunk"
+        },
+        {
+          "$ref": "#/$defs/AvatarState"
+        },
+        {
+          "$ref": "#/$defs/PointerFly"
+        },
+        {
+          "$ref": "#/$defs/PointerHide"
+        },
+        {
+          "$ref": "#/$defs/CardShow"
+        },
+        {
+          "$ref": "#/$defs/CardUpdate"
+        },
+        {
+          "$ref": "#/$defs/CardClose"
+        },
+        {
+          "$ref": "#/$defs/MemoryToast"
+        },
+        {
+          "$ref": "#/$defs/QuestionAsk"
+        },
+        {
+          "$ref": "#/$defs/SettingsState"
+        }
+      ],
+      "title": "Brain"
+    },
+    "overlay": {
+      "discriminator": {
+        "mapping": {
+          "card.closed": "#/$defs/CardClosed",
+          "overlay.ready": "#/$defs/OverlayReady",
+          "overlay.rects": "#/$defs/OverlayRects",
+          "question.answer": "#/$defs/QuestionAnswer",
+          "settings.update": "#/$defs/SettingsUpdate"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/OverlayReady"
+        },
+        {
+          "$ref": "#/$defs/OverlayRects"
+        },
+        {
+          "$ref": "#/$defs/CardClosed"
+        },
+        {
+          "$ref": "#/$defs/QuestionAnswer"
+        },
+        {
+          "$ref": "#/$defs/SettingsUpdate"
+        }
+      ],
+      "title": "Overlay"
+    }
+  },
+  "required": [
+    "brain",
+    "overlay"
+  ],
+  "title": "Protocol",
+  "type": "object"
+}

@@ -1,0 +1,38 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Electron
+node_modules/
+overlay/out/
+overlay/dist/
+*.tsbuildinfo
+
+# Runtime data: replay sessions hold screen and mic recordings
+sessions/*
+!sessions/.gitkeep
+data/*
+!data/.gitkeep
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Downloaded model caches
+.fastembed_cache/
+.cache/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+*.log

@@ -1,0 +1,113 @@
+"""WebSocket link to the overlay."""
+
+import asyncio
+import logging
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
+from pydantic import ValidationError
+
+from brain.events import CardClosedByPlayer, EventBus, OverlayConnected, QuestionAnswered
+from shared.protocol import PROTOCOL_VERSION, BrainMessage, OverlayMessageAdapter
+from shared.protocol.messages import (
+    CardClosed,
+    OverlayReady,
+    OverlayRects,
+    QuestionAnswer,
+    Rect,
+    Settings,
+    SettingsState,
+    SettingsUpdate,
+)
+
+log = logging.getLogger(__name__)
+
+# A website open in the player's browser can reach localhost sockets, so binding to
+# 127.0.0.1 isn't enough. Browsers always send Origin, which lets us refuse them.
+ALLOWED_ORIGINS = {"file://", "http://localhost:5173", "http://127.0.0.1:5173"}
+
+
+class OverlayLink:
+    """Tracks the connected overlay and what it has reported."""
+
+    def __init__(self, bus: EventBus) -> None:
+        self._bus = bus
+        self._socket: WebSocket | None = None
+        self._send_lock = asyncio.Lock()
+        self.rects: tuple[Rect, ...] = ()
+        self.display_scale: float = 1.0
+        self.settings = Settings()
+
+    @property
+    def connected(self) -> bool:
+        return self._socket is not None
+
+    async def send(self, message: BrainMessage) -> None:
+        socket = self._socket
+        if socket is None:
+            log.debug("Overlay not connected; dropped %s", message.type)
+            return
+        async with self._send_lock:
+            await socket.send_text(message.model_dump_json())
+
+    def attach(self, socket: WebSocket) -> None:
+        self._socket = socket
+
+    def detach(self, socket: WebSocket) -> None:
+        if self._socket is socket:
+            self._socket = None
+            self.rects = ()
+
+    async def handle_text(self, text: str) -> None:
+        try:
+            message = OverlayMessageAdapter.validate_json(text)
+        except ValidationError:
+            log.exception("Rejected invalid overlay message: %.200s", text)
+            return
+
+        match message:
+            case OverlayReady():
+                if message.protocol_version != PROTOCOL_VERSION:
+                    log.error(
+                        "Protocol mismatch: overlay=%s brain=%s. Run gen:protocol.",
+                        message.protocol_version,
+                        PROTOCOL_VERSION,
+                    )
+                self.display_scale = message.display_scale
+                await self.send(SettingsState(settings=self.settings))
+                self._bus.publish(OverlayConnected(display_scale=message.display_scale))
+            case OverlayRects():
+                self.rects = tuple(item.rect for item in message.rects)
+            case CardClosed():
+                self._bus.publish(CardClosedByPlayer(card_id=message.card_id))
+            case QuestionAnswer():
+                self._bus.publish(
+                    QuestionAnswered(question_id=message.question_id, answer=message.answer)
+                )
+            case SettingsUpdate():
+                self.settings = message.settings
+                await self.send(SettingsState(settings=self.settings))
+
+
+def create_app(link: OverlayLink) -> FastAPI:
+    app = FastAPI(title="AI Gamer Partner brain")
+
+    @app.websocket("/ws")
+    async def overlay_socket(socket: WebSocket) -> None:
+        origin = socket.headers.get("origin")
+        if origin is not None and origin not in ALLOWED_ORIGINS:
+            log.warning("Refused WebSocket from origin %s", origin)
+            await socket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        await socket.accept()
+        link.attach(socket)
+        log.info("Overlay connected")
+        try:
+            while True:
+                await link.handle_text(await socket.receive_text())
+        except WebSocketDisconnect:
+            log.info("Overlay disconnected")
+        finally:
+            link.detach(socket)
+
+    return app

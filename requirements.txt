@@ -1,0 +1,32 @@
+# Python 3.12. Versions checked against PyPI on 2026-11-07 and installed together on Windows.
+
+# Voice and LLM. Pipecat caps google-genai below 3 (3.0.0 exists), so this is the newest it allows.
+pipecat-ai[cartesia,deepgram,elevenlabs,google,local]==1.15.0
+google-genai==2.34.0
+
+# Brain server and contract
+fastapi==0.162.1
+uvicorn==0.54.0
+websockets==17.4
+pydantic==2.14.3
+pydantic-settings==2.16.2
+httpx==0.28.1
+
+# Capture. dxcam 0.4.0 is still a dev pre-release, so stay on the latest stable.
+dxcam==0.3.0
+mss==10.2.0
+
+# Perception. rapidocr requires the headless OpenCV build; do not add opencv-python as well.
+opencv-python-headless==5.0.0.93
+numpy==2.5.4
+imagehash==4.3.2
+pillow==13.0.0
+rapidocr==3.10.0
+onnxruntime==1.31.1
+
+# Memory
+sqlite-vec==0.1.9
+fastembed==0.9.1
+
+# Research
+exa-py==2.28.0
