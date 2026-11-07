@@ -79,3 +79,58 @@ async def test_the_schema_sent_is_strict() -> None:
     await ask(client(messages))
     sent = messages.kwargs["output_config"]["format"]["schema"]  # type: ignore[index]
     assert sent["additionalProperties"] is False
+
+
+class FakeStream:
+    def __init__(self, chunks: list[str], stop_reason: str) -> None:
+        self._chunks = chunks
+        self._stop_reason = stop_reason
+
+    async def __aenter__(self) -> "FakeStream":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    @property
+    async def text_stream(self):  # type: ignore[no-untyped-def]
+        for chunk in self._chunks:
+            yield chunk
+
+    async def get_final_message(self) -> SimpleNamespace:
+        return SimpleNamespace(stop_reason=self._stop_reason)
+
+
+class FakeBetaMessages:
+    def __init__(self, chunks: list[str], stop_reason: str = "end_turn") -> None:
+        self.chunks = chunks
+        self.stop_reason = stop_reason
+        self.kwargs: dict[str, object] = {}
+
+    def stream(self, **kwargs: object) -> FakeStream:
+        self.kwargs = kwargs
+        return FakeStream(self.chunks, self.stop_reason)
+
+
+def text_client(messages: FakeBetaMessages, limit: int = 5) -> ClaudeClient:
+    built = ClaudeClient("test-model", "test-key", RateLimiter(limit), effort="medium")
+    built._client = SimpleNamespace(beta=SimpleNamespace(messages=messages))  # type: ignore[assignment]
+    return built
+
+
+async def test_streams_text_with_thinking_on_at_the_chosen_effort() -> None:
+    messages = FakeBetaMessages(["Mine ", "hellstone."])
+    chunks = [chunk async for chunk in text_client(messages).stream_text("Plan.", "Next?", 100)]
+    assert "".join(chunks) == "Mine hellstone."
+    assert messages.kwargs["thinking"] == {"type": "adaptive"}
+    assert messages.kwargs["output_config"] == {"effort": "medium"}
+    # The caller's cap is for the visible answer; thinking gets room on top.
+    assert messages.kwargs["max_tokens"] > 100
+
+
+async def test_streaming_refuses_over_the_local_limit() -> None:
+    messages = FakeBetaMessages(["x"])
+    built = text_client(messages, limit=0)
+    with pytest.raises(LLMUnavailableError):
+        _ = [chunk async for chunk in built.stream_text("Plan.", "Next?", 100)]
+    assert messages.kwargs == {}

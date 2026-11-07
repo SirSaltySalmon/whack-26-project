@@ -88,15 +88,22 @@ def main() -> None:
 
     configure_logging(args.verbose)
     try:
+        settings, game_hint = Settings(), ""
+        if args.live:
+            from brain.game_setup import pick_game
+
+            # Before the event loop, because it can wait on the terminal.
+            settings, game_hint = pick_game(settings)
         asyncio.run(
             run(
-                Settings(),
+                settings,
                 replay_dir=args.replay,
                 typed=args.typed,
                 record=args.record,
                 speed=args.speed,
                 exit_when_done=args.exit_when_done,
                 write_messages=args.write_messages,
+                game_hint=game_hint,
             )
         )
     except KeyboardInterrupt:

@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from brain.capture.apps import AppWindow, unique_apps
 from brain.capture.window_mac import MacGameWindow
 from brain.perception.coords import CropRegion
 
@@ -56,6 +57,33 @@ class GameWindow:
             log.info("Game window '%s': %s", self._process_name, state)
             self._last_state = state
         return region
+
+    def app_windows(self) -> list[AppWindow]:
+        """Every app with a visible top-level window, for the player to pick the game from."""
+        found: list[AppWindow] = []
+
+        def check(hwnd: int, _: int) -> bool:
+            if self._user32.IsWindowVisible(hwnd) and not self._user32.GetWindow(hwnd, _GW_OWNER):
+                title = self._title(hwnd)
+                process_id = wintypes.DWORD()
+                self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+                stem = self._process_stem(process_id.value)
+                # Untitled windows are mostly helpers and tray icons, not something to play.
+                if stem and title:
+                    found.append(AppWindow(stem, stem, title))
+            return True
+
+        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(check)
+        self._user32.EnumWindows(callback, 0)
+        return unique_apps(found)
+
+    def _title(self, hwnd: int) -> str:
+        length = self._user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return ""
+        text = ctypes.create_unicode_buffer(length + 1)
+        self._user32.GetWindowTextW(hwnd, text, length + 1)
+        return text.value
 
     def _check(self) -> tuple[str, CropRegion | None]:
         if not self._process_name:
@@ -128,6 +156,8 @@ class GameWindow:
         user32.GetForegroundWindow.restype = hwnd
         user32.GetWindow.argtypes = [hwnd, wintypes.UINT]
         user32.GetWindow.restype = hwnd
+        user32.GetWindowTextLengthW.argtypes = [hwnd]
+        user32.GetWindowTextW.argtypes = [hwnd, wintypes.LPWSTR, ctypes.c_int]
         user32.GetWindowThreadProcessId.argtypes = [hwnd, ctypes.POINTER(wintypes.DWORD)]
         user32.IsIconic.argtypes = [hwnd]
         user32.IsWindow.argtypes = [hwnd]
@@ -148,3 +178,7 @@ def create_game_window(process_name: str) -> "GameWindow | MacGameWindow":
     if sys.platform == "darwin":
         return MacGameWindow(process_name)
     return GameWindow(process_name)
+
+
+def list_app_windows() -> list[AppWindow]:
+    return create_game_window("").app_windows()

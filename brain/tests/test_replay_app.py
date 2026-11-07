@@ -176,6 +176,7 @@ def _main(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> list[dict[str, An
 
     monkeypatch.setattr(entry_point, "run", fake_run)
     monkeypatch.setattr(entry_point, "Settings", object)
+    monkeypatch.setattr("brain.game_setup.pick_game", lambda settings: (settings, ""))
     monkeypatch.setattr(entry_point, "configure_logging", lambda *_: None)
     monkeypatch.setattr("sys.argv", ["brain", *argv])
     entry_point.main()

@@ -18,6 +18,7 @@ from brain.control_wiring import StatusParts, build_control
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
+from brain.game_setup import ensure_brief, name_game
 from brain.llm.factory import LLMFactory
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
@@ -57,11 +58,16 @@ async def run(
     speed: float = 1.0,
     exit_when_done: bool = False,
     write_messages: Path | None = None,
+    game_hint: str = "",
 ) -> None:
     bus = EventBus()
     link = OverlayLink(bus)
     # One factory, because limiters are per model and vision and deep notes can share a model.
     factory = LLMFactory(settings)
+    # Before memory opens, because memory is filed under the game's title.
+    settings, written = (
+        (settings, None) if replay_dir else await name_game(settings, factory.deep, game_hint)
+    )
     personalities = load_personalities()
     link.personalities = personalities.names
     link.voices = settings.voice_options
@@ -214,6 +220,16 @@ async def run(
             if barks and startup_voice:
                 # In the background: until a bark is ready, its event goes to the talker instead.
                 tasks.create_task(survive("Barks", barks.prepare(startup_voice)))
+            if not replay_dir:
+                brief = ensure_brief(
+                    database,
+                    settings.game_title,
+                    factory.deep,
+                    game_hint,
+                    written,
+                    settings.brief_timeout_s,
+                )
+                tasks.create_task(survive("Game brief", brief))
             if tools:
                 tasks.create_task(survive("Wiki", find_wiki(settings, database, tools, control)))
             if open_page:

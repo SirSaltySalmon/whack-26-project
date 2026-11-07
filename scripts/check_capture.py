@@ -1,6 +1,6 @@
 """Checks live capture of the game window: rate, cost and what the frames actually show.
 
-Usage: python scripts/check_capture.py [--process Terraria] [--seconds 30] [--fps 2]
+Usage: python scripts/check_capture.py [--process NAME] [--seconds 30] [--fps 2]
 Start the script, then click into the game and keep it in front. Sample images are saved under
 sessions/, which is gitignored. Open one and check that it shows only the game.
 """
@@ -25,6 +25,7 @@ from brain.capture.ring_buffer import Frame, RingBuffer  # noqa: E402
 from brain.capture.source import default_live_source  # noqa: E402
 from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
+from brain.game_setup import pick_game  # noqa: E402
 from shared.protocol.messages import Rect  # noqa: E402
 
 SAMPLES_SAVED = 3
@@ -76,10 +77,14 @@ def report(frames: list[Frame], fps: int, seconds: float, cpu_seconds: float, ou
 async def main() -> int:
     settings = Settings()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--process", default=settings.game_process or "Terraria")
+    parser.add_argument("--process", help="the game's process name; asks if unset")
     parser.add_argument("--seconds", type=float, default=30)
     parser.add_argument("--fps", type=int, default=settings.capture_fps)
     args = parser.parse_args()
+    args.process = args.process or pick_game(settings)[0].game_process
+    if not args.process:
+        print("No game picked. Pass --process or set GAME_PROCESS.")
+        return 1
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     buffer = RingBuffer(args.fps * settings.ring_buffer_seconds)

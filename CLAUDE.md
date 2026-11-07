@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, deep reasoning). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it |
+| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, progress scout). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY` |
 | Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
@@ -97,7 +97,7 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-python -m brain --live                     # run against the live game
+python -m brain --live                     # run against the live game; asks which window if GAME_PROCESS is unset
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
@@ -132,8 +132,8 @@ What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
-- `GAME_PROCESS`: the game's process name, such as `Terraria`. Live capture stays off without it.
-- `GAME_TITLE`: what memory and the learned profile are filed under, so set it for each game. If it's unset, every game shares `Unknown game`. If it's blank, they share an empty title.
+- `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` lists open app windows in the terminal and the player picks the game; the pick is kept in `data/games.json` and reused when there's no terminal, as when the Control Center starts the brain. Live capture stays off until there's a game.
+- `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 
@@ -182,7 +182,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 
 **Not started**
 - [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
-- [ ] Learner: game brief, learned regions, compiled readers (Track 4)
+- [ ] Learner: learned regions, compiled readers (Track 4). The game brief is wired (`brain/learner/brief.py`): at startup the deep model names the game and writes a 60-word brief into the profile, once per game. Check it on a few real games
 - [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 

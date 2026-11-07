@@ -1,6 +1,7 @@
 """All runtime configuration. Model IDs live here and nowhere else."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,7 +25,12 @@ class Settings(BaseSettings):
 
     talker_model: str = "gemini-3.5-flash-lite"
     vision_model: str = "gemini-3.6-flash"
-    deep_model: str = "gemini-3.6-flash"
+    # think_hard and session notes. Paid; falls back to deep_fallback_model without
+    # ANTHROPIC_API_KEY. Effort is low, medium or high: medium keeps think_hard to a few seconds.
+    deep_model: str = "claude-sonnet-5-5"
+    deep_effort: Literal["low", "medium", "high"] = "medium"
+    deep_timeout_s: float = 60.0
+    deep_fallback_model: str = "gemini-3.6-flash"
     # Reports on what is on screen. Paid, so it only runs with ANTHROPIC_API_KEY set.
     observer_model: str = "claude-haiku-5-5"
     # Answers look_closer while the player waits. Gemini Flash took about 9 s at full
@@ -47,6 +53,8 @@ class Settings(BaseSettings):
             # One frame per 0.6 s at high focus is 100 a minute, plus look_closer. This is our
             # own spending cap, not a quota.
             "claude-haiku-5-5": 120,
+            # Only player-asked think_hard and a note every few minutes; a spending cap.
+            "claude-sonnet-5-5": 10,
         }
     )
 
@@ -72,7 +80,8 @@ class Settings(BaseSettings):
     mic_device_index: int | None = None
     speaker_device_index: int | None = None
 
-    # The game's process name, such as Terraria. Live capture stays off until this is set, because
+    # The game's process name, such as Terraria. Unset, the player picks the game's window in the
+    # terminal at startup (brain/game_setup.py). Live capture stays off until there's one, because
     # capturing without a window to crop to would send the whole desktop onward.
     game_process: str = ""
     capture_fps: int = 5
@@ -93,8 +102,11 @@ class Settings(BaseSettings):
     advice_gap_s: float = 300.0
     advice_quiet_s: float = 30.0
 
-    # Names what memory is filed under. It's data, so the brain has no game-specific logic.
+    # Names what memory is filed under. It's data, so the brain has no game-specific logic. Unset,
+    # the deep model names the game from its window once, and games_path remembers it per app.
     game_title: str = "Unknown game"
+    games_path: Path = Path("data/games.json")
+    brief_timeout_s: float = 30.0
 
     db_path: Path = Path("data/brain.sqlite3")
     sessions_dir: Path = Path("sessions")

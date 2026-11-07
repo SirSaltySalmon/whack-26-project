@@ -1,6 +1,6 @@
 """Saves screenshots of the game for offline tests, spaced out so they show varied moments.
 
-Usage: python scripts/save_screenshots.py [--count 20] [--every 5] [--process Terraria]
+Usage: python scripts/save_screenshots.py [--count 20] [--every 5] [--process NAME]
 Start it, then click into the game and play. It only captures while the game is in front, and it
 waits if you switch away. Images go to sessions/, which is gitignored. Keep anything private out.
 """
@@ -23,6 +23,7 @@ from brain.capture.ring_buffer import RingBuffer  # noqa: E402
 from brain.capture.source import default_live_source  # noqa: E402
 from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
+from brain.game_setup import pick_game  # noqa: E402
 from shared.protocol.messages import Rect  # noqa: E402
 
 
@@ -51,8 +52,12 @@ async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--count", type=int, default=20)
     parser.add_argument("--every", type=float, default=5.0, help="seconds between screenshots")
-    parser.add_argument("--process", default=settings.game_process or "Terraria")
+    parser.add_argument("--process", help="the game's process name; asks if unset")
     args = parser.parse_args()
+    args.process = args.process or pick_game(settings)[0].game_process
+    if not args.process:
+        print("No game picked. Pass --process or set GAME_PROCESS.")
+        return
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     out_dir = settings.sessions_dir / f"screenshots-{datetime.now():%Y%m%d-%H%M%S}"

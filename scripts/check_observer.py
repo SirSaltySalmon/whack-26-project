@@ -1,6 +1,6 @@
 """Watches the live game with the vision model and prints what it reports and what gets confirmed.
 
-Usage: python scripts/check_observer.py [--process Terraria] [--seconds 30]
+Usage: python scripts/check_observer.py [--process NAME] [--seconds 30]
 Start it, then click into the game and keep it in front. It costs about 3 cents a minute, and frames
 go to Anthropic, so turn off the Steam overlay and keep anything private off the game window.
 """
@@ -23,6 +23,7 @@ from brain.capture.source import default_live_source  # noqa: E402
 from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
 from brain.events import EventBus, GameEvent  # noqa: E402
+from brain.game_setup import pick_game  # noqa: E402
 from brain.llm.factory import LLMFactory  # noqa: E402
 from brain.perception.focus import Focus, FocusIntervals  # noqa: E402
 from brain.perception.observation import Observation  # noqa: E402
@@ -40,9 +41,13 @@ class NoOverlay:
 async def main() -> int:
     settings = Settings()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--process", default=settings.game_process or "Terraria")
+    parser.add_argument("--process", help="the game's process name; asks if unset")
     parser.add_argument("--seconds", type=float, default=30)
     args = parser.parse_args()
+    args.process = args.process or pick_game(settings)[0].game_process
+    if not args.process:
+        print("No game picked. Pass --process or set GAME_PROCESS.")
+        return 1
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
     overlay = NoOverlay()

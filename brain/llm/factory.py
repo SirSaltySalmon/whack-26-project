@@ -3,7 +3,7 @@
 from google.genai import types
 
 from brain.config import Settings
-from brain.llm.base import LLMUnavailableError, RateLimiter, VisionLLM
+from brain.llm.base import LLMUnavailableError, RateLimiter, TextLLM, VisionLLM
 from brain.llm.claude import ClaudeClient
 from brain.llm.gemini import GeminiClient
 
@@ -51,5 +51,16 @@ class LLMFactory:
         model = self._settings.closeup_model
         return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
 
-    def deep(self) -> GeminiClient:
-        return self._build(self._settings.deep_model, types.ThinkingLevel.HIGH)
+    def deep(self) -> TextLLM:
+        """For think_hard and session notes. Falls back to Gemini without ANTHROPIC_API_KEY."""
+        key = self._settings.anthropic_api_key
+        if key is None:
+            return self._build(self._settings.deep_fallback_model, types.ThinkingLevel.HIGH)
+        model = self._settings.deep_model
+        return ClaudeClient(
+            model,
+            key.get_secret_value(),
+            self._limiter(model),
+            effort=self._settings.deep_effort,
+            timeout_s=self._settings.deep_timeout_s,
+        )

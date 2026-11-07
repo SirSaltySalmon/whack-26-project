@@ -211,6 +211,7 @@ def test_the_type_flag_reaches_run(monkeypatch: pytest.MonkeyPatch, argv: list[s
 
     monkeypatch.setattr(entry_point, "run", fake_run)
     monkeypatch.setattr(entry_point, "Settings", object)
+    monkeypatch.setattr("brain.game_setup.pick_game", lambda settings: (settings, ""))
     monkeypatch.setattr(entry_point, "configure_logging", lambda *_: None)
     monkeypatch.setattr(sys, "argv", ["brain", *argv])
     entry_point.main()
