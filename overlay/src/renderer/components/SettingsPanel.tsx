@@ -1,10 +1,13 @@
 import type { Settings, SettingsState } from "../../lib/protocol.generated.ts";
+import type { AvatarImage } from "../hooks/useAvatarImage.ts";
 import type { Frame } from "../logic/layout.ts";
 import { TEXT_CARD_LIMITS } from "../logic/layout.ts";
+import { AvatarSettings } from "./AvatarSettings.tsx";
 import { CardWindow } from "./CardWindow.tsx";
 
 interface SettingsPanelProps {
   state: SettingsState | null;
+  avatar: AvatarImage;
   frame: Frame;
   onFrame(frame: Frame): void;
   onChange(settings: Settings): void;
@@ -35,6 +38,7 @@ function Choice({
 /** Buttons only, so changing a setting never takes the keyboard from the game. */
 export function SettingsPanel({
   state,
+  avatar,
   frame,
   onFrame,
   onChange,
@@ -103,7 +107,11 @@ export function SettingsPanel({
       onRaise={() => undefined}
       onClose={onClose}
     >
-      <div className="settings">{body}</div>
+      <div className="settings">
+        {body}
+        {/* Visual only, so it works before the brain connects. */}
+        <AvatarSettings avatar={avatar} />
+      </div>
     </CardWindow>
   );
 }
