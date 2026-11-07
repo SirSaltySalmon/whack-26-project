@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from contextlib import asynccontextmanager
 
@@ -37,6 +38,14 @@ async def settle(rounds: int = 50) -> None:
     """
     for _ in range(rounds):
         await asyncio.sleep(0)
+
+
+async def until(check: Callable[[], bool], timeout_s: float = 2.0) -> None:
+    """For waits settle() can't cover, such as the director retrying a line on a real timer."""
+    deadline = time.monotonic() + timeout_s
+    while not check():
+        assert time.monotonic() < deadline, "Timed out waiting for the condition"
+        await asyncio.sleep(0.001)
 
 
 class Stuck:

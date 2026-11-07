@@ -1,155 +1,90 @@
 """A turn that's checking the screen must still answer when the player talks over it."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 
 import pytest
+from pydantic import BaseModel
 
-from brain.agent.tools import ToolRegistry
+from brain.agent.tools import Tool, TurnContext
 from brain.director import director as director_module
-from brain.director.director import Director
-from brain.director.rules import AskTalker, CancelSpeech
-from brain.events import EventBus
+from brain.events import PlayerSpeech, PlayerStartedSpeaking
+from brain.llm.base import ToolCall, ToolStep
+from brain.tests.director_rig import LOOKING, Rig, settle, until
+from brain.tests.fakes import ScriptedToolLLM
+
+ANSWER = "It's the Guide."
 
 
-class FakeVoice:
-    """Refuses to speak while the player is talking, like PipecatVoice."""
-
-    def __init__(self) -> None:
-        self.said: list[str] = []
-        self.player_talking = False
-
-    async def say(self, text: str) -> bool:
-        if self.player_talking:
-            return False
-        self.said.append(text)
-        return True
-
-    async def set_voice(self, voice_id: str | None) -> None:
-        return None
-
-    async def run(self) -> None:
-        return None
-
-    def live_state(self) -> dict[str, str]:
-        return {}
-
-
-def director(voice: FakeVoice) -> Director:
-    built = Director(
-        EventBus(),
-        voice,
-        proactive=lambda: True,
-        agent=object(),  # type: ignore[arg-type]
-        tools=ToolRegistry([]),
-    )
-    return built
+class NoInput(BaseModel):
+    pass
 
 
 @pytest.fixture(autouse=True)
 def fast_retries(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(director_module, "SPEAK_RETRY_S", 0.01)
+    monkeypatch.setattr(director_module, "SPEAK_RETRY_S", 0.001)
 
 
-def fake_turn(
-    checked: asyncio.Event, release: asyncio.Event, answer: str = "It's the Guide."
-) -> Callable[..., Awaitable[str]]:
-    async def run_turn(*args: object, **kwargs: object) -> str:
-        looking = args[8]
-        await looking()  # type: ignore[operator]
-        checked.set()
-        await release.wait()
-        return answer
+def checking_rig(*replies: str) -> tuple[Rig, ScriptedToolLLM, asyncio.Event]:
+    """A rig whose first turn calls a screen check that waits for the returned gate."""
+    gate = asyncio.Event()
 
-    return run_turn
+    async def check(_arguments: NoInput, _turn: TurnContext) -> str:
+        await gate.wait()
+        return "a man in brown"
 
-
-async def test_talking_during_a_check_does_not_cancel_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    checked, release = asyncio.Event(), asyncio.Event()
-    monkeypatch.setattr(director_module, "run_turn", fake_turn(checked, release))
-    voice = FakeVoice()
-    built = director(voice)
-
-    built._dispatch(AskTalker("what's next to me?", None))
-    await checked.wait()
-    assert built.checking
-
-    voice.player_talking = True
-    built._dispatch(CancelSpeech())
-    release.set()
-    await asyncio.sleep(0.05)
-    voice.player_talking = False
-    assert built._slot is not None
-    await built._slot
-
-    assert voice.said[-1] == "It's the Guide."
-    assert not built.checking
+    agent = ScriptedToolLLM(
+        [ToolStep("", (ToolCall("check", {}),)), *(ToolStep(reply) for reply in replies)]
+    )
+    rig = Rig(agent=agent, tools=[Tool("check", "Checks the screen.", NoInput, check)])
+    return rig, agent, gate
 
 
-async def test_a_new_question_waits_for_the_check_to_answer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    checked, release = asyncio.Event(), asyncio.Event()
-    turns = [fake_turn(checked, release, "It's the Guide.")]
+async def test_talking_during_a_check_does_not_cancel_it() -> None:
+    rig, _agent, gate = checking_rig(ANSWER)
+    async with rig.running():
+        await rig.publish(PlayerSpeech(transcript="what's next to me?"))
+        assert rig.voice.said == [LOOKING] and rig.director.checking
 
-    async def run_turn(*args: object, **kwargs: object) -> str:
-        if turns:
-            return await turns.pop(0)(*args, **kwargs)
-        return "Anything else?"
+        # PipecatVoice refuses to speak over the player, so the answer has to wait for silence.
+        rig.voice.accepts = False
+        await rig.publish(PlayerStartedSpeaking())
+        gate.set()
+        await until(lambda: ANSWER in rig.voice.said)
+        assert rig.spoken == []
 
-    monkeypatch.setattr(director_module, "run_turn", run_turn)
-    voice = FakeVoice()
-    built = director(voice)
-
-    built._dispatch(AskTalker("what's next to me?", None))
-    await checked.wait()
-    built._dispatch(AskTalker("so, answer?", None))
-    release.set()
-    assert built._slot is not None
-    await built._slot
-
-    answers = [line for line in voice.said if line in ("It's the Guide.", "Anything else?")]
-    assert answers == ["It's the Guide.", "Anything else?"]
+        rig.voice.accepts = True
+        await until(lambda: rig.spoken == [ANSWER])
+        await settle()
+    assert not rig.director.checking
 
 
-async def test_a_turn_without_tools_is_still_cancelled_by_talking(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    started = asyncio.Event()
+async def test_a_new_question_waits_for_the_check_to_answer() -> None:
+    rig, agent, gate = checking_rig(ANSWER, "Anything else?")
+    async with rig.running():
+        await rig.publish(PlayerSpeech(transcript="what's next to me?"))
+        await rig.publish(PlayerSpeech(transcript="so, answer?"))
+        assert rig.director.checking
+        assert agent.sends == ["what's next to me?"]  # The second waits its turn.
 
-    async def run_turn(*args: object, **kwargs: object) -> str:
-        started.set()
-        await asyncio.sleep(10)
-        return "Too late."
-
-    monkeypatch.setattr(director_module, "run_turn", run_turn)
-    voice = FakeVoice()
-    built = director(voice)
-
-    built._dispatch(AskTalker("hi", None))
-    await started.wait()
-    built._dispatch(CancelSpeech())
-    assert built._slot is not None
-    with pytest.raises(asyncio.CancelledError):
-        await built._slot
-    assert "Too late." not in voice.said
+        gate.set()
+        await until(lambda: len(rig.spoken) == 2)
+    assert agent.sends == ["what's next to me?", "so, answer?"]
+    assert rig.spoken == [ANSWER, "Anything else?"]
 
 
 async def test_an_answer_is_dropped_if_the_player_never_stops(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(director_module, "ANSWER_WAIT_S", 0.05)
-    checked, release = asyncio.Event(), asyncio.Event()
-    monkeypatch.setattr(director_module, "run_turn", fake_turn(checked, release))
-    voice = FakeVoice()
-    built = director(voice)
+    rig, _agent, gate = checking_rig(ANSWER)
+    async with rig.running():
+        await rig.publish(PlayerSpeech(transcript="what's that?"))
+        rig.voice.accepts = False
+        gate.set()
+        await until(lambda: not rig.director.checking)
 
-    built._dispatch(AskTalker("what's that?", None))
-    await checked.wait()
-    voice.player_talking = True
-    release.set()
-    assert built._slot is not None
-    await built._slot
-
-    assert "It's the Guide." not in voice.said
-    assert not built.checking
+        # Once dropped, it isn't said late when the player finally stops.
+        rig.voice.accepts = True
+        await settle()
+    assert ANSWER in rig.voice.said  # It was tried,
+    assert rig.spoken == []  # but never accepted.
