@@ -101,6 +101,7 @@ npm --prefix overlay run typecheck
 
 ## Gotchas
 
+- **`start` uses whatever keys `.env` has.** With keys there, it opens the microphone, sends typed turns to Gemini, watches the screen with paid Haiku once `GAME_PROCESS` is set, and generates barks with ElevenLabs. Check `node $D state` before typing turns. For a key-free run, move `.env` aside first.
 - **It's your real desktop.** Someone clicking the window between driver calls changes the open tab. Run `tab X` before `field`, `click` or `text`.
 - **The window reopens on the last tab used** (localStorage). Forget `tab Agent` and `field "Game title"` returns `NOT_FOUND`.
 - **Choices persist** in `%APPDATA%\overlay\launcher.json`, game title included, and saved keys go in `keys.json`, encrypted with DPAPI. That's why Finish clears the test title.
