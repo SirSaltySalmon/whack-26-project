@@ -23,7 +23,8 @@ These need no game, mic or paid calls. `CLAUDE.md` requires tests for the direct
 **`brain/tests/test_director_rules.py`**
 - `PlayerStartedSpeaking` gives `CancelSpeech`, and the next `PlayerSpeech` carries its `started_at`
 - Reconnecting the overlay doesn't greet again
-- `Tick` asks only when all of these hold: overlay connected, quiet for `question_quiet_s`, `question_gap_s` since the last question, no danger, proactive on
+- `Tick` asks only when all of these hold: overlay connected, quiet for `question_quiet_s`, `question_gap_s` since the last question, no danger
+- `GameEvent` and `Tick` act the same with hints on or off
 - Danger starts and ends with `danger_started`, `danger_high` and `danger_ended`
 - `SettingsChanged` gives `SetVoice`
 
@@ -61,6 +62,18 @@ These need no game, mic or paid calls. `CLAUDE.md` requires tests for the direct
 - Results carry the call's `id` and `name`
 - `allow_tools=False` sets mode `NONE`, and automatic function calling is off
 
+**`brain/tests/test_open_page.py`** (new)
+- `PlayerStartedSpeaking` sends `page.read` only when the page's hostname exactly matches the wiki's. `wiki.gg.example.com` must not match `wiki.gg`
+- A reply with an old `request_id`, or from a different host, is discarded
+- Navigating away drops the snapshot, and closing the card forgets the page
+- Matching: finds passages by word and prefix, prefers visible ones on a tie, stays under the cap and keeps page order
+- A transcript with no overlap sends nothing, and one that refers to the page sends the visible text
+- `read_open_page` gives the right text for each case: on the wiki, off the wiki, nothing open
+- Page text is never written to SQLite
+
+**`brain/tests/test_director.py`** (add, once WP8 is built)
+- The excerpt reaches player turns and never reaches `_talk`
+
 **`brain/tests/test_server.py`** (add)
 - `settings.state` includes `personalities` and `voices`
 
@@ -97,6 +110,9 @@ Run `python -m brain --live` and `npm --prefix overlay run dev`.
 Any windowed game or app works for most of this. First read the real free-tier limits from AI Studio into `rpm_by_model`.
 - [ ] "hi" gets a plain reply with no tool call and no filler. This also proves Gemini accepts the tool declarations
 - [ ] "look up the Eye of Cthulhu" shows a card, with a filler line first
+- [ ] Once WP8 is built, with a wiki page open: a question it answers past the intro is answered in one Flash-Lite call, with no filler line
+- [ ] Once WP8 is built: "what does this say?" uses the part in view, including after scrolling and while minimized
+- [ ] Once WP8 is built: follow a link off the wiki, and the partner says it can't read that page. The log shows no read was requested
 - [ ] "open the wiki page for slimes" opens the real site in the wiki window
 - [ ] "what am I holding?" uses `look_closer`, and the answer matches the screen
 - [ ] "point at my health" lands the pointer beside the target, at 100% and 150% scaling
@@ -121,7 +137,8 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] Capture works on the demo machine. **dxcam fails on the main dev machine** with `COMError -2005270524` (feature level not supported), so check whether mss keeps up or whether another GPU or session fixes it
 - [ ] The overlay draws over Terraria, and OBS Display Capture records it
 - [ ] Frames contain only the game, and our own UI is masked (save one with `scripts/save_screenshots.py`)
-- [ ] A fight raises an observer event, then a reaction, and hints off keeps it quiet
+- [ ] A fight raises an observer event, then a reaction, with hints on or off
+- [ ] With hints off, about 10 reactions and questions stay free of tips and of anything not yet found. This depends on the model following its prompt, so read them
 - [ ] Pointer accuracy on HUD and on moving world targets, with `pointer_ttl_ms` tuned
 - [ ] Terraria's pixel font reads well in an enlarged `look_closer` crop
 - [ ] A 30-minute session: no drift in replies, cost near the estimate, and notes appear in the vault

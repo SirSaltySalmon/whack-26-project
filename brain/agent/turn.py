@@ -42,13 +42,15 @@ async def run_turn(
     turn: TurnContext,
     on_first_tool: Callable[[], Awaitable[None]],
     after_tools_line: str,
+    hints: bool = True,
 ) -> str | None:
     """Returns what to say, or None for nothing. Raises if the very first model call fails.
 
     Once a tool has run, the player may already be looking at its result, so a failed follow-up
     returns after_tools_line rather than claiming the partner couldn't help.
     """
-    system = f"{build_system(personality, tone, max_words, context)}\n\n{_TOOL_GUIDANCE}"
+    base = build_system(personality, tone, max_words, context, hints)
+    system = f"{base}\n\n{_TOOL_GUIDANCE}"
     chat = llm.tool_chat(system, registry.declarations(), MAX_TOKENS)
     step = await chat.send(transcript)
     for round_index in range(MAX_TOOL_ROUNDS):

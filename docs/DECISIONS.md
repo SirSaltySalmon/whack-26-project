@@ -2,6 +2,37 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: The partner can read the open page, on the game's wiki only
+
+**Status:** accepted by the project owner, not built yet. Partly replaces "the wiki window shows the real site" below: page text may now reach a model in this one case. Frames stay masked. The spec is WP8 in [REMAINING_WORK.md](REMAINING_WORK.md).
+
+If the player has the answer open, the partner shouldn't need another call to find it. Today it can't see the page at all, and `lookup_wiki` only fetches an intro and infobox.
+
+| # | Decision | Effect |
+|---|---|---|
+| 1 | **Read rendered text, not HTML** | `innerText` is much smaller, and leaves out markup and text hidden by CSS. Table layout is lost, though rows stay readable |
+| 2 | **Only the game's discovered wiki** | The brain asks for a read only when the open page's hostname exactly matches. A page off the wiki is never read, and the partner says it can't. This limits prompt injection and what reaches Gemini's free tier, at the cost of not reading a guide the player followed a link to |
+| 3 | **Match locally, then offer a tool** | Keyword matching adds relevant passages to the first prompt, so a page question usually takes one Flash-Lite call. `read_open_page` gets more for one extra call. Reaching zero isn't possible, because a model still writes the reply |
+| 4 | **Read when the player starts speaking** | The text is fresh, nothing polls and the voice path never waits |
+| 5 | **Player turns only, in RAM only** | Page text never reaches game-event reactions or SQLite. It's labelled as tentative data |
+| 6 | **The script runs in an isolated world, from the main process** | The page's own scripts can't tamper with it, and the sandbox stays as it was: no preload |
+
+Rejected: tool only (every page question takes two calls), an excerpt on every turn (sends page text on unrelated turns), and raw HTML (large, and hidden text would need catching separately).
+
+The matching can miss, or pick the wrong passage. A miss costs one tool call. A wrong passage could mislead the reply, which is why the text is labelled tentative.
+
+## 2026-11-07: Hints off means conversation only, and barks replace the talker where they fit
+
+**Status:** accepted by the project owner. Applies to `brain/director/` and the overlay's settings.
+
+**Hints off isn't silence.** The first version stopped game reactions and questions when hints were off. A partner that goes quiet doesn't feel like one, and it still has to ask to understand the game.
+
+- The director's rules no longer take the setting, so reactions and questions run either way, under the same cooldown and question budget.
+- The setting only changes the prompt. Off, the talker is told not to offer hints, tips or anything the player hasn't found yet, and to give game knowledge only when asked directly.
+- This relies on the model following that instruction, so test it. It isn't enforced in code.
+
+**Barks replace the talker for the events they cover,** once WP6 in [REMAINING_WORK.md](REMAINING_WORK.md) is built. Speed is the point of a reaction, at the cost of less variety. With no bark ready, the event falls back to the talker.
+
 ## 2026-11-07: Player turns can use tools, and MCP is a later adapter
 
 **Status:** accepted by the project owner, for the team to review. Applies to `brain/agent/`, `brain/director/` and `brain/llm/`.
