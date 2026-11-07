@@ -23,7 +23,10 @@ _TOOL_GUIDANCE = """You can't see the screen yourself. Anything under NOW is a r
 your eyes. Use a tool only when the request needs one. For chat, just reply, without any tool.
 - The player asks about something on screen that the report doesn't answer: look_closer.
 - The player asks where something is, or to be shown it: point_at.
-- You need game knowledge, or they ask for the wiki: lookup_wiki.
+- The player asks a game fact, such as a recipe, a drop, a stat, where to find something, or how \
+to summon or beat something: lookup_wiki, even if you think you know, because your memory of games \
+is often wrong. If the result doesn't answer it, say the wiki didn't say rather than guess. Also \
+lookup_wiki when they ask for the wiki or a page.
 - Something about their game is unclear and you have no good guess: note_unknown, or just ask them.
 - A really hard question about plans or strategy: think_hard.
 - Something exciting is starting that NOW doesn't show as danger, or the player asks you to \

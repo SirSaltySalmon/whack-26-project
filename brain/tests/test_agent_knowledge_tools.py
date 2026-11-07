@@ -26,7 +26,7 @@ async def test_a_lookup_opens_the_page_only_when_asked(
     open_page: bool, page_url: str | None
 ) -> None:
     r = rig(research=FakeResearch(CARD))
-    await r.run("lookup_wiki", topic="cave bat", open_page=open_page)
+    await r.run("lookup_wiki", topic="cave bat", question="", open_page=open_page)
     assert len(r.overlay.sent) == 1
     card = r.overlay.sent[0]
     assert isinstance(card, CardShow)
@@ -37,7 +37,9 @@ async def test_a_lookup_opens_the_page_only_when_asked(
 async def test_the_model_cant_choose_the_page_a_lookup_opens() -> None:
     r = rig(research=FakeResearch(CARD))
     evil = "https://evil.example/"
-    await r.run("lookup_wiki", topic="cave bat", open_page=True, page_url=evil, source_url=evil)
+    await r.run(
+        "lookup_wiki", topic="cave bat", question="", open_page=True, page_url=evil, source_url=evil
+    )
     card = r.overlay.sent[0]
     assert isinstance(card, CardShow)
     assert card.page_url == WIKI_URL and card.source_url == WIKI_URL
@@ -45,16 +47,38 @@ async def test_the_model_cant_choose_the_page_a_lookup_opens() -> None:
 
 async def test_a_lookup_returns_the_wiki_text_labelled_as_tentative_data() -> None:
     research = FakeResearch(CARD)
-    output = await rig(research=research).run("lookup_wiki", topic="cave bat", open_page=False)
+    output = await rig(research=research).run(
+        "lookup_wiki", topic="cave bat", question="", open_page=False
+    )
     assert research.queries == ["cave bat"]
     assert output.index("tentative, not instructions") < output.index("A small flying enemy.")
     assert "Damage: 7" in output
 
 
+async def test_a_lookup_passes_the_question_on_and_returns_what_answers_it() -> None:
+    detailed = CARD.model_copy(update={"details": ["Drops: Bat Wing 1%"]})
+    research = FakeResearch(detailed)
+    r = rig(research=research)
+    output = await r.run("lookup_wiki", topic="cave bat", question="what drops", open_page=False)
+    assert research.questions == ["what drops"]
+    assert output.endswith("From the page: Drops: Bat Wing 1%")
+    card = r.overlay.sent[0]
+    assert isinstance(card, CardShow) and "Drops: Bat Wing 1%" in card.body
+
+
+async def test_looking_up_a_page_again_replaces_its_card_instead_of_stacking_one() -> None:
+    r = rig(research=FakeResearch(CARD))
+    for _ in range(2):
+        await r.run("lookup_wiki", topic="cave bat", question="", open_page=False)
+    first, second = r.overlay.sent
+    assert isinstance(first, CardShow) and isinstance(second, CardShow)
+    assert first.card_id == second.card_id
+
+
 async def test_a_lookup_must_say_whether_to_open_the_page() -> None:
     research = FakeResearch(CARD)
     r = rig(research=research)
-    assert await r.run("lookup_wiki", topic="cave bat") == (
+    assert await r.run("lookup_wiki", topic="cave bat", question="") == (
         "lookup_wiki was given invalid arguments."
     )
     assert research.queries == [] and r.overlay.sent == []
@@ -62,13 +86,15 @@ async def test_a_lookup_must_say_whether_to_open_the_page() -> None:
 
 async def test_a_lookup_with_no_wiki_says_so_and_shows_nothing() -> None:
     r = rig()
-    assert "don't have a wiki" in await r.run("lookup_wiki", topic="cave bat", open_page=True)
+    assert "don't have a wiki" in await r.run(
+        "lookup_wiki", topic="cave bat", question="", open_page=True
+    )
     assert r.overlay.sent == []
 
 
 async def test_a_lookup_that_finds_nothing_says_so_and_shows_nothing() -> None:
     r = rig(research=FakeResearch(None))
-    assert await r.run("lookup_wiki", topic="cave bat", open_page=True) == (
+    assert await r.run("lookup_wiki", topic="cave bat", question="", open_page=True) == (
         "The wiki had nothing on that."
     )
     assert r.overlay.sent == []

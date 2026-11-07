@@ -29,9 +29,11 @@ class FakeResearch:
     def __init__(self, card: WikiCard | None) -> None:
         self.card = card
         self.queries: list[str] = []
+        self.questions: list[str] = []
 
-    async def lookup(self, query: str) -> WikiCard | None:
+    async def lookup(self, query: str, question: str = "") -> WikiCard | None:
         self.queries.append(query)
+        self.questions.append(question)
         return self.card
 
 
