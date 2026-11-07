@@ -16,7 +16,8 @@ export type Brain =
   | MemoryToast
   | QuestionAsk
   | SettingsState
-  | PageRead;
+  | PageRead
+  | DebugRegions;
 export type Final = boolean;
 export type Text = string;
 export type Type = "subtitle.chunk";
@@ -62,32 +63,37 @@ export type Name = string;
 export type Voices = VoiceOption[];
 export type RequestId = string;
 export type Type10 = "page.read";
+export type Display = string | null;
+export type Name1 = string;
+export type Status = "ok" | "masked" | "unreadable";
+export type Regions = DebugRegion[];
+export type Type11 = "debug.regions";
 export type Overlay =
   OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent;
 export type DisplayScale = number;
 export type Height1 = number;
 export type ProtocolVersion = number;
-export type Type11 = "overlay.ready";
+export type Type12 = "overlay.ready";
 export type Width1 = number;
 export type ElementId = string;
 export type Rects = ElementRect[];
-export type Type12 = "overlay.rects";
+export type Type13 = "overlay.rects";
 export type CardId3 = string;
-export type Type13 = "card.closed";
+export type Type14 = "card.closed";
 export type CardId4 = string;
 export type Title2 = string | null;
-export type Type14 = "card.navigated";
+export type Type15 = "card.navigated";
 export type Url = string;
 export type Answer = string;
 export type QuestionId1 = string;
-export type Type15 = "question.answer";
-export type Type16 = "settings.update";
+export type Type16 = "question.answer";
+export type Type17 = "settings.update";
 export type CardId5 = string;
 export type RequestId1 = string;
 export type Text3 = string;
 export type Title3 = string | null;
 export type Truncated = boolean;
-export type Type17 = "page.content";
+export type Type18 = "page.content";
 export type Url1 = string;
 export type VisibleText = string;
 
@@ -183,11 +189,27 @@ export interface PageRead {
   request_id: RequestId;
   type?: Type10;
 }
+/**
+ * A debug view of where each HUD region was found and what its reader reads.
+ *
+ * Always the full current set, so an empty list clears the view. Send it about twice a second
+ * while debugging: the overlay hides the view when messages stop.
+ */
+export interface DebugRegions {
+  regions: Regions;
+  type?: Type11;
+}
+export interface DebugRegion {
+  display?: Display;
+  name: Name1;
+  rect: Rect;
+  status: Status;
+}
 export interface OverlayReady {
   display_scale: DisplayScale;
   height: Height1;
   protocol_version: ProtocolVersion;
-  type?: Type11;
+  type?: Type12;
   width: Width1;
 }
 /**
@@ -195,7 +217,7 @@ export interface OverlayReady {
  */
 export interface OverlayRects {
   rects: Rects;
-  type?: Type12;
+  type?: Type13;
 }
 export interface ElementRect {
   element_id: ElementId;
@@ -203,7 +225,7 @@ export interface ElementRect {
 }
 export interface CardClosed {
   card_id: CardId3;
-  type?: Type13;
+  type?: Type14;
 }
 /**
  * The wiki window's page changed. The URL and title come from a website: treat them as data.
@@ -211,17 +233,17 @@ export interface CardClosed {
 export interface CardNavigated {
   card_id: CardId4;
   title?: Title2;
-  type?: Type14;
+  type?: Type15;
   url: Url;
 }
 export interface QuestionAnswer {
   answer: Answer;
   question_id: QuestionId1;
-  type?: Type15;
+  type?: Type16;
 }
 export interface SettingsUpdate {
   settings: Settings;
-  type?: Type16;
+  type?: Type17;
 }
 /**
  * The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
@@ -233,7 +255,7 @@ export interface PageContent {
   text: Text3;
   title?: Title3;
   truncated?: Truncated;
-  type?: Type17;
+  type?: Type18;
   url: Url1;
   visible_text: VisibleText;
 }

@@ -4,10 +4,10 @@ Usage: python scripts/overlay_demo.py   then, in another terminal: npm --prefix 
 
 Uses the real brain server, so origin checks and message validation behave as they do in a real run.
 
-Each pass shows the avatar's states, the pointer, subtitles both ways, a toast for each source and a
-question with and without options, so Stage 0 of docs/TEST_PLAN.md can be checked by eye. Clicking
-an answer moves on straight away. The terminal logs what the overlay reports back, including the
-rectangles it wants masked.
+Each pass shows the avatar's states, the pointer, the HUD regions debug view, subtitles both ways,
+a toast for each source and a question with and without options, so Stage 0 of docs/TEST_PLAN.md
+can be checked by eye. Clicking an answer moves on straight away. The terminal logs what the overlay
+reports back, including the rectangles it wants masked.
 """
 
 import asyncio
@@ -31,6 +31,8 @@ from shared.protocol import BrainMessage  # noqa: E402
 from shared.protocol.messages import (  # noqa: E402
     AvatarState,
     CardShow,
+    DebugRegion,
+    DebugRegions,
     MemoryToast,
     PointerFly,
     QuestionAsk,
@@ -47,10 +49,14 @@ log = logging.getLogger("overlay_demo")
 SUBTITLE_HOLD_S = 3.0  # SUBTITLE_LINGER_MS is 2500
 TOAST_HOLD_S = 4.5  # TOAST_MS is 4000
 QUESTION_HOLD_S = 31.0  # QUESTION_MS is 30000
+DEBUG_REGIONS_STALE_S = 3.0  # DEBUG_REGIONS_STALE_MS is 3000
 
 WORD_GAP_S = 0.3
 TOAST_GAP_S = 1.0
 ANSWER_POLL_S = 0.25
+# Like the brain while debugging: about twice a second, with the readings changing.
+DEBUG_REGIONS_GAP_S = 0.5
+DEBUG_HEALTH_READINGS = ("72/100", "68/100", "64/100", "60/100", "64/100", "68/100")
 
 # Bare words and separate punctuation, because real word timings can arrive like this.
 SPOKEN_WORDS = ("That", "looks", "like", "a", "tough", "fight", ",", "so", "stay", "sharp", ".")
@@ -101,6 +107,32 @@ async def show_pointer(overlay: Overlay, sleep: Sleep) -> None:
     await sleep(5)
 
 
+def debug_regions(health: str) -> DebugRegions:
+    """Two made-up HUD boxes near the top, on screen even in a small window."""
+    return DebugRegions(
+        regions=[
+            DebugRegion(
+                name="health",
+                rect=Rect(x=700, y=40, width=220, height=26),
+                status="ok",
+                display=health,
+            ),
+            DebugRegion(
+                name="mana", rect=Rect(x=980, y=40, width=26, height=180), status="unreadable"
+            ),
+        ]
+    )
+
+
+async def show_debug_regions(overlay: Overlay, sleep: Sleep) -> None:
+    log.info("Debug regions: health reads, mana doesn't")
+    for health in DEBUG_HEALTH_READINGS:
+        await overlay.send(debug_regions(health))
+        await sleep(DEBUG_REGIONS_GAP_S)
+    await overlay.send(DebugRegions(regions=[]))
+    await sleep(1)
+
+
 async def show_subtitles(overlay: Overlay, sleep: Sleep) -> None:
     """The two shapes the brain sends: real voice word by word, subtitles-only mode all at once."""
     log.info("Subtitles: word by word")
@@ -148,6 +180,7 @@ async def ask(
 async def one_pass(overlay: Overlay, answered: asyncio.Event, sleep: Sleep = asyncio.sleep) -> None:
     await show_avatar_states(overlay, sleep)
     await show_pointer(overlay, sleep)
+    await show_debug_regions(overlay, sleep)
     await show_subtitles(overlay, sleep)
     await show_toasts(overlay, sleep)
     for question in QUESTIONS:

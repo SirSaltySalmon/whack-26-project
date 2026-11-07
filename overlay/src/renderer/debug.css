@@ -1,0 +1,47 @@
+/* The HUD regions debug view. Sizes here must match logic/debugRegions.ts. */
+.debug-regions {
+  position: fixed;
+  inset: 0;
+  /* Under the cards and the character: it's a debugging aid, not part of the partner. */
+  z-index: 3;
+  pointer-events: none;
+}
+
+.debug-outline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--debug-color);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.debug-label {
+  position: absolute;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-left: 3px solid var(--debug-color);
+  border-radius: 4px;
+  background: rgba(11, 13, 18, 0.85);
+  color: var(--text);
+  font:
+    12px/20px ui-monospace,
+    Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.debug-ok {
+  --debug-color: #22c55e;
+}
+
+.debug-masked {
+  --debug-color: #9ca3af;
+}
+
+.debug-unreadable {
+  --debug-color: #ef4444;
+}

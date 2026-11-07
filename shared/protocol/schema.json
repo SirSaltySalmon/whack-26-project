@@ -197,6 +197,68 @@
       "title": "CardUpdate",
       "type": "object"
     },
+    "DebugRegion": {
+      "properties": {
+        "display": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "masked",
+            "unreadable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "rect",
+        "status"
+      ],
+      "title": "DebugRegion",
+      "type": "object"
+    },
+    "DebugRegions": {
+      "description": "A debug view of where each HUD region was found and what its reader reads.\n\nAlways the full current set, so an empty list clears the view. Send it about twice a second\nwhile debugging: the overlay hides the view when messages stop.",
+      "properties": {
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/DebugRegion"
+          },
+          "title": "Regions",
+          "type": "array"
+        },
+        "type": {
+          "const": "debug.regions",
+          "default": "debug.regions",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "regions"
+      ],
+      "title": "DebugRegions",
+      "type": "object"
+    },
     "ElementRect": {
       "properties": {
         "element_id": {
@@ -668,6 +730,7 @@
           "card.close": "#/$defs/CardClose",
           "card.show": "#/$defs/CardShow",
           "card.update": "#/$defs/CardUpdate",
+          "debug.regions": "#/$defs/DebugRegions",
           "page.read": "#/$defs/PageRead",
           "pointer.fly": "#/$defs/PointerFly",
           "pointer.hide": "#/$defs/PointerHide",
@@ -711,6 +774,9 @@
         },
         {
           "$ref": "#/$defs/PageRead"
+        },
+        {
+          "$ref": "#/$defs/DebugRegions"
         }
       ],
       "title": "Brain"
