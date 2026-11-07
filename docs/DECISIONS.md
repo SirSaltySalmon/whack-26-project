@@ -2,6 +2,34 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: Replay runs start from a fixed memory snapshot
+
+**Status:** accepted. Applies to `brain/memory/` and `brain/app.py`.
+
+Replay is both the main test harness and the stage fallback, so its memory has to be repeatable and able to show the partner remembering earlier sessions.
+
+- Each replay loads `fixtures/replay_memory.sql` into an in-memory database, and everything it learns is thrown away when the run ends. The player's real memory is never touched, and the vault isn't exported.
+- If the file is missing or can't be loaded, the replay still runs, with empty memory.
+- The snapshot is SQL text rather than a database file so it can be reviewed. It can contain conversation transcripts, so read it before committing it.
+- If a snapshot is used on stage, say that its memory was seeded.
+
+## 2026-11-07: Low confidence includes not understanding the game yet
+
+**Status:** accepted. Applies to `brain/memory/` and the talker's context.
+
+Low confidence isn't only a shaky reading that disagrees with a stored fact. The partner often just hasn't discovered a detail yet, and that's a reason to talk to the player rather than guess.
+
+| Situation | What happens |
+|---|---|
+| The partner has no guess: "what's shimmer?" | Opens a question with no fact behind it, and the player's answer becomes a `player` fact |
+| The partner has a shaky guess and nothing stored | Stores it as tentative and asks yes or no |
+| A shaky reading disagrees with a stored fact | Keeps both open and asks, so it can't replace something surer |
+
+- Open questions appear in the talker's context under `UNSURE`, so it can say it doesn't know or bring them up instead of guessing.
+- Spoken answers count. Replying after a question brings the next session note forward, and that note settles the question. This adds no separate LLM call beyond that note.
+- Session notes can also open questions about things the partner didn't follow.
+- At most five of these no-guess questions stay open at once, and asking still goes through the director's question budget, so the partner doesn't nag.
+
 ## 2026-11-07: Memory stores the play session, not a game encyclopedia
 
 **Status:** accepted. Applies to `brain/memory/`, `brain/research/` and the talker's context.
