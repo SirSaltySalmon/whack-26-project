@@ -106,6 +106,14 @@ export function defaultTextFrame(viewport: Size, stackIndex: number): Frame {
   );
 }
 
+/** Tall enough that opening settings shows every choice, including the voices at the bottom. */
+export function defaultSettingsFrame(viewport: Size): Frame {
+  return clampFrame(
+    { ...defaultTextFrame(viewport, 0), height: 290 },
+    viewport,
+  );
+}
+
 export interface QuestionPlacement {
   left: number;
   bottom: number;
@@ -113,6 +121,9 @@ export interface QuestionPlacement {
 
 const QUESTION_WIDTH = 300; // Keep equal to .question's width in companion.css.
 const QUESTION_GAP = 12;
+// A question grows upward from its bottom edge, and its height depends on its text. This fits three
+// lines of text and two rows of buttons.
+const QUESTION_ROOM = 160;
 
 /** Beside the character, on whichever side has room, so it reads as the character asking. */
 export function questionPlacement(
@@ -121,11 +132,13 @@ export function questionPlacement(
 ): QuestionPlacement {
   const right = avatar.x + avatar.width + QUESTION_GAP;
   const fitsRight = right + QUESTION_WIDTH <= viewport.width;
+  const level = viewport.height - avatar.y - avatar.height;
   return {
     left: fitsRight
       ? right
       : Math.max(0, avatar.x - QUESTION_GAP - QUESTION_WIDTH),
-    bottom: Math.max(0, viewport.height - avatar.y - avatar.height),
+    // Level with the character, unless that would lose the question's top off the screen.
+    bottom: Math.max(0, Math.min(level, viewport.height - QUESTION_ROOM)),
   };
 }
 

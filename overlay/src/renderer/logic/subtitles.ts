@@ -9,7 +9,7 @@ export interface SubtitleLine {
 
 /** Word timings can arrive as bare words, so this adds the spaces, but not before punctuation. */
 function joinWords(previous: string, next: string): string {
-  if (previous === "") return next;
+  if (previous === "" || next === "") return previous + next;
   if (/\s$/.test(previous) || /^[\s.,!?;:'’)]/.test(next)) {
     return previous + next;
   }

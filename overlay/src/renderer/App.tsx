@@ -24,6 +24,7 @@ import { cardsReducer, type Card } from "./logic/cards.ts";
 import {
   clampFrame,
   defaultAvatarFrame,
+  defaultSettingsFrame,
   defaultTextFrame,
   defaultWebFrame,
   minimizedTabPosition,
@@ -51,7 +52,7 @@ export function App() {
   const feed = useCompanionFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFrame, setSettingsFrame] = useState(() =>
-    defaultTextFrame(viewport, 0),
+    defaultSettingsFrame(viewport),
   );
 
   useClickThrough();
