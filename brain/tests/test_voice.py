@@ -51,6 +51,7 @@ def _listening_voice() -> tuple["PipecatVoice", EventBus]:
     voice._bus = bus
     voice._mood = MoodTracker()
     voice._last_partial = ""
+    voice._last_partial_logged = 0.0
     voice.user_speaking = True
     return voice, bus
 
@@ -78,6 +79,15 @@ def test_partial_transcripts_update_the_players_mood() -> None:
     moods = [e for e in published if isinstance(e, PlayerMood)]
     assert moods and moods[0].label == "frustrated"
     assert voice.live_state() == {"player mood": "frustrated"}
+
+
+def test_live_text_is_logged_but_not_on_every_update(caplog: pytest.LogCaptureFixture) -> None:
+    voice, _ = _listening_voice()
+    with caplog.at_level("INFO", logger="brain.voice.pipecat_voice"):
+        voice.on_partial_transcript("where")
+        voice.on_partial_transcript("where do")
+    heard = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Hearing")]
+    assert heard == ["Hearing: where"]
 
 
 def test_mic_audio_only_counts_while_the_player_talks() -> None:
