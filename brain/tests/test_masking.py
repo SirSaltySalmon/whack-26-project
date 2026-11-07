@@ -1,5 +1,6 @@
 import numpy as np
 
+from brain.perception.coords import CropRegion
 from brain.perception.masking import mask_overlay
 from shared.protocol.messages import Rect
 
@@ -20,6 +21,13 @@ def test_converts_dips_to_physical_pixels() -> None:
     masked = mask_overlay(white(), [Rect(x=10, y=10, width=10, height=10)], 2.0, 0)
     assert masked[20, 20].sum() == 0 and masked[39, 39].sum() == 0
     assert masked[40, 40].sum() > 0
+
+
+def test_cropped_frame_is_masked_where_the_overlay_really_is() -> None:
+    rect = Rect(x=110, y=60, width=10, height=10)
+    masked = mask_overlay(white(), [rect], 1.0, 0, CropRegion(100, 50, 200, 100))
+    assert masked[10, 10].sum() == 0 and masked[19, 19].sum() == 0
+    assert masked[20, 20].sum() > 0 and masked[60, 110].sum() > 0
 
 
 def test_rects_off_screen_are_clipped() -> None:

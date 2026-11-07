@@ -3,6 +3,7 @@
 # Voice and LLM. Pipecat caps google-genai below 3 (3.0.0 exists), so this is the newest it allows.
 pipecat-ai[cartesia,deepgram,elevenlabs,google,local]==1.15.0
 google-genai==2.34.0
+anthropic==2.6.0
 
 # Brain server and contract
 fastapi==0.162.1
@@ -23,6 +24,9 @@ imagehash==4.3.2
 pillow==13.0.0
 rapidocr==3.10.0
 onnxruntime==1.31.1
+
+# Mood from the live transcript
+vaderSentiment==3.3.2
 
 # Memory
 sqlite-vec==0.1.9

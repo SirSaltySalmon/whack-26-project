@@ -15,13 +15,13 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Gemini free tier only: Flash-Lite (talker), Flash (vision, pointing, deep reasoning) |
+| LLMs | Gemini free tier: Flash-Lite (talker), Flash (on-demand vision, pointing, deep reasoning). Claude Haiku 5.5 (paid): continuous screen reports |
 | Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
 Model IDs live only in `brain/config.py`. Never hardcode them elsewhere.
 
-Don't propose: Tauri, an LLM deciding when to speak, continuous vision model watching, Obsidian or Markdown as the memory store, or Silero VAD on the voice path (Flux does its own turn detection).
+Don't propose: Tauri, an LLM deciding when to speak, Obsidian or Markdown as the memory store, or Silero VAD on the voice path (Flux does its own turn detection).
 
 ## Rules That Must Hold
 **Latency**
@@ -32,7 +32,8 @@ Don't propose: Tauri, an LLM deciding when to speak, continuous vision model wat
 
 **Data ingestion**
 - Capture locally at about 5 fps into a full-resolution, 10-second ring buffer in RAM.
-- Call vision only on a trigger: learning the game, the player asking, or an event. Don't stream frames to the AI, because free-tier quotas won't sustain it.
+- Haiku reports on the newest frame every 0.8 s while the game is in front. See [docs/DECISIONS.md](docs/DECISIONS.md). A report counts only once consecutive frames agree (`brain/perception/tracker.py`), and even then it's an observation, not a fact.
+- Call Gemini vision only on a trigger: learning the game, the player asking, or an event. Free-tier quotas won't sustain streaming.
 - Send downscaled frames at `media_resolution` low by default. Send full-resolution crops only when the player asks or an event fires.
 - Send every LLM call through a local per-model rate limiter that refuses rather than waits. When over quota, fall back to cached barks or stay quiet.
 
@@ -93,6 +94,8 @@ pip install -r requirements-dev.txt
 python -m brain --live                     # run against the live game
 python -m brain --replay <session-dir>     # run from a recorded session
 pytest brain/tests
+python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
+python scripts/save_screenshots.py        # save test screenshots of the game
 ruff check --fix brain; ruff format brain
 npm --prefix overlay install
 npm --prefix overlay run dev
@@ -116,7 +119,8 @@ Replay mode is the main test harness: it records frames, audio and events to dis
 
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
-- `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without the last three, the brain runs subtitles only.
+- `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
+- `GAME_PROCESS`: the game's process name, such as `Terraria`. Live capture stays off without it.
 - `GAME_TITLE`: what memory and the learned profile are filed under, so set it for each game. If it's unset, every game shares `Unknown game`. If it's blank, they share an empty title.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
@@ -131,7 +135,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Echo:** Pipecat's local audio transport has no documented echo cancellation, so speaker output can trigger barge-in. Use headphones. Without them, set `VOICE_HALF_DUPLEX=true`, which mutes the mic while the partner talks but gives up barge-in.
 - **Recording:** record with OBS Display Capture. Game Capture and Window Capture are likely to miss the overlay.
 - **`<webview>`:** Electron's docs warn it can be unstable, so test it over the game. Hide it with `visibility: hidden`: `display: none` can reload the page. Set `pointer-events: none` on it during a drag, or it swallows the drag.
-- **Frame privacy:** crop frames to the game window so notifications and other apps never reach Gemini. Keep replay sessions out of git; they contain screen and mic data.
+- **Frame privacy:** frames are cropped to the game window and only captured while it's in front. The Steam overlay draws inside that window, so cropping can't remove friend lists and chats: turn it off while playing. Keep replay sessions out of git; they contain screen and mic data.
 
 ### Terraria (test these; don't hardcode them)
 - **Wiki:** the official wiki is `terraria.wiki.gg`, and its `api.php` `action=parse` works. Fandom's copy is unofficial, so don't assume every game's wiki is on Fandom. Fandom limits are undocumented: cache pages and send one request at a time.

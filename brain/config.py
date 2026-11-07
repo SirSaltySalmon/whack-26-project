@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     deepgram_api_key: SecretStr | None = None
     elevenlabs_api_key: SecretStr | None = None
     exa_api_key: SecretStr | None = None
@@ -22,11 +23,19 @@ class Settings(BaseSettings):
     talker_model: str = "gemini-3.5-flash-lite"
     vision_model: str = "gemini-3.6-flash"
     deep_model: str = "gemini-3.6-flash"
+    # Reports on what is on screen. Paid, so it only runs with ANTHROPIC_API_KEY set.
+    observer_model: str = "claude-haiku-5-5"
+    observer_interval_s: float = 0.8
 
     # Requests per minute we allow ourselves, per model. These are cautious placeholders: Google
     # doesn't publish free-tier numbers, so set them from your project's AI Studio rate limit page.
     rpm_by_model: dict[str, int] = Field(
-        default_factory=lambda: {"gemini-3.5-flash-lite": 10, "gemini-3.6-flash": 6}
+        default_factory=lambda: {
+            "gemini-3.5-flash-lite": 10,
+            "gemini-3.6-flash": 6,
+            # One frame per 0.8 s is 75 a minute. This is our own spending cap, not a quota.
+            "claude-haiku-5-5": 90,
+        }
     )
 
     tts_model: str = "eleven_flash_v2_5"
@@ -48,6 +57,9 @@ class Settings(BaseSettings):
     mic_device_index: int | None = None
     speaker_device_index: int | None = None
 
+    # The game's process name, such as Terraria. Live capture stays off until this is set, because
+    # capturing without a window to crop to would send the whole desktop onward.
+    game_process: str = ""
     capture_fps: int = 5
     ring_buffer_seconds: int = 10
     ai_image_max_edge_px: int = 1280

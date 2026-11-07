@@ -2,10 +2,11 @@
 
 import threading
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
+from brain.perception.coords import CropRegion
 from shared.protocol.messages import Rect
 
 
@@ -15,6 +16,8 @@ class Frame:
     image: np.ndarray
     # Overlay rectangles (DIPs) at capture time, so masking matches this exact frame.
     overlay_rects: tuple[Rect, ...] = ()
+    # Where the image sits on screen, in physical pixels. None means it starts at the corner.
+    region: CropRegion | None = None
 
 
 class RingBuffer:
@@ -26,7 +29,7 @@ class RingBuffer:
 
     def push(self, frame: Frame) -> None:
         # dxcam can hand out zero-copy views that later captures overwrite.
-        owned = Frame(frame.ts, frame.image.copy(), frame.overlay_rects)
+        owned = replace(frame, image=frame.image.copy())
         with self._lock:
             self._frames.append(owned)
 

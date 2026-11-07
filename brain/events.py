@@ -35,6 +35,22 @@ class PlayerSpeech(Event):
 
 
 @dataclass(frozen=True)
+class PlayerSpeechPartial(Event):
+    """The turn so far, while the player is still talking. It can change until PlayerSpeech."""
+
+    transcript: str
+
+
+@dataclass(frozen=True)
+class PlayerMood(Event):
+    """A rough read of the player's mood from their words and voice."""
+
+    label: str
+    valence: float
+    intensity: float
+
+
+@dataclass(frozen=True)
 class PlayerStartedSpeaking(Event):
     """Barge-in signal from Deepgram Flux's StartOfTurn."""
 

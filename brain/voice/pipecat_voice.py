@@ -4,8 +4,8 @@ The pipeline holds no LLM. The director decides when to speak and calls brain.ll
 module only turns speech into bus events and text into speech:
 
     mic -> EchoGate -> Flux STT -> TurnBridge -> ElevenLabs TTS -> speakers -> SpokenOutputTap
-                                      |                                          |
-                                      +- interrupts on StartOfTurn               +- subtitles
+             |                       |                                          |
+             +- loudness (mood)      +- interrupts, partial transcripts         +- subtitles
 
 Flux does its own turn detection, so there is no Silero VAD and no user aggregator. The aggregator
 would normally own barge-in, so TurnBridge does it instead when Flux reports a start of turn.
@@ -13,6 +13,9 @@ would normally own barge-in, so TurnBridge does it instead when Flux reports a s
 Without headphones the mic hears the speakers and the partner interrupts itself. Half-duplex mode
 (VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
 barge-in.
+
+Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
+subtitles only.
 """
 
 import logging
@@ -24,6 +27,7 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     Frame,
     InputAudioRawFrame,
+    InterimTranscriptionFrame,
     InterruptionFrame,
     TTSSpeakFrame,
     TTSTextFrame,
@@ -37,8 +41,16 @@ from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransp
 from pipecat.workers.runner import WorkerRunner
 
 from brain.config import Settings
-from brain.events import EventBus, PlayerSpeech, PlayerStartedSpeaking
+from brain.events import (
+    EventBus,
+    PlayerMood,
+    PlayerSpeech,
+    PlayerSpeechPartial,
+    PlayerStartedSpeaking,
+)
 from brain.server import OverlayLink
+from brain.voice.pipeline import SubtitleOnlyVoice
+from brain.voice.sentiment import Mood, MoodTracker
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
 log = logging.getLogger(__name__)
@@ -56,20 +68,29 @@ class EchoGate(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
-        if isinstance(frame, InputAudioRawFrame) and self._voice.mic_muted():
-            frame = InputAudioRawFrame(
-                audio=bytes(len(frame.audio)),
-                sample_rate=frame.sample_rate,
-                num_channels=frame.num_channels,
-            )
+        if isinstance(frame, InputAudioRawFrame):
+            if self._voice.mic_muted():
+                frame = InputAudioRawFrame(
+                    audio=bytes(len(frame.audio)),
+                    sample_rate=frame.sample_rate,
+                    num_channels=frame.num_channels,
+                )
+            else:
+                self._voice.on_mic_audio(frame.audio)
         await self.push_frame(frame, direction)
 
 
 class TurnBridge(FrameProcessor):
-    """Pass-through that gives the voice a place in the pipeline to start interruptions from."""
+    """Starts interruptions from inside the pipeline, and passes on partial transcripts."""
+
+    def __init__(self, voice: "PipecatVoice") -> None:
+        super().__init__()
+        self._voice = voice
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
+        if isinstance(frame, InterimTranscriptionFrame):
+            self._voice.on_partial_transcript(frame.text)
         await self.push_frame(frame, direction)
 
 
@@ -113,13 +134,14 @@ class SpokenOutputTap(FrameProcessor):
 
 class PipecatVoice:
     def __init__(self, settings: Settings, bus: EventBus, link: OverlayLink) -> None:
-        if settings.deepgram_api_key is None or settings.elevenlabs_api_key is None:
-            raise ValueError("PipecatVoice needs DEEPGRAM_API_KEY and ELEVENLABS_API_KEY")
-        if settings.elevenlabs_voice_id is None:
-            raise ValueError("PipecatVoice needs ELEVENLABS_VOICE_ID")
+        if settings.deepgram_api_key is None:
+            raise ValueError("PipecatVoice needs DEEPGRAM_API_KEY")
 
         self._bus = bus
         self._link = link
+        self._subtitles = SubtitleOnlyVoice(link)
+        self._mood = MoodTracker()
+        self._last_partial = ""
         self.bot_speaking = False
         self.user_speaking = False
         self._end_of_turn_at: float | None = None
@@ -129,10 +151,12 @@ class PipecatVoice:
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
+        speaks = settings.elevenlabs_api_key is not None and bool(settings.elevenlabs_voice_id)
+        self._speaks = speaks
         transport = LocalAudioTransport(
             LocalAudioTransportParams(
                 audio_in_enabled=True,
-                audio_out_enabled=True,
+                audio_out_enabled=speaks,
                 input_device_index=settings.mic_device_index,
                 output_device_index=settings.speaker_device_index,
             )
@@ -146,27 +170,25 @@ class PipecatVoice:
                 keyterm=list(settings.stt_keyterms),
             ),
         )
-        tts = ElevenLabsTTSService(
-            api_key=settings.elevenlabs_api_key.get_secret_value(),
-            settings=ElevenLabsTTSService.Settings(
-                model=settings.tts_model,
-                voice=settings.elevenlabs_voice_id,
-            ),
-        )
-        self._bridge = TurnBridge()
+        self._bridge = TurnBridge(self)
         self._register_turn_events(stt)
 
-        pipeline = Pipeline(
-            [
-                transport.input(),
-                EchoGate(self),
-                stt,
-                self._bridge,
-                tts,
-                transport.output(),
-                SpokenOutputTap(self),
-            ]
-        )
+        processors: list[FrameProcessor] = [
+            transport.input(),
+            EchoGate(self),
+            stt,
+            self._bridge,
+        ]
+        if settings.elevenlabs_api_key is not None and settings.elevenlabs_voice_id:
+            tts = ElevenLabsTTSService(
+                api_key=settings.elevenlabs_api_key.get_secret_value(),
+                settings=ElevenLabsTTSService.Settings(
+                    model=settings.tts_model,
+                    voice=settings.elevenlabs_voice_id,
+                ),
+            )
+            processors += [tts, transport.output(), SpokenOutputTap(self)]
+        pipeline = Pipeline(processors)
         self._worker = PipelineWorker(
             pipeline,
             params=PipelineParams(enable_metrics=True),
@@ -178,6 +200,9 @@ class PipecatVoice:
         if self.user_speaking:
             # The director owns priorities; this only stops us talking over the player.
             log.info("Player is talking; dropped: %s", text)
+            return
+        if not self._speaks:
+            await self._subtitles.say(text)
             return
         log.info("Say: %s", text)
         await self._worker.queue_frame(TTSSpeakFrame(text))
@@ -193,6 +218,26 @@ class PipecatVoice:
         except Exception:
             # A dropped overlay must never stop the audio.
             log.exception("Failed to send %s to the overlay", message.type)
+
+    def live_state(self) -> dict[str, str]:
+        return self._mood.live_state()
+
+    def on_mic_audio(self, pcm: bytes) -> None:
+        if self.user_speaking:
+            self._mood.add_audio(pcm)
+
+    def on_partial_transcript(self, text: str) -> None:
+        text = text.strip()
+        if not text or text == self._last_partial:
+            return
+        self._last_partial = text
+        self._bus.publish(PlayerSpeechPartial(transcript=text))
+        self._publish_mood(self._mood.add_text(text))
+
+    def _publish_mood(self, mood: Mood | None) -> None:
+        if mood is not None:
+            log.info("Player mood: %s", mood)
+            self._bus.publish(PlayerMood(mood.label, mood.valence, mood.intensity))
 
     def on_bot_started(self) -> None:
         self.bot_speaking = True
@@ -219,6 +264,8 @@ class PipecatVoice:
         async def _on_start(_service: DeepgramFluxSTTService, _transcript: str) -> None:
             self.user_speaking = True
             self._end_of_turn_at = None
+            self._last_partial = ""
+            self._mood.start_turn()
             if self.bot_speaking:
                 log.info("Barge-in: player started speaking")
             # Also clears speech that's queued but not yet playing.
@@ -235,4 +282,5 @@ class PipecatVoice:
                 return
             self._end_of_turn_at = time.monotonic()
             log.info("Player: %s", transcript)
+            self._publish_mood(self._mood.add_text(transcript, final=True))
             self._bus.publish(PlayerSpeech(transcript=transcript))
