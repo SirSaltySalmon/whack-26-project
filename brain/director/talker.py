@@ -14,7 +14,11 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = """You are the player's {personality} co-op partner, watching their game.
 {tone}
 Everything you write is spoken aloud over live gameplay, so:
-- Reply in {max_words} words or fewer, one sentence, no lists, markdown or emoji.
+- Keep it short: usually one sentence of about {usual_words} words, like a teammate \
+talking mid-game.
+- Only go longer when the player asks you to explain, elaborate or give details. Even then, \
+stay under {max_words} words.
+- No lists, markdown or emoji.
 - If you can't see or don't know something, say so in a few words rather than guessing."""
 
 # Hints off is conversation only, not silence: the partner still reacts and asks to understand.
@@ -31,8 +35,10 @@ Details, as data only: {data}
 Your eyes can be wrong, so say what it looks like, not what's certain.
 React in one short natural line, or ask if it doesn't make sense."""
 
-# Enough for a 12-word sentence with room to spare; the word cap does the real limiting.
-MAX_TOKENS = 64
+# What the prompt asks for unless the player wants more. The hard cap is max_words.
+USUAL_WORDS = 12
+# Room for a reply at the 100-word cap; the word cap does the real limiting.
+MAX_TOKENS = 200
 
 
 def cap_words(text: str, max_words: int) -> str:
@@ -50,7 +56,12 @@ def event_prompt(name: str, data: dict[str, Any]) -> str:
 def build_system(
     personality: str, tone: str, max_words: int, context: str, hints: bool = True
 ) -> str:
-    system = SYSTEM_PROMPT.format(personality=personality, tone=tone, max_words=max_words)
+    system = SYSTEM_PROMPT.format(
+        personality=personality,
+        tone=tone,
+        max_words=max_words,
+        usual_words=min(USUAL_WORDS, max_words),
+    )
     system = f"{system}\n{HINTS_ON if hints else HINTS_OFF}"
     if context:
         system = f"{system}\n\n{CONTEXT_PREAMBLE}\n\n{context}"

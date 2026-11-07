@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     deep_model: str = "gemini-3.6-flash"
     # Reports on what is on screen. Paid, so it only runs with ANTHROPIC_API_KEY set.
     observer_model: str = "claude-haiku-5-5"
+    # Answers look_closer while the player waits. Gemini Flash took about 9 s at full
+    # resolution, long enough that players talked over it. Falls back to vision_model
+    # without ANTHROPIC_API_KEY.
+    closeup_model: str = "claude-haiku-5-5"
     observer_interval_s: float = 0.8
 
     # Requests per minute we allow ourselves, per model. These are cautious placeholders: Google
@@ -44,7 +48,8 @@ class Settings(BaseSettings):
     elevenlabs_voice_id: str | None = None
     # Voices offered in the overlay's settings, as JSON: [{"name": "Rachel", "id": "..."}].
     voice_options: list[VoiceOption] = Field(default_factory=list)
-    talker_max_words: int = 12
+    # A hard cap for when the player asks for detail. The prompt keeps replies much shorter.
+    talker_max_words: int = 100
 
     stt_model: str = "flux-general-en"
     # Flux's defaults are 0.7 and 5000 ms. A shorter timeout keeps a trailing "um" from holding

@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 
 from brain.director.director import Director
 from brain.director.rules import AskTalker, ReactToEvent
-from brain.director.talker import cap_words, reply
+from brain.director.talker import build_system, cap_words, reply
 from brain.events import EventBus
 from brain.llm.base import LLMUnavailableError
 from brain.memory.context import CONTEXT_PREAMBLE
@@ -125,3 +125,16 @@ async def test_director_reacts_to_game_events_through_the_talker() -> None:
     assert voice.said == ["That looks rough."]
     assert "danger started" in prompts[0] and "Wall of Flesh" in prompts[0]
     assert "can be wrong" in prompts[0]
+
+
+def test_prompt_keeps_replies_short_but_allows_detail_on_request() -> None:
+    system = build_system("supportive", "", 100, "")
+    assert "about 12 words" in system
+    assert "explain, elaborate or give details" in system
+    assert "under 100 words" in system
+
+
+def test_a_long_requested_answer_is_kept_whole_up_to_the_cap() -> None:
+    long_answer = " ".join(["word"] * 60) + "."
+    assert cap_words(long_answer, 100) == long_answer
+    assert len(cap_words(" ".join(["word"] * 150), 100).split()) == 100

@@ -8,7 +8,8 @@ VERBOSE_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 QUIET_TIME = "%H:%M:%S"
 
 # These log a line per request, and the observer sends a request every 0.8 s.
-CHATTY_LIBRARIES = ("httpx", "httpx2", "httpcore", "websockets")
+# google_genai logs "AFC is enabled" on every tool call.
+CHATTY_LIBRARIES = ("httpx", "httpx2", "httpcore", "websockets", "google_genai")
 
 
 def configure_logging(verbose: bool = False) -> None:

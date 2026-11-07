@@ -2,6 +2,28 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: Replies stay short unless the player asks for more
+
+**Status:** accepted by the project owner. Replaces the 12-word hard cap (decision 2 of the voice entry below still holds: a reply is collected before TTS). Applies to `brain/director/talker.py`, `brain/agent/turn.py` and `brain/config.py`.
+
+A hard 12-word cap leaves no room for an answer the player asks to hear in full, such as how a mechanic works.
+
+- **The default stays short.** The prompt asks for about one 12-word sentence, like a teammate talking mid-game.
+- **Longer only when asked.** If the player asks to explain, elaborate or give details, the reply can run longer.
+- **A hard cap of 100 words** (`talker_max_words`), enforced in code. Token limits rose to fit: 200 for plain replies and 400 for tool turns.
+- **Longer answers take longer to start.** A reply is collected whole before TTS, so a 100-word answer delays first audio more than a short one. Short replies are unaffected.
+
+## 2026-11-07: A turn that's using a tool finishes, even if the player talks
+
+**Status:** accepted. Narrows decision 4 of the agent entry below ("a barge-in cancels the turn in progress"). Applies to `brain/director/` and `brain/agent/`.
+
+In the first live test, every request that used `look_closer` spoke its "one sec" line and then never answered. The logs showed why: the check took about 9 s, the player talked again within 4-6 s, and that barge-in cancelled the turn and threw the answer away.
+
+- **Tool turns survive a barge-in.** Once a turn has started a tool, the player talking doesn't cancel it. A new question waits until it has answered.
+- **The answer waits for silence.** It's said once the player stops talking, or dropped after 10 s if they don't.
+- **`look_closer` uses Haiku** (`closeup_model`), which should take about 1.5 s, instead of Gemini Flash at full resolution, which took 9.1 s on a Terraria screenshot. These calls only happen when the player asks. Without `ANTHROPIC_API_KEY` it falls back to `vision_model`. `point_at` stays on Gemini, because `coords.py` converts its box format.
+- Turns without tools still cancel on a barge-in, as before.
+
 ## 2026-11-07: The partner can read the open page, on the game's wiki only
 
 **Status:** accepted by the project owner, not built yet. Partly replaces "the wiki window shows the real site" below: page text may now reach a model in this one case. Frames stay masked. The spec is WP8 in [REMAINING_WORK.md](REMAINING_WORK.md).

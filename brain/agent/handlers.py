@@ -130,10 +130,15 @@ class AgentTools:
         memory: Unknowns,
         context: Callable[[str], Awaitable[str]],
         limits: AgentLimits,
+        *,
+        look_vision: Callable[[], VisionLLM] | None = None,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
         self._vision = vision
+        # A faster model for look_closer, since the player is waiting on it. Pointing stays on
+        # `vision`, whose box format is the one coords.py converts.
+        self._look_vision = look_vision or vision
         self._deep = deep
         self._memory = memory
         self._context = context
@@ -214,7 +219,7 @@ class AgentTools:
         if frame is None:
             return CANT_SEE
         closeup = await self._closeup(frame, arguments.area)
-        reply = await self._vision().vision_json(
+        reply = await self._look_vision().vision_json(
             _LOOK_PROMPT.format(question=arguments.question),
             closeup.image,
             "image/jpeg",
@@ -288,7 +293,7 @@ class AgentTools:
         answer = "".join(parts).strip()
         if not answer:
             raise LLMEmptyResponseError("The deep model returned nothing")
-        # The spoken reply is only 12 words, so the card carries the full reasoning.
+        # The spoken reply is kept short, so the card carries the full reasoning.
         await self._overlay.send(
             CardShow(card_id=REASONING_CARD_ID, title=arguments.question[:80], body=answer)
         )

@@ -3,7 +3,7 @@
 from google.genai import types
 
 from brain.config import Settings
-from brain.llm.base import LLMUnavailableError, RateLimiter
+from brain.llm.base import LLMUnavailableError, RateLimiter, VisionLLM
 from brain.llm.claude import ClaudeClient
 from brain.llm.gemini import GeminiClient
 
@@ -41,6 +41,14 @@ class LLMFactory:
         key = self._settings.anthropic_api_key
         if key is None:
             raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
+        return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
+
+    def closeup(self) -> VisionLLM:
+        """For questions about the screen while the player waits, so speed matters most."""
+        key = self._settings.anthropic_api_key
+        if key is None:
+            return self.vision()
+        model = self._settings.closeup_model
         return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
 
     def deep(self) -> GeminiClient:

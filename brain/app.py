@@ -144,6 +144,7 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
                 settings.look_max_frame_age_s,
                 settings.pointer_ttl_ms,
             ),
+            look_vision=factory.closeup,
         )
 
     director = Director(

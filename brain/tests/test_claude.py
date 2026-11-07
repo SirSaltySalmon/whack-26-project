@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, RateLimiter
-from brain.llm.claude import ClaudeClient
+from brain.llm.claude import ClaudeClient, strict_schema
 
 
 class Answer(BaseModel):
@@ -57,3 +57,25 @@ async def test_incomplete_replies_are_errors(stop_reason: str) -> None:
 async def test_no_text_is_an_error() -> None:
     with pytest.raises(LLMEmptyResponseError):
         await ask(client(FakeMessages(None)))
+
+
+class Inner(BaseModel):
+    name: str
+
+
+class Outer(BaseModel):
+    inner: Inner
+    items: list[Inner]
+
+
+def test_every_object_forbids_extra_fields_as_anthropic_requires() -> None:
+    schema = strict_schema(Outer.model_json_schema())
+    assert schema["additionalProperties"] is False
+    assert schema["$defs"]["Inner"]["additionalProperties"] is False
+
+
+async def test_the_schema_sent_is_strict() -> None:
+    messages = FakeMessages('{"value": "seen"}')
+    await ask(client(messages))
+    sent = messages.kwargs["output_config"]["format"]["schema"]  # type: ignore[index]
+    assert sent["additionalProperties"] is False

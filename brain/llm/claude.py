@@ -2,6 +2,7 @@
 
 import logging
 from base64 import standard_b64encode
+from typing import Any
 
 import anthropic
 
@@ -14,6 +15,18 @@ from brain.llm.base import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def strict_schema(schema: Any) -> Any:
+    """Anthropic's structured output rejects any object that doesn't forbid extra fields."""
+    if isinstance(schema, dict):
+        fixed = {key: strict_schema(value) for key, value in schema.items()}
+        if fixed.get("type") == "object":
+            fixed["additionalProperties"] = False
+        return fixed
+    if isinstance(schema, list):
+        return [strict_schema(item) for item in schema]
+    return schema
 
 
 class ClaudeClient:
@@ -43,7 +56,10 @@ class ClaudeClient:
                 thinking={"type": "disabled"},
                 output_config={
                     "effort": "low",
-                    "format": {"type": "json_schema", "schema": schema.model_json_schema()},
+                    "format": {
+                        "type": "json_schema",
+                        "schema": strict_schema(schema.model_json_schema()),
+                    },
                 },
                 messages=[
                     {

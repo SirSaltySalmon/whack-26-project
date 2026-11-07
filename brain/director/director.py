@@ -3,6 +3,10 @@
 Deciding stays instant because speech runs in its own task. There's one speech slot: a player turn
 replaces whatever is in it, the start of their next turn cancels it, and anything else is skipped
 while it's busy. A cancelled turn doesn't take back a pointer or card it has already shown.
+
+One exception: a turn that has started a tool, such as checking the screen, isn't cancelled.
+Players talk while they wait, and cancelling meant the answer they asked for never came. It
+finishes, says its answer once they stop talking, and then their next turn runs.
 """
 
 import asyncio
@@ -34,6 +38,9 @@ from shared.protocol.messages import QuestionAsk
 log = logging.getLogger(__name__)
 
 TICK_INTERVAL_S = 5.0
+# How long an answer that took a tool waits for the player to stop talking before it's dropped.
+ANSWER_WAIT_S = 10.0
+SPEAK_RETRY_S = 0.5
 
 
 class Director:
@@ -44,7 +51,7 @@ class Director:
         proactive: Callable[[], bool],
         talker: TextLLM | None = None,
         personality: Callable[[], str] = lambda: "supportive",
-        max_words: int = 12,
+        max_words: int = 100,
         context: Callable[[str], Awaitable[str]] | None = None,
         on_spoken: Callable[[str], Awaitable[None]] | None = None,
         *,
@@ -74,6 +81,8 @@ class Director:
         )
         self._slot: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[None]] = set()
+        # True while the turn in the slot is running a tool, so it isn't cancelled.
+        self.checking = False
         self._lines_said = 0
 
     async def run(self) -> None:
@@ -98,8 +107,14 @@ class Director:
     def _dispatch(self, action: Action) -> None:
         match action:
             case CancelSpeech():
+                if self.checking:
+                    log.info("Player spoke during a check; it will still answer")
+                    return
                 self._cancel_slot()
             case AskTalker():
+                if self.checking and self._slot is not None and not self._slot.done():
+                    self._slot = asyncio.create_task(self._after(self._slot, action))
+                    return
                 self._cancel_slot()
                 self._slot = asyncio.create_task(self._perform_safely(action))
             case SetVoice():
@@ -117,6 +132,11 @@ class Director:
         if self._slot is not None and not self._slot.done():
             log.debug("Cancelling speech in progress")
             self._slot.cancel()
+
+    async def _after(self, previous: asyncio.Task[None], action: Action) -> None:
+        # wait() rather than await, so a failed or cancelled check doesn't stop this turn.
+        await asyncio.wait({previous})
+        await self._perform_safely(action)
 
     async def _perform_safely(self, action: Action) -> None:
         try:
@@ -147,9 +167,17 @@ class Director:
         self._lines_said += 1
         return self._personalities.line(self._personality(), kind, self._lines_said)
 
-    async def _speak(self, text: str) -> None:
+    async def _speak(self, text: str, wait_s: float = 0.0) -> None:
+        """Says it, waiting up to wait_s for the player to stop talking first."""
+        deadline = time.monotonic() + wait_s
+        while not await self._voice.say(text):
+            if time.monotonic() >= deadline:
+                if wait_s:
+                    log.info("Player kept talking; dropped: %s", text)
+                return
+            await asyncio.sleep(SPEAK_RETRY_S)
         # Only what was really accepted goes into memory, or the partner would remember saying it.
-        if await self._voice.say(text) and self._on_spoken:
+        if self._on_spoken:
             await self._on_spoken(text)
 
     async def _player_turn(self, action: AskTalker, agent: ToolLLM, tools: ToolRegistry) -> None:
@@ -158,9 +186,25 @@ class Director:
         name = self._personality()
 
         async def looking() -> None:
+            self.checking = True
             # The result takes seconds, and silence would read as not having heard them.
             await self._voice.say(self._line("looking"))
 
+        try:
+            await self._run_player_turn(action, agent, tools, started, context, name, looking)
+        finally:
+            self.checking = False
+
+    async def _run_player_turn(
+        self,
+        action: AskTalker,
+        agent: ToolLLM,
+        tools: ToolRegistry,
+        started: float,
+        context: str,
+        name: str,
+        looking: Callable[[], Awaitable[None]],
+    ) -> None:
         try:
             text = await run_turn(
                 agent,
@@ -184,7 +228,8 @@ class Director:
             text = self._line("unavailable")
         log.info("Latency: player turn took %.0f ms", (time.monotonic() - started) * 1000)
         if text:
-            await self._speak(text)
+            # After a tool, the player may well be talking while they wait, so hold the answer.
+            await self._speak(text, ANSWER_WAIT_S if self.checking else 0.0)
         else:
             log.warning("Player turn produced no reply for: %s", action.transcript)
 

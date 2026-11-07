@@ -207,7 +207,8 @@ class PipecatVoice:
     async def say(self, text: str) -> bool:
         if self.user_speaking:
             # The director owns priorities; this only stops us talking over the player.
-            log.info("Player is talking; dropped: %s", text)
+            # Debug, because the director retries results it still owes the player.
+            log.debug("Player is talking; not saying: %s", text)
             return False
         if not self._speaks:
             return await self._subtitles.say(text)

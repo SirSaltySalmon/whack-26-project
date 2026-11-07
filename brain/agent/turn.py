@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 # Three model calls at most: the first reply, a follow-up tool, and the final reply.
 MAX_TOOL_ROUNDS = 2
 # Higher than the talker's, because tool arguments count toward this too.
-MAX_TOKENS = 256
+MAX_TOKENS = 400
 
 _TOOL_GUIDANCE = """You can't see the screen yourself. Anything under NOW is a rough report from \
 your eyes. Use a tool only when the request needs one. For chat, just reply, without any tool.
