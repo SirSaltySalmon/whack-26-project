@@ -63,6 +63,7 @@ class Director:
         send: Callable[[BrainMessage], Awaitable[None]] | None = None,
         question_gap_s: float = 90.0,
         question_quiet_s: float = 20.0,
+        page_excerpt: Callable[[str], str | None] | None = None,
     ) -> None:
         self._events = bus.subscribe()
         self._voice = voice
@@ -77,6 +78,7 @@ class Director:
         self._personalities = personalities or load_personalities()
         self._take_question = take_question
         self._send = send
+        self._page_excerpt = page_excerpt
         self._state = DirectorState(
             question_gap_s=question_gap_s, question_quiet_s=question_quiet_s
         )
@@ -187,6 +189,10 @@ class Director:
     async def _player_turn(self, action: AskTalker, agent: ToolLLM, tools: ToolRegistry) -> None:
         started = time.monotonic()
         context = await self._gather_context(action.transcript)
+        # Player turns only. _talk never gets this, so page text can't reach a game-event reaction.
+        excerpt = self._open_page_excerpt(action.transcript)
+        if excerpt:
+            context = f"{context}\n\n{excerpt}" if context else excerpt
         name = self._personality()
 
         async def looking() -> None:
@@ -265,6 +271,16 @@ class Director:
         )
         if text:
             await self._speak(text)
+
+    def _open_page_excerpt(self, transcript: str) -> str | None:
+        if self._page_excerpt is None:
+            return None
+        try:
+            return self._page_excerpt(transcript)
+        except Exception:
+            # The wiki page is a bonus; the turn goes ahead without it.
+            log.exception("Couldn't match the open page")
+            return None
 
     async def _gather_context(self, query: str) -> str:
         if self._context is None:

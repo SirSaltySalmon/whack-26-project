@@ -81,6 +81,7 @@ class Rig:
         quiet_s: float = QUIET_S,
         gap_s: float = GAP_S,
         bark_events: Mapping[str, str] | None = None,
+        page_excerpt: Callable[[str], str | None] | None = None,
     ) -> None:
         self.bus = EventBus()
         self.voice = voice or FakeVoice()
@@ -100,6 +101,7 @@ class Rig:
             send=self.overlay.send,
             question_gap_s=gap_s,
             question_quiet_s=quiet_s,
+            page_excerpt=page_excerpt,
         )
         # WP6 makes this a Director argument. Until then, only the rules know about the map.
         self.director._state.bark_events = bark_events or {}

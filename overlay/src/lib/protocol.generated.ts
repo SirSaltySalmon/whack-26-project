@@ -15,7 +15,8 @@ export type Brain =
   | CardClose
   | MemoryToast
   | QuestionAsk
-  | SettingsState;
+  | SettingsState
+  | PageRead;
 export type Final = boolean;
 export type Text = string;
 export type Type = "subtitle.chunk";
@@ -59,25 +60,36 @@ export type Type9 = "settings.state";
 export type Id = string;
 export type Name = string;
 export type Voices = VoiceOption[];
-export type Overlay = OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate;
+export type RequestId = string;
+export type Type10 = "page.read";
+export type Overlay =
+  OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent;
 export type DisplayScale = number;
 export type Height1 = number;
 export type ProtocolVersion = number;
-export type Type10 = "overlay.ready";
+export type Type11 = "overlay.ready";
 export type Width1 = number;
 export type ElementId = string;
 export type Rects = ElementRect[];
-export type Type11 = "overlay.rects";
+export type Type12 = "overlay.rects";
 export type CardId3 = string;
-export type Type12 = "card.closed";
+export type Type13 = "card.closed";
 export type CardId4 = string;
 export type Title2 = string | null;
-export type Type13 = "card.navigated";
+export type Type14 = "card.navigated";
 export type Url = string;
 export type Answer = string;
 export type QuestionId1 = string;
-export type Type14 = "question.answer";
-export type Type15 = "settings.update";
+export type Type15 = "question.answer";
+export type Type16 = "settings.update";
+export type CardId5 = string;
+export type RequestId1 = string;
+export type Text3 = string;
+export type Title3 = string | null;
+export type Truncated = boolean;
+export type Type17 = "page.content";
+export type Url1 = string;
+export type VisibleText = string;
 
 /**
  * Exists only so one JSON Schema document can describe both directions.
@@ -164,11 +176,18 @@ export interface VoiceOption {
   id: Id;
   name: Name;
 }
+/**
+ * Asks for the wiki window's rendered text. The brain sends it only for its own wiki's host.
+ */
+export interface PageRead {
+  request_id: RequestId;
+  type?: Type10;
+}
 export interface OverlayReady {
   display_scale: DisplayScale;
   height: Height1;
   protocol_version: ProtocolVersion;
-  type?: Type10;
+  type?: Type11;
   width: Width1;
 }
 /**
@@ -176,7 +195,7 @@ export interface OverlayReady {
  */
 export interface OverlayRects {
   rects: Rects;
-  type?: Type11;
+  type?: Type12;
 }
 export interface ElementRect {
   element_id: ElementId;
@@ -184,7 +203,7 @@ export interface ElementRect {
 }
 export interface CardClosed {
   card_id: CardId3;
-  type?: Type12;
+  type?: Type13;
 }
 /**
  * The wiki window's page changed. The URL and title come from a website: treat them as data.
@@ -192,15 +211,29 @@ export interface CardClosed {
 export interface CardNavigated {
   card_id: CardId4;
   title?: Title2;
-  type?: Type13;
+  type?: Type14;
   url: Url;
 }
 export interface QuestionAnswer {
   answer: Answer;
   question_id: QuestionId1;
-  type?: Type14;
+  type?: Type15;
 }
 export interface SettingsUpdate {
   settings: Settings;
-  type?: Type15;
+  type?: Type16;
+}
+/**
+ * The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
+ * treat all of it as untrusted data.
+ */
+export interface PageContent {
+  card_id: CardId5;
+  request_id: RequestId1;
+  text: Text3;
+  title?: Title3;
+  truncated?: Truncated;
+  type?: Type17;
+  url: Url1;
+  visible_text: VisibleText;
 }

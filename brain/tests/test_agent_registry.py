@@ -16,6 +16,7 @@ EXPECTED_ARGUMENTS = {
     "look_closer": {"question", "area"},
     "point_at": {"target"},
     "lookup_wiki": {"topic", "open_page"},
+    "read_open_page": {"question"},
     "note_unknown": {"subject", "attribute", "question"},
     "think_hard": {"question"},
 }
@@ -120,7 +121,7 @@ async def test_cancelling_a_tool_isnt_swallowed_because_barge_in_depends_on_it()
         await task
 
 
-def test_the_five_tools_are_declared_each_with_a_json_schema() -> None:
+def test_the_six_tools_are_declared_each_with_a_json_schema() -> None:
     declarations = {d.name: d for d in rig().tools.registry().declarations()}
     assert set(declarations) == set(EXPECTED_ARGUMENTS)
     for name, arguments in EXPECTED_ARGUMENTS.items():

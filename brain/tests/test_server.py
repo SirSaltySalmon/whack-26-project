@@ -5,7 +5,13 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from brain.events import CardPageChanged, EventBus, OverlayConnected, SettingsChanged
+from brain.events import (
+    CardPageChanged,
+    EventBus,
+    OverlayConnected,
+    PageContentReceived,
+    SettingsChanged,
+)
 from brain.server import OverlayLink, create_app
 from brain.tests.fakes import drain
 from shared.protocol import PROTOCOL_VERSION
@@ -132,3 +138,31 @@ def test_frame_scale_override_wins_over_the_reported_scale() -> None:
         socket.receive_json()
     assert link.reported_scale == 1.5
     assert link.display_scale == 1.0
+
+
+def test_page_content_reaches_the_bus() -> None:
+    client, _, bus = make()
+    events = bus.subscribe()
+    reply = {
+        "type": "page.content",
+        "request_id": "r1",
+        "card_id": "wiki",
+        "url": "https://wiki.example/wiki/A",
+        "title": "A",
+        "text": "Line one\nLine two",
+        "visible_text": "Line two",
+    }
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(json.dumps(reply))
+        socket.send_text(ready())
+        socket.receive_json()
+    assert events.get_nowait() == PageContentReceived(
+        request_id="r1",
+        card_id="wiki",
+        url="https://wiki.example/wiki/A",
+        title="A",
+        text="Line one\nLine two",
+        visible_text="Line two",
+        truncated=False,
+        ts=ANY,
+    )

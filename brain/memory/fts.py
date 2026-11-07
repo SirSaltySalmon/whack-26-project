@@ -11,6 +11,12 @@ _STOPWORDS = frozenset(
 )
 
 
+def query_terms(text: str) -> list[str]:
+    """The distinct lowercase words worth searching for, in order, with stopwords dropped."""
+    tokens = [token.lower() for token in _TOKEN.findall(text)]
+    return list(dict.fromkeys(token for token in tokens if token not in _STOPWORDS))
+
+
 def to_match_query(text: str) -> str | None:
     """Returns an FTS5 MATCH string, or None when the text has nothing worth searching for.
 
@@ -18,8 +24,7 @@ def to_match_query(text: str) -> str | None:
     and raise errors when passed through raw. Quoting every token makes them literals, which also
     stops operators like NEAR or OR in player speech from being interpreted.
     """
-    tokens = [token.lower() for token in _TOKEN.findall(text)]
-    terms = list(dict.fromkeys(token for token in tokens if token not in _STOPWORDS))
+    terms = query_terms(text)
     if not terms:
         return None
     return " OR ".join(f'"{term}"' for term in terms)

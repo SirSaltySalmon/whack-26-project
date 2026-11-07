@@ -111,6 +111,13 @@ class SettingsState(BaseModel):
     voices: list[VoiceOption] = Field(default_factory=list)
 
 
+class PageRead(BaseModel):
+    """Asks for the wiki window's rendered text. The brain sends it only for its own wiki's host."""
+
+    type: Literal["page.read"] = "page.read"
+    request_id: str
+
+
 # --- Overlay to brain ---
 class OverlayReady(BaseModel):
     type: Literal["overlay.ready"] = "overlay.ready"
@@ -152,6 +159,20 @@ class SettingsUpdate(BaseModel):
     settings: Settings
 
 
+class PageContent(BaseModel):
+    """The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
+    treat all of it as untrusted data."""
+
+    type: Literal["page.content"] = "page.content"
+    request_id: str
+    card_id: str
+    url: str  # From WebContents.getURL() at read time
+    title: str | None = None
+    text: str = Field(max_length=200_000)
+    visible_text: str = Field(max_length=4_000)
+    truncated: bool = False
+
+
 BrainMessage = Annotated[
     SubtitleChunk
     | AvatarState
@@ -162,11 +183,18 @@ BrainMessage = Annotated[
     | CardClose
     | MemoryToast
     | QuestionAsk
-    | SettingsState,
+    | SettingsState
+    | PageRead,
     Field(discriminator="type"),
 ]
 OverlayMessage = Annotated[
-    OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate,
+    OverlayReady
+    | OverlayRects
+    | CardClosed
+    | CardNavigated
+    | QuestionAnswer
+    | SettingsUpdate
+    | PageContent,
     Field(discriminator="type"),
 ]
 

@@ -300,6 +300,85 @@
       "title": "OverlayRects",
       "type": "object"
     },
+    "PageContent": {
+      "description": "The wiki window's rendered text, in reply to page.read. Every field comes from a website, so\ntreat all of it as untrusted data.",
+      "properties": {
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 200000,
+          "title": "Text",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "page.content",
+          "default": "page.content",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "visible_text": {
+          "maxLength": 4000,
+          "title": "Visible Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "card_id",
+        "url",
+        "text",
+        "visible_text"
+      ],
+      "title": "PageContent",
+      "type": "object"
+    },
+    "PageRead": {
+      "description": "Asks for the wiki window's rendered text. The brain sends it only for its own wiki's host.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "page.read",
+          "default": "page.read",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "title": "PageRead",
+      "type": "object"
+    },
     "PointerFly": {
       "properties": {
         "label": {
@@ -589,6 +668,7 @@
           "card.close": "#/$defs/CardClose",
           "card.show": "#/$defs/CardShow",
           "card.update": "#/$defs/CardUpdate",
+          "page.read": "#/$defs/PageRead",
           "pointer.fly": "#/$defs/PointerFly",
           "pointer.hide": "#/$defs/PointerHide",
           "question.ask": "#/$defs/QuestionAsk",
@@ -628,6 +708,9 @@
         },
         {
           "$ref": "#/$defs/SettingsState"
+        },
+        {
+          "$ref": "#/$defs/PageRead"
         }
       ],
       "title": "Brain"
@@ -639,6 +722,7 @@
           "card.navigated": "#/$defs/CardNavigated",
           "overlay.ready": "#/$defs/OverlayReady",
           "overlay.rects": "#/$defs/OverlayRects",
+          "page.content": "#/$defs/PageContent",
           "question.answer": "#/$defs/QuestionAnswer",
           "settings.update": "#/$defs/SettingsUpdate"
         },
@@ -662,6 +746,9 @@
         },
         {
           "$ref": "#/$defs/SettingsUpdate"
+        },
+        {
+          "$ref": "#/$defs/PageContent"
         }
       ],
       "title": "Overlay"
