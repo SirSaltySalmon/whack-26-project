@@ -1,12 +1,16 @@
 import time
+from typing import Any
 
 import pytest
 
 from brain.config import Settings
 from brain.events import EventBus, PlayerMood, PlayerSpeechPartial
 from brain.server import OverlayLink
+from brain.tests.fakes import FakeOverlay
+from brain.voice.barks import Bark
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.sentiment import MoodTracker
+from shared.protocol.messages import AvatarState, SubtitleChunk
 
 pytest.importorskip("pyaudio")
 from brain.voice.pipecat_voice import PipecatVoice  # noqa: E402
@@ -110,3 +114,56 @@ def test_voice_that_fails_to_start_falls_back_to_subtitles(
     settings = Settings(_env_file=None, deepgram_api_key="test")  # type: ignore[call-arg]
     bus = EventBus()
     assert isinstance(create_voice(settings, bus, OverlayLink(bus)), SubtitleOnlyVoice)
+
+
+BARK = Bark(text="Your health looks low.", pcm=bytes(960), sample_rate=24000)
+
+
+async def test_subtitle_voice_plays_a_bark_as_one_final_chunk() -> None:
+    overlay = FakeOverlay()
+    voice = SubtitleOnlyVoice(overlay)  # type: ignore[arg-type]
+    assert await voice.play(BARK) is True
+    chunks = [message for message in overlay.sent if isinstance(message, SubtitleChunk)]
+    assert [(chunk.text, chunk.final) for chunk in chunks] == [("Your health looks low.", True)]
+    states = [message.state for message in overlay.sent if isinstance(message, AvatarState)]
+    assert states == ["talking", "idle"]
+
+
+class FakeWorker:
+    def __init__(self) -> None:
+        self.queued: list[Any] = []
+
+    async def queue_frame(self, frame: Any) -> None:
+        self.queued.append(frame)
+
+
+def _speaking_voice(user_speaking: bool) -> tuple["PipecatVoice", FakeWorker]:
+    voice = PipecatVoice.__new__(PipecatVoice)
+    worker = FakeWorker()
+    voice._worker = worker  # type: ignore[assignment]
+    voice._speaks = True
+    voice.user_speaking = user_speaking
+    return voice, worker
+
+
+async def test_pipecat_voice_drops_a_bark_while_the_player_is_talking() -> None:
+    voice, worker = _speaking_voice(user_speaking=True)
+    assert await voice.play(BARK) is False
+    assert worker.queued == []
+
+
+async def test_pipecat_voice_plays_a_bark_while_the_player_is_quiet() -> None:
+    # Doesn't check how it plays, because WP6 replaces live TTS here with the pre-generated audio.
+    voice, worker = _speaking_voice(user_speaking=False)
+    assert await voice.play(BARK) is True
+    assert worker.queued
+
+
+async def test_pipecat_voice_without_speech_shows_a_bark_as_a_subtitle() -> None:
+    overlay = FakeOverlay()
+    voice, worker = _speaking_voice(user_speaking=False)
+    voice._speaks = False
+    voice._subtitles = SubtitleOnlyVoice(overlay)  # type: ignore[arg-type]
+    assert await voice.play(BARK) is True
+    assert worker.queued == []
+    assert [m.text for m in overlay.sent if isinstance(m, SubtitleChunk)] == [BARK.text]

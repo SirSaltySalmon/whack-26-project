@@ -3,6 +3,7 @@
 An LLM never decides this. Models only choose what to do inside a turn these rules started.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -46,6 +47,15 @@ class ReactToEvent:
 
 
 @dataclass(frozen=True)
+class PlayBark:
+    """React with a pre-generated line, which skips the model and TTS."""
+
+    kind: str  # A LineKind
+    event: str  # The GameEvent name, for logs
+    data: dict[str, Any]  # Passed on, in case there's no bark and it falls back
+
+
+@dataclass(frozen=True)
 class AskQuestion:
     """Ask the player the next open question, if memory has one."""
 
@@ -60,7 +70,7 @@ class SetVoice:
     voice_id: str | None
 
 
-Action = Say | AskTalker | ReactToEvent | AskQuestion | CancelSpeech | SetVoice
+Action = Say | AskTalker | ReactToEvent | PlayBark | AskQuestion | CancelSpeech | SetVoice
 
 
 @dataclass
@@ -75,6 +85,8 @@ class DirectorState:
     turn_started_at: float | None = None
     in_danger: bool = False
     greeted: bool = False
+    # GameEvent name -> LineKind. Events not listed here go to the talker.
+    bark_events: Mapping[str, str] = field(default_factory=dict)
 
 
 def _may_ask(ts: float, state: DirectorState) -> bool:
@@ -116,7 +128,9 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 return []
             state.last_bark_at = event.ts
             state.last_activity_at = event.ts
-            # TODO(track 3): use the personality's pre-generated barks where they fit.
+            kind = state.bark_events.get(event.name)
+            if kind is not None:
+                return [PlayBark(kind, event.name, event.data)]
             return [ReactToEvent(event.name, event.data)]
         case Tick():
             if not _may_ask(event.ts, state):

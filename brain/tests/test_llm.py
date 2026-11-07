@@ -5,6 +5,8 @@ from brain.config import Settings
 from brain.llm.base import LLMUnavailableError, RateLimiter
 from brain.llm.factory import LLMFactory
 
+# GeminiClient's own behaviour is in test_gemini_client.py and test_gemini_tool_chat.py.
+
 
 def test_limiter_refuses_over_the_limit_then_recovers() -> None:
     now = 0.0

@@ -23,6 +23,7 @@ from brain.director.rules import (
     AskTalker,
     CancelSpeech,
     DirectorState,
+    PlayBark,
     ReactToEvent,
     Say,
     SetVoice,
@@ -156,6 +157,9 @@ class Director:
                     await self._talk(action.transcript, query=action.transcript)
             case ReactToEvent():
                 await self._talk(event_prompt(action.name, action.data), query=action.name)
+            case PlayBark():
+                # WP6 plays the bark here when one is ready. Until then, the talker reacts instead.
+                await self._talk(event_prompt(action.event, action.data), query=action.event)
             case AskQuestion():
                 await self._ask_question()
             case SetVoice():

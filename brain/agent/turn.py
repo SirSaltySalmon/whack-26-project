@@ -49,14 +49,15 @@ async def run_turn(
 ) -> str | None:
     """Returns what to say, or None for nothing. Raises if the very first model call fails.
 
-    Once a tool has run, the player may already be looking at its result, so a failed follow-up
-    returns after_tools_line rather than claiming the partner couldn't help.
+    Once a tool has run, the player may already be looking at its result, so a failed or wordless
+    follow-up returns after_tools_line rather than claiming the partner couldn't help.
     """
     base = build_system(personality, tone, max_words, context, hints)
     system = f"{base}\n\n{_TOOL_GUIDANCE}"
     chat = llm.tool_chat(system, registry.declarations(), MAX_TOKENS)
     step = await chat.send(transcript)
     announced = False
+    ran_tools = False
     for round_index in range(MAX_TOOL_ROUNDS):
         if not step.calls:
             break
@@ -64,6 +65,7 @@ async def run_turn(
             announced = True
             await on_first_tool()
         outputs = await asyncio.gather(*(registry.run(call, turn) for call in step.calls))
+        ran_tools = True
         try:
             # The last round must end in words, or the partner would go quiet after doing the work.
             step = await chat.send_results(
@@ -74,4 +76,10 @@ async def run_turn(
             log.warning("Couldn't get a reply after running tools: %s", exc)
             return after_tools_line
     text = cap_words(step.text, max_words)
-    return text or None
+    if text:
+        return text
+    if ran_tools:
+        # A reply holding only a thought, or a tool call we refused, has no words either.
+        log.warning("The model gave no words after running tools")
+        return after_tools_line
+    return None

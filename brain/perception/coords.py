@@ -18,7 +18,8 @@ class NormalizedBox:
 
     def __post_init__(self) -> None:
         values = (self.ymin, self.xmin, self.ymax, self.xmax)
-        if any(v < 0 or v > 1000 for v in values):
+        # Written this way round so NaN fails too: every comparison with it is false.
+        if not all(0 <= v <= 1000 for v in values):
             raise ValueError(f"Box outside the 0-1000 range: {values}")
         if self.ymin >= self.ymax or self.xmin >= self.xmax:
             raise ValueError(f"Box has no area: {values}")

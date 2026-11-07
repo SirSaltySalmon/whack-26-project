@@ -1,12 +1,22 @@
 {
   "default": "supportive",
+  "event_lines": {
+    "danger_started": "danger",
+    "danger_high": "danger_high",
+    "player_died": "died",
+    "health_low": "low_health"
+  },
   "personalities": {
     "supportive": {
       "tone": "Warm and encouraging, like a teammate who's glad to be here.",
       "lines": {
         "looking": ["Let me look.", "One sec.", "Checking now."],
         "done": ["There you go.", "Got it for you."],
-        "unavailable": ["I can't check that right now.", "Sorry, I can't do that right now."]
+        "unavailable": ["I can't check that right now.", "Sorry, I can't do that right now."],
+        "danger": ["Heads up, that looks like trouble.", "Careful, something's coming."],
+        "danger_high": ["Whoa, this looks bad!", "Hang in there, this looks rough!"],
+        "died": ["Oof, that looked rough. You've got this.", "Shake it off, you'll get it next time."],
+        "low_health": ["Your health looks low.", "That looks like low health, careful."]
       }
     },
     "degrading": {
@@ -14,7 +24,11 @@
       "lines": {
         "looking": ["Fine, I'll look.", "Hold on, genius."],
         "done": ["There. You're welcome.", "Happy now?"],
-        "unavailable": ["Can't right now. Work it out yourself.", "Not happening right now."]
+        "unavailable": ["Can't right now. Work it out yourself.", "Not happening right now."],
+        "danger": ["Oh good, trouble. Try not to panic.", "Here comes trouble. Good luck with that."],
+        "danger_high": ["Yeah, this is going badly.", "Any plan here? Anything at all?"],
+        "died": ["Bold strategy, that.", "And there it goes. Nicely played."],
+        "low_health": ["Health's looking low. Just a thought.", "Maybe stop taking hits?"]
       }
     },
     "romantic": {
@@ -22,7 +36,11 @@
       "lines": {
         "looking": ["Let me look, love.", "One sec, dear."],
         "done": ["There you go, love.", "All yours, dear."],
-        "unavailable": ["Sorry love, I can't right now.", "I can't check that just now, dear."]
+        "unavailable": ["Sorry love, I can't right now.", "I can't check that just now, dear."],
+        "danger": ["Careful, love, that looks like trouble.", "Watch yourself, dear."],
+        "danger_high": ["Stay with me, love, this looks bad!", "Oh dear, this looks rough!"],
+        "died": ["Oh love, you'll get it next time.", "Aw, dear. Still proud of you."],
+        "low_health": ["Your health looks low, love.", "You look hurt, dear. Careful."]
       }
     },
     "protective": {
@@ -30,7 +48,11 @@
       "lines": {
         "looking": ["Let me check that.", "Careful, I'm checking."],
         "done": ["Okay, that's it there.", "There. Stay safe."],
-        "unavailable": ["I can't check that right now, so go carefully.", "I can't see that right now. Stay careful."]
+        "unavailable": ["I can't check that right now, so go carefully.", "I can't see that right now. Stay careful."],
+        "danger": ["Careful, something's coming.", "Stay alert, that looks like trouble."],
+        "danger_high": ["This looks dangerous, be careful!", "I don't like this, careful!"],
+        "died": ["It's okay, take a breath.", "That's alright. We go again."],
+        "low_health": ["Your health looks low.", "You look hurt, so go carefully."]
       }
     }
   }

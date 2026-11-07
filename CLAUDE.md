@@ -97,6 +97,7 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 python -m brain --live                     # run against the live game
+python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --replay <session-dir>     # run from a recorded session
 pytest brain/tests
@@ -113,7 +114,7 @@ python scripts/overlay_demo.py             # drives the overlay with no game, mi
 ```
 
 ## Testing
-What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Replay mode is meant to be the main test harness: it records frames, audio and events to disk and feeds them back through the same pipeline. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
+What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are in `brain/tests/fakes.py`, so use those rather than writing new ones. Replay mode is meant to be the main test harness: it records frames, audio and events to disk and feeds them back through the same pipeline. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
 
 ## Coding Standards
 - **Python:** type hints at module boundaries, Pydantic for anything crossing a process boundary, ruff for lint and format.
@@ -140,6 +141,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Gemini tool turns:** send the model's `Content` back unchanged. Gemini 3 needs its thought signatures returned, so `GeminiToolChat` keeps the raw object.
 - **Free-tier quota:** limits are per project, not per API key, and daily quotas reset at midnight Pacific. Google doesn't publish the numbers, so read them on your project's AI Studio rate limit page and set `rpm_by_model` in `brain/config.py`. Keep a separate project for the demo so development can't use up its quota.
 - **Free-tier privacy:** free-tier content is used to improve Google's products, including the frames and transcripts we send. Never capture anything private while testing.
+- **Electron in VS Code:** a shell started by a VS Code extension can have `ELECTRON_RUN_AS_NODE=1` set, which makes Electron fail with `Cannot find module 'electron'`. Unset it first.
 - **Echo:** Pipecat's local audio transport has no documented echo cancellation, so speaker output can trigger barge-in. Use headphones. Without them, set `VOICE_HALF_DUPLEX=true`, which mutes the mic while the partner talks but gives up barge-in.
 - **Recording:** record with OBS Display Capture. Game Capture and Window Capture are likely to miss the overlay.
 - **`<webview>`:** Electron's docs warn it can be unstable, so test it over the game. Hide it with `visibility: hidden`: `display: none` can reload the page. Set `pointer-events: none` on it during a drag, or it swallows the drag.
@@ -162,8 +164,13 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
 
+**Done, with no keys or game**
+- [x] Shared contract for the remaining work (WP0)
+- [x] Shared fakes and the test plan's automated tests (WP1). WP8's tests come with WP8
+- [x] Typed turns and the extended overlay demo (WP2)
+- [x] Stage 0, apart from what needs a mouse or a visible window
+
 **Not started**
-- [ ] Automated tests for the new paths, and the test tooling. Both are listed in the test plan
 - [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
 - [ ] Learner: game brief, learned regions, compiled readers (Track 4)
 - [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)

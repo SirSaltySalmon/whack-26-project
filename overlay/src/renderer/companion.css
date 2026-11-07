@@ -13,11 +13,18 @@
   line-height: 1.35;
   text-align: center;
   transform: translateX(-50%);
-  transition: opacity 0.6s 1.8s;
 }
 
+/* An animation, because a line that arrives already finished mounts with this class. A transition
+   wouldn't run on the first render, so that line would never be seen. */
 .subtitles-done {
-  opacity: 0;
+  animation: subtitles-fade 0.6s 1.8s forwards;
+}
+
+@keyframes subtitles-fade {
+  to {
+    opacity: 0;
+  }
 }
 
 .toasts {
@@ -110,7 +117,10 @@
 }
 
 .settings {
+  position: absolute;
+  inset: 0;
   padding: 4px 10px 12px;
+  overflow: auto;
 }
 
 .settings-heading {

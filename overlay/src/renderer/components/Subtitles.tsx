@@ -5,6 +5,8 @@ export function Subtitles({ line }: { line: SubtitleLine | null }) {
   if (line === null || line.text === "") return null;
   return (
     <div
+      // A new line gets a new element, or it would inherit the last line's fade part way through.
+      key={line.utteranceId}
       className={`subtitles${line.done ? " subtitles-done" : ""}`}
       data-rect-id="subtitles"
     >

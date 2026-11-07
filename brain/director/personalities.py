@@ -3,11 +3,11 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 _DEFAULT_PATH = Path(__file__).with_name("personalities.json")
 
-LineKind = Literal["looking", "done", "unavailable"]
+LineKind = Literal["looking", "done", "unavailable", "danger", "danger_high", "died", "low_health"]
 
 
 class Personality(BaseModel):
@@ -18,6 +18,8 @@ class Personality(BaseModel):
 class PersonalityBook(BaseModel):
     default: str
     personalities: dict[str, Personality]
+    # Which game events have a fixed line, by GameEvent name.
+    event_lines: dict[str, LineKind] = Field(default_factory=dict)
 
     @property
     def names(self) -> list[str]:

@@ -1,66 +1,57 @@
 # Test Plan
 
-How to test the wiring on the `wiring` branch. **Nothing here has been carried out yet**, because Terraria isn't available.
+How to test the wiring on the `wiring` branch. The automated tests and test tools are done. **The live checks below haven't been carried out over a game,** because Terraria isn't available.
 
 ## What has been checked so far
 
-Checked on 2026-11-07, with no keys, network or game:
+Checked on 2026-11-07, with no keys or game:
 
 | Check | Result |
 |---|---|
-| `pytest brain/tests` | 396 pass. `test_talker`'s fake voice was updated, because `say()` now returns whether it spoke |
-| `npm --prefix overlay test` and `typecheck` | 33 pass, types clean |
-| `npm --prefix overlay run build` | Builds |
-| A throwaway script with fake models (not in the repo) | 55 checks pass on the tool loop, tools, Gemini message handling and director |
-| The real brain with a fake Gemini key, connected to as if by the overlay | Starts, sends personalities and voices, greets, and saves and echoes settings |
+| `pytest brain/tests` | 851 pass, the same on repeat runs. A run that blocked every non-loopback connection passed too |
+| `npm --prefix overlay test` and `typecheck` | 58 pass, types clean |
+| `npm --prefix overlay run build` and `ruff check brain` | Builds, clean |
+| Mutation checks on the new tests, on private copies | Director 63 of 63, agent 63 of 64 (the survivor changes nothing today), overlay demo 14 of 14, and 18 of 18 on the WP0 contract, the bug fixes and typed turns |
+| Stage 0, with the real brain and the built overlay rendered offscreen and driven by a script | Everything that doesn't need a mouse or a visible window passes. See [Stage 0](#stage-0-no-keys) |
 
-**Not checked:** any real model call, real audio, the overlay's new parts on screen, or anything over a game. Nothing has confirmed that Gemini accepts our tool declarations or that Flash-Lite picks tools sensibly.
+**Not checked:** any real model call, real audio, the overlay in a visible window, or anything over a game. Nothing has confirmed that Gemini accepts our tool declarations or that Flash-Lite picks tools sensibly.
 
-## 1. Automated tests to write
+### Bugs this turned up, all fixed
 
-These need no game, mic or paid calls. `CLAUDE.md` requires tests for the director rules and coordinates, so write those first.
+| Bug | Effect | Fix |
+|---|---|---|
+| A subtitle that arrived already finished never showed | **In subtitles-only mode no line was ever visible,** and WP6's barks would have had the same problem | `companion.css` fades with an animation, because a transition doesn't run on an element's first render |
+| The settings panel couldn't scroll | With voices configured, the Voice row was cut off and couldn't be clicked | The panel scrolls, and opens tall enough to show every row |
+| A question beside a small character at the top of the screen | Its top ran off the screen | `questionPlacement` keeps room above it. The 160 px is estimated from the CSS, so check it on screen |
+| No words from the model after tools ran | The partner went silent after doing the work | `run_turn` returns `after_tools_line` |
+| A NaN coordinate from a vision model | It passed the range check and reached the pointer | `NormalizedBox` rejects it |
+| An empty final subtitle chunk | Left a trailing space on the line | `joinWords` |
 
-**`brain/tests/test_director_rules.py`**
-- `PlayerStartedSpeaking` gives `CancelSpeech`, and the next `PlayerSpeech` carries its `started_at`
-- Reconnecting the overlay doesn't greet again
-- `Tick` asks only when all of these hold: overlay connected, quiet for `question_quiet_s`, `question_gap_s` since the last question, no danger
-- `GameEvent` and `Tick` act the same with hints on or off
-- Danger starts and ends with `danger_started`, `danger_high` and `danger_ended`
-- `SettingsChanged` gives `SetVoice`
+### Found, and left for the team
 
-**`brain/tests/test_director.py`** (new)
-- Events keep being handled while a player turn is stuck in the model
-- Barge-in cancels a turn, and its stale reply is never spoken
-- A new player turn replaces one in progress, while event reactions are skipped when the slot is busy
-- A failed action doesn't stop the loop
-- `on_spoken` isn't called when `say()` returns `False`
-- A question is shown and spoken, and `take_question` returning `None` stays quiet
+- **"Not now" tells the brain nothing.** It only closes the question on screen. A question that's been asked is never asked again, so a dismissed one stays open until a session note settles it. Decide if that's right. Fixing it needs a new protocol message.
+- **A skipped reaction still uses up its budget.** `decide` runs before the speech slot is checked, so a reaction skipped because the partner is busy still starts the cooldown, and a skipped question still starts the question gap. It's harmless at these values, but it could look like a missed reaction when tuning.
+- **The wiki opens behind a cookie dialog.** The window's session is in memory, so wiki.gg should ask again on every launch. Dismiss it before recording a demo.
 
-**`brain/tests/test_agent_turn.py`** (new)
-- Plain text reply: one model call and no filler
-- Tool, then text: exactly one filler line
-- Stops at the step cap, with tools turned off on the last call
-- Over quota on the first call raises; over quota after a tool returns `after_tools_line`
-- The final text keeps to the word cap
+## 1. Automated tests
 
-**`brain/tests/test_agent_tools.py`** (new)
-- `look_closer` uses `RingBuffer.nearest(started_at)`, `point_at` uses the newest frame, and both use high detail
-- Overlay rectangles are masked in what's sent, and the buffer's frame stays untouched
-- Pointer rectangle at 100% and 150% scale, with a window offset and a cropped area
-- A malformed or `found: false` box sends no pointer
-- `page_url` is set only when `open_page` is true, and its value comes from the wiki client
-- A stale frame gives the "can't see" text
-- Tool output is labelled as data
-- The registry returns text for an unknown tool, invalid arguments, a timeout, an unavailable LLM and an exception
+All of these need no game, mic or paid calls. Everything the test plan listed is written, apart from WP8's tests below.
 
-**`brain/tests/test_closeup.py`** (new)
-- Each area gives the right `CropRegion`, including the window offset
-- Large crops shrink, and small crops grow by whole multiples
+| Area | Files in `brain/tests/` |
+|---|---|
+| Director rules | `test_director_rules.py` |
+| Director's speech slot, lines and context | `test_director.py`, `test_director_lines.py` |
+| Player turns and tools | `test_agent_turn.py`, `test_agent_tools.py`, `test_agent_knowledge_tools.py`, `test_agent_registry.py` |
+| Coordinates, masking, closeups | `test_coords.py`, `test_masking.py`, `test_closeup.py` |
+| Gemini tool turns, with no network | `test_gemini_tool_chat.py`, `test_gemini_client.py` |
+| Overlay link | `test_server.py` |
+| Shared contract | `test_profile_schema.py`, `test_personalities.py` |
+| Voice | `test_voice.py`, `test_voice_processors.py` |
+| Test tools | `test_typed.py`, `test_overlay_demo.py` |
 
-**`brain/tests/test_llm.py`** (add)
-- `GeminiToolChat` passes the model's `Content` back unchanged, including `thought_signature`
-- Results carry the call's `id` and `name`
-- `allow_tools=False` sets mode `NONE`, and automatic function calling is off
+Overlay logic is tested beside its code, in `overlay/src/renderer/logic/*.test.ts`. Shared helpers are `fakes.py`, `director_rig.py`, `agent_rig.py` and `fake_gemini.py`.
+
+### Still to write, with WP8
 
 **`brain/tests/test_open_page.py`** (new)
 - `PlayerStartedSpeaking` sends `page.read` only when the page's hostname exactly matches the wiki's. `wiki.gg.example.com` must not match `wiki.gg`
@@ -71,40 +62,33 @@ These need no game, mic or paid calls. `CLAUDE.md` requires tests for the direct
 - `read_open_page` gives the right text for each case: on the wiki, off the wiki, nothing open
 - Page text is never written to SQLite
 
-**`brain/tests/test_director.py`** (add, once WP8 is built)
+**`brain/tests/test_director.py`** (add)
 - The excerpt reaches player turns and never reaches `_talk`
 
-**`brain/tests/test_server.py`** (add)
-- `settings.state` includes `personalities` and `voices`
+## 2. Test tooling
 
-**`overlay/src/renderer/logic/subtitles.test.ts`** (new)
-- Word chunks join with spaces, but not before punctuation
-- A single `final=true` chunk shows whole
-- An empty final chunk marks the line done
-- A late final chunk from an interrupted utterance doesn't end the new one
+**Typed turns: `python -m brain --live --type`.** Each typed line becomes `PlayerStartedSpeaking` and then `PlayerSpeech`, the same events real voice sends, so turns can be tested with no mic or Deepgram key. A prefix like `5: what's that` waits 5 seconds first, so there's time to switch back to the game. Capture stops while the terminal is in front, and `look_closer` says it can't see once capture has been stopped for longer than `look_max_frame_age_s`.
 
-**`overlay/src/renderer/logic/layout.test.ts`** (add)
-- `questionPlacement` picks the side with room
-
-## 2. Test tooling to build
-
-**Typed turns: `python -m brain --live --type`.** Each typed line becomes `PlayerSpeech`, so turns can be tested with no mic or Deepgram key. A prefix like `5: what's that` waits 5 seconds first, so there's time to switch back to the game. Capture stops while the terminal is in front, and `look_closer` refuses frames older than `look_max_frame_age_s`.
-
-**Overlay demo: extend `scripts/overlay_demo.py`.** Send `subtitle.chunk` both ways, `toast.memory` and `question.ask`, so the new overlay parts can be checked with no brain logic.
+**Overlay demo: `python scripts/overlay_demo.py`,** then `npm --prefix overlay run dev` in another terminal. Each pass shows the avatar's states, the pointer, subtitles both ways, a toast for each source, and a question with and without options. Clicking an answer moves on, and otherwise a question holds for 31 s. The terminal logs what the overlay reports back, including the rectangles to mask. The settings panel gets the real personalities, and two fake voices if `VOICE_OPTIONS` isn't set.
 
 ## 3. Live checks
 
 Run these in order. Each stage needs more keys. Stages 1 to 3 make paid or quota-limited calls. Tick results in `CLAUDE.md`.
 
 ### Stage 0: no keys
-Run `python -m brain --live` and `npm --prefix overlay run dev`.
-- [ ] Subtitle shows "Brain connected." once, then fades
-- [ ] Reloading the overlay doesn't greet again
-- [ ] The gear on the character opens settings, and clicking options updates them
-- [ ] Settings survive restarting the brain
+Run `python -m brain --live --type` and `npm --prefix overlay run dev`.
+
+Ticked items passed with the real brain and the built overlay, rendered offscreen and driven by a script. Repeat them once in a visible window, because a transparency or click-through problem wouldn't show offscreen. The unticked ones need a person with a mouse.
+
+- [x] Subtitle shows "Brain connected." once, then fades
+- [x] Reloading the overlay doesn't greet again
+- [x] The gear on the character opens settings, and clicking options updates them
+- [x] Settings survive restarting the brain
+- [x] A typed line reaches the brain. With no Gemini key it logs `No talker LLM configured`
+- [x] Demo script: toast, question and subtitles look right, and their rectangles reach the brain's log
 - [ ] The game still gets clicks everywhere except on buttons and card frames
 - [ ] The overlay never takes keyboard focus while settings or a question is open
-- [ ] Demo script: toast, question and subtitles look right, and their rectangles reach the brain's log
+- [ ] At 150% Windows scaling, cards and masks still line up
 
 ### Stage 1: `GEMINI_API_KEY`, `GAME_PROCESS`, `GAME_TITLE`
 Any windowed game or app works for most of this. First read the real free-tier limits from AI Studio into `rpm_by_model`.
