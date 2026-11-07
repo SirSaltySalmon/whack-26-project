@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from brain.events import (
     CardClosedByPlayer,
+    CardPageChanged,
     EventBus,
     OverlayConnected,
     QuestionAnswered,
@@ -16,6 +17,7 @@ from brain.events import (
 from shared.protocol import PROTOCOL_VERSION, BrainMessage, OverlayMessageAdapter
 from shared.protocol.messages import (
     CardClosed,
+    CardNavigated,
     OverlayReady,
     OverlayRects,
     QuestionAnswer,
@@ -85,6 +87,10 @@ class OverlayLink:
                 self.rects = tuple(item.rect for item in message.rects)
             case CardClosed():
                 self._bus.publish(CardClosedByPlayer(card_id=message.card_id))
+            case CardNavigated():
+                self._bus.publish(
+                    CardPageChanged(card_id=message.card_id, url=message.url, title=message.title)
+                )
             case QuestionAnswer():
                 self._bus.publish(
                     QuestionAnswered(question_id=message.question_id, answer=message.answer)
