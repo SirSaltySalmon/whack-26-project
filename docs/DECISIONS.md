@@ -2,6 +2,28 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: A Control Center window configures, starts and inspects the brain
+
+**Status:** built on `frontend`, for the team to review. Applies to `overlay/src/main/`, `overlay/src/renderer/control/`, `shared/protocol/control.py`, `brain/control.py`, `brain/describe.py`, `brain/server.py`, `brain/app.py` and `brain/__main__.py`, plus small additions in Track 3's and Track 4's directories listed below.
+
+For the demo, one window has to show the technology: keys, game, personality and voice chosen before starting, a Start button, and memory browsed live with its sources and history.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **A second, normal window in the same Electron app** | Typing keys needs keyboard focus, and the overlay must never take it. The Control Center isn't always-on-top and never focuses itself on brain events |
+| 2 | **It starts and stops the brain** | Choosing things before the start needs an owner. Closing the window stops the brain. A brain started from a terminal is still found and used |
+| 3 | **Keys are encrypted with Electron `safeStorage` and passed as environment variables** | They're never written to `.env` and never sent back to the window. pydantic-settings reads the environment before `.env`, so `.env` still works as a fallback |
+| 4 | **A new `/control` socket, not a second client on `/ws`** | `OverlayLink` keeps one socket, so a second client would replace the overlay. `/control` uses the same Origin allowlist |
+| 5 | **Memory browsing is read-only** (`brain/memory/browse.py`) | Writes still only go through `FactStore.remember`, so the trust rules can't be bypassed |
+| 6 | **Tabs are found from `overlay/src/renderer/control/tabs/*/tab.tsx`** | The avatar tab, and any later one, drops in without editing a shared file |
+| 7 | **Stop asks over `/control` first, then ends the process tree after 5 s** | A plain kill skips `memory.finish()` and leaves the session open. On Windows, a venv's `python.exe` starts the real interpreter as a child, so it uses `taskkill /T` |
+
+### What other tracks need to know
+- **Track 1 (Overlay):** tabs follow `ControlTab` in `tabs/types.ts` and reach everything through `useControl()`. Order 50 is kept for the avatar tab. If avatar choices must reach the overlay, add an optional field to `Settings`, so they persist in memory like personality does. The in-game settings card and the Agent tab share `renderer/shared/SettingsFields.tsx`.
+- **Track 3 (Voice and director):** `voice.preview` publishes `VoicePreviewRequested`, which the rules turn into a plain `Say`. It's skipped while the partner is talking.
+- **Track 4 (Memory and learning):** `browse.py` reads `facts`, `questions` and `session_notes` directly, so schema changes there must update it. The recall panel calls the same `talker_context` the director uses.
+- **Everyone:** `python -m brain --describe` must stay fast, so it imports only config and personalities, and `brain/__main__.py` imports `brain.app` only when running.
+
 ## 2026-11-07: A replay uses no live services unless asked
 
 **Status:** accepted by Track 2's owner, for the team to review. Applies to `brain/replay/` and `brain/app.py`. Details are under WP3 in [REMAINING_WORK.md](REMAINING_WORK.md).

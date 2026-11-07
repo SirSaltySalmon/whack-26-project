@@ -1,0 +1,174 @@
+/* The Memory tab. */
+
+/* Memory */
+.mem-page {
+  max-width: 1300px;
+}
+
+.mem-toolbar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.mem-search {
+  flex: 1;
+  padding: 9px 12px;
+  font-size: 14px;
+}
+
+.mem-stats {
+  margin-top: -6px;
+}
+
+.mem-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mem-facts,
+.mem-panel {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.mem-facts h2,
+.mem-panel h2 {
+  font-size: 14px;
+}
+
+.mem-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mem-group {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.mem-group-conflict {
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.mem-group-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.mem-subject {
+  color: var(--text-muted);
+}
+
+.mem-subject::after {
+  content: " ›";
+}
+
+.mem-attribute {
+  font-weight: 600;
+}
+
+.mem-fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.mem-value {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mem-when {
+  margin: 0 0 0 auto;
+}
+
+.mem-fact-past {
+  opacity: 0.6;
+}
+
+.mem-fact-past .mem-value {
+  font-size: 13px;
+  font-weight: 400;
+  text-decoration: line-through;
+}
+
+.mem-source-text {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mem-confidence {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mem-confidence-bar {
+  width: 60px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-hover);
+}
+
+.mem-confidence-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.mem-recall,
+.mem-note pre {
+  max-height: 320px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--bg);
+  font:
+    12px/1.5 "Cascadia Mono",
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mem-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.mem-list li {
+  margin-bottom: 6px;
+}
+
+.mem-note {
+  margin-top: 8px;
+}
+
+.mem-note summary {
+  cursor: pointer;
+}
+
+.cc-empty-line {
+  margin: 16px 0 4px;
+  color: var(--text-muted);
+}

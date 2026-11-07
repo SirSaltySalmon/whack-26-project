@@ -88,6 +88,7 @@ Four people own one track each. Stay inside your track; say so before editing an
 | 4. Memory and learning | `brain/memory/`, `brain/learner/`, `brain/research/` |
 
 - **Shared:** `shared/protocol/`, `brain/llm/` (the only place that calls LLM providers), `brain/agent/` (player-turn tools), `brain/config.py`, `brain/events.py`.
+- **Control Center tabs:** one folder per tab under `overlay/src/renderer/control/tabs/`, found automatically. See `tabs/types.ts`; adding a tab edits no shared file.
 - **The protocol is the contract between tracks.** Pydantic models in `shared/protocol/` are the source of truth, and TypeScript types are generated from them. Never hand-edit the generated types. After hour 1, changes are additive only, and breaking changes need agreement from all tracks.
 - Every vendor sits behind one interface, so a swap is a one-line config change.
 
@@ -100,7 +101,8 @@ python -m brain --live                     # run against the live game
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
-python -m brain --replay <session-dir>     # run from a recorded session: no game, mic, keys or network
+python -m brain --replay <session-dir>     # run from a recorded session
+python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
 python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
 pytest brain/tests
@@ -108,7 +110,7 @@ python scripts/check_observer.py          # print live vision reports (paid, abo
 python scripts/save_screenshots.py        # save test screenshots of the game
 ruff check --fix brain; ruff format brain
 npm --prefix overlay install
-npm --prefix overlay run dev
+npm --prefix overlay run dev              # overlay plus the Control Center, which can start the brain
 npm --prefix overlay run typecheck
 npm --prefix overlay test
 npm --prefix overlay run format

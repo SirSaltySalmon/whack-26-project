@@ -16,12 +16,14 @@ from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import default_live_source
 from brain.capture.window import GameWindow
 from brain.config import WS_HOST, Settings
+from brain.control import ControlLink, ShutdownRequested, stop_when
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
+from brain.memory.browse import browse
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
@@ -42,6 +44,7 @@ from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
+from shared.protocol.control import BrainStatus
 from shared.protocol.messages import Settings as OverlaySettings
 
 log = logging.getLogger(__name__)
@@ -89,7 +92,9 @@ def _registry(tools: AgentTools | None, observer: Observer | None) -> ToolRegist
     return tools.registry().including(watch_tool(observer.focus)) if observer else tools.registry()
 
 
-async def _find_wiki(settings: Settings, database: Database, tools: AgentTools) -> None:
+async def _find_wiki(
+    settings: Settings, database: Database, tools: AgentTools, control: ControlLink
+) -> None:
     """In the background, so a slow or dead wiki can't hold up the brain's start."""
     title = settings.game_title.strip()
     if not title or title == Settings.model_fields["game_title"].default:
@@ -102,6 +107,7 @@ async def _find_wiki(settings: Settings, database: Database, tools: AgentTools) 
         log.warning("No wiki found for %s", title)
     else:
         log.info("Using the wiki at %s", tools.research.site.api_url)
+        await control.push_status()
 
 
 async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
@@ -217,8 +223,37 @@ async def run(
         question_quiet_s=settings.question_quiet_s,
     )
 
+    def status() -> BrainStatus:
+        listening = not isinstance(voice, SubtitleOnlyVoice)
+        voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
+        research = tools.research if tools else None
+        return BrainStatus(
+            mode="replay" if replay_dir else "live",
+            game_title=settings.game_title,
+            session_id=memory.session.id,
+            watching=observer is not None,
+            listening=listening,
+            speaking=listening and settings.elevenlabs_api_key is not None and bool(voice_id),
+            talking=talker is not None,
+            tools=tools is not None,
+            wiki_url=research.site.api_url if research else None,
+        )
+
+    stop = asyncio.Event()
+    control = ControlLink(
+        link,
+        bus,
+        browse=lambda text, history, limit: database.run(
+            lambda conn: browse(conn, settings.game_title, text, history, limit)
+        ),
+        recall=talker_context,
+        status=status,
+        shutdown=stop.set,
+    )
+    link.mirror = control.mirror
+
     config = uvicorn.Config(
-        create_app(link), host=WS_HOST, port=settings.brain_port, log_level="warning"
+        create_app(link, control), host=WS_HOST, port=settings.brain_port, log_level="warning"
     )
     server = uvicorn.Server(config)
 
@@ -229,6 +264,7 @@ async def run(
                 if part:
                     tasks.create_task(_survive(name, part.run()))
             tasks.create_task(server.serve())
+            tasks.create_task(stop_when(stop))
             tasks.create_task(director.run())
             tasks.create_task(capture.run())
             tasks.create_task(_survive("Voice", voice.run()))
@@ -236,13 +272,15 @@ async def run(
                 tasks.create_task(_survive("Observer", observer.run()))
             tasks.create_task(memory.run())
             if tools:
-                tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
+                tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools, control)))
             if typed:
                 tasks.create_task(_survive("Typing", typed_turns(bus)))
             if replay and exit_when_done:
                 tasks.create_task(exit_after(replay.finished, settings.replay_exit_grace_s))
     except* ReplayDone:
         log.info("Replay finished; exiting")
+    except* ShutdownRequested:
+        log.info("Stopped from the Control Center")
     finally:
         if tools and tools.research:
             await tools.research.aclose()

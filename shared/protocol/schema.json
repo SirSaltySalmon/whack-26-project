@@ -25,6 +25,132 @@
       "title": "AvatarState",
       "type": "object"
     },
+    "BrainDescription": {
+      "description": "Printed by `python -m brain --describe`, before anything starts. Never holds key values.",
+      "properties": {
+        "game_process": {
+          "title": "Game Process",
+          "type": "string"
+        },
+        "game_title": {
+          "title": "Game Title",
+          "type": "string"
+        },
+        "keys_set": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Keys Set",
+          "type": "object"
+        },
+        "personalities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Personalities",
+          "type": "array"
+        },
+        "protocol_version": {
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "voices": {
+          "items": {
+            "$ref": "#/$defs/VoiceOption"
+          },
+          "title": "Voices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "personalities",
+        "voices",
+        "keys_set",
+        "game_title",
+        "game_process"
+      ],
+      "title": "BrainDescription",
+      "type": "object"
+    },
+    "BrainStatus": {
+      "description": "Which parts of the partner are running, so the Control Center can show what's on.",
+      "properties": {
+        "game_title": {
+          "title": "Game Title",
+          "type": "string"
+        },
+        "listening": {
+          "title": "Listening",
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "live",
+            "replay"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "speaking": {
+          "title": "Speaking",
+          "type": "boolean"
+        },
+        "talking": {
+          "title": "Talking",
+          "type": "boolean"
+        },
+        "tools": {
+          "title": "Tools",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "brain.status",
+          "default": "brain.status",
+          "title": "Type",
+          "type": "string"
+        },
+        "watching": {
+          "title": "Watching",
+          "type": "boolean"
+        },
+        "wiki_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wiki Url"
+        }
+      },
+      "required": [
+        "mode",
+        "game_title",
+        "watching",
+        "listening",
+        "speaking",
+        "talking",
+        "tools"
+      ],
+      "title": "BrainStatus",
+      "type": "object"
+    },
     "CardClose": {
       "properties": {
         "card_id": {
@@ -197,6 +323,95 @@
       "title": "CardUpdate",
       "type": "object"
     },
+    "ContextPreview": {
+      "description": "Asks for the exact context the talker would get for this query.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 500,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.context_preview",
+          "default": "memory.context_preview",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "text"
+      ],
+      "title": "ContextPreview",
+      "type": "object"
+    },
+    "ControlError": {
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "control.error",
+          "default": "control.error",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ControlError",
+      "type": "object"
+    },
+    "ControlHello": {
+      "properties": {
+        "protocol_version": {
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "type": {
+          "const": "control.hello",
+          "default": "control.hello",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_version"
+      ],
+      "title": "ControlHello",
+      "type": "object"
+    },
+    "ControlShutdown": {
+      "description": "Stop the brain cleanly, so the session is closed and its note written.",
+      "properties": {
+        "type": {
+          "const": "control.shutdown",
+          "default": "control.shutdown",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "ControlShutdown",
+      "type": "object"
+    },
     "ElementRect": {
       "properties": {
         "element_id": {
@@ -212,6 +427,186 @@
         "rect"
       ],
       "title": "ElementRect",
+      "type": "object"
+    },
+    "FactView": {
+      "properties": {
+        "attribute": {
+          "title": "Attribute",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "player",
+            "observed",
+            "wiki"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "tentative": {
+          "title": "Tentative",
+          "type": "boolean"
+        },
+        "valid_from": {
+          "title": "Valid From",
+          "type": "number"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "subject",
+        "attribute",
+        "value",
+        "source",
+        "confidence",
+        "tentative",
+        "valid_from"
+      ],
+      "title": "FactView",
+      "type": "object"
+    },
+    "MemoryContext": {
+      "properties": {
+        "context": {
+          "title": "Context",
+          "type": "string"
+        },
+        "elapsed_ms": {
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.context",
+          "default": "memory.context",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "context",
+        "elapsed_ms"
+      ],
+      "title": "MemoryContext",
+      "type": "object"
+    },
+    "MemoryQuery": {
+      "description": "Empty text lists the newest facts instead of searching.",
+      "properties": {
+        "include_history": {
+          "default": false,
+          "title": "Include History",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.query",
+          "default": "memory.query",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "title": "MemoryQuery",
+      "type": "object"
+    },
+    "MemoryResults": {
+      "properties": {
+        "elapsed_ms": {
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/FactView"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/NoteView"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/QuestionView"
+          },
+          "title": "Questions",
+          "type": "array"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.results",
+          "default": "memory.results",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "facts",
+        "questions",
+        "notes",
+        "elapsed_ms"
+      ],
+      "title": "MemoryResults",
       "type": "object"
     },
     "MemoryToast": {
@@ -241,6 +636,38 @@
         "source"
       ],
       "title": "MemoryToast",
+      "type": "object"
+    },
+    "NoteView": {
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "rolling",
+            "recap"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "body",
+        "created_at"
+      ],
+      "title": "NoteView",
       "type": "object"
     },
     "OverlayReady": {
@@ -426,6 +853,53 @@
       "title": "QuestionAsk",
       "type": "object"
     },
+    "QuestionView": {
+      "properties": {
+        "answer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "answered",
+            "dropped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "status"
+      ],
+      "title": "QuestionView",
+      "type": "object"
+    },
     "Rect": {
       "properties": {
         "height": {
@@ -578,9 +1052,31 @@
       ],
       "title": "VoiceOption",
       "type": "object"
+    },
+    "VoicePreview": {
+      "description": "Speak this sample line in the current voice, if the partner isn't already talking.",
+      "properties": {
+        "text": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "voice.preview",
+          "default": "voice.preview",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "VoicePreview",
+      "type": "object"
     }
   },
-  "description": "Exists only so one JSON Schema document can describe both directions.",
+  "description": "Exists only so one JSON Schema document can describe every direction.",
   "properties": {
     "brain": {
       "discriminator": {
@@ -632,6 +1128,77 @@
       ],
       "title": "Brain"
     },
+    "control": {
+      "discriminator": {
+        "mapping": {
+          "control.hello": "#/$defs/ControlHello",
+          "control.shutdown": "#/$defs/ControlShutdown",
+          "memory.context_preview": "#/$defs/ContextPreview",
+          "memory.query": "#/$defs/MemoryQuery",
+          "settings.update": "#/$defs/SettingsUpdate",
+          "voice.preview": "#/$defs/VoicePreview"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ControlHello"
+        },
+        {
+          "$ref": "#/$defs/MemoryQuery"
+        },
+        {
+          "$ref": "#/$defs/ContextPreview"
+        },
+        {
+          "$ref": "#/$defs/SettingsUpdate"
+        },
+        {
+          "$ref": "#/$defs/VoicePreview"
+        },
+        {
+          "$ref": "#/$defs/ControlShutdown"
+        }
+      ],
+      "title": "Control"
+    },
+    "control_reply": {
+      "discriminator": {
+        "mapping": {
+          "brain.status": "#/$defs/BrainStatus",
+          "control.error": "#/$defs/ControlError",
+          "memory.context": "#/$defs/MemoryContext",
+          "memory.results": "#/$defs/MemoryResults",
+          "settings.state": "#/$defs/SettingsState",
+          "toast.memory": "#/$defs/MemoryToast"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MemoryResults"
+        },
+        {
+          "$ref": "#/$defs/MemoryContext"
+        },
+        {
+          "$ref": "#/$defs/BrainStatus"
+        },
+        {
+          "$ref": "#/$defs/SettingsState"
+        },
+        {
+          "$ref": "#/$defs/MemoryToast"
+        },
+        {
+          "$ref": "#/$defs/ControlError"
+        }
+      ],
+      "title": "Control Reply"
+    },
+    "description": {
+      "$ref": "#/$defs/BrainDescription"
+    },
     "overlay": {
       "discriminator": {
         "mapping": {
@@ -669,7 +1236,10 @@
   },
   "required": [
     "brain",
-    "overlay"
+    "overlay",
+    "control",
+    "control_reply",
+    "description"
   ],
   "title": "Protocol",
   "type": "object"

@@ -173,9 +173,5 @@ OverlayMessage = Annotated[
 BrainMessageAdapter: TypeAdapter[BrainMessage] = TypeAdapter(BrainMessage)
 OverlayMessageAdapter: TypeAdapter[OverlayMessage] = TypeAdapter(OverlayMessage)
 
-
-class Protocol(BaseModel):
-    """Exists only so one JSON Schema document can describe both directions."""
-
-    brain: BrainMessage
-    overlay: OverlayMessage
+# The Control Center's messages are in control.py, and Protocol, which lists every direction for
+# the generated TypeScript, is in __init__.py.

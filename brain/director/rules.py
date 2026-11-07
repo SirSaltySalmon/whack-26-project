@@ -15,6 +15,7 @@ from brain.events import (
     PlayerStartedSpeaking,
     SettingsChanged,
     Tick,
+    VoicePreviewRequested,
 )
 
 # Names the observer's tracker publishes. They describe any game, so this stays game-agnostic.
@@ -140,5 +141,8 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
         case SettingsChanged():
             # Sending the current voice again is harmless, so this needs no change tracking.
             return [SetVoice(getattr(event.settings, "voice_id", None))]
+        case VoicePreviewRequested():
+            # A plain Say, so it's skipped while the partner is talking and never interrupts.
+            return [Say(event.text)]
         case _:
             return []
