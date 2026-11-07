@@ -61,6 +61,15 @@ class CardClosedByPlayer(Event):
 
 
 @dataclass(frozen=True)
+class CardPageChanged(Event):
+    """The wiki window's page changed. The URL and title are untrusted website data."""
+
+    card_id: str
+    url: str
+    title: str | None = None
+
+
+@dataclass(frozen=True)
 class QuestionAnswered(Event):
     question_id: str
     answer: str

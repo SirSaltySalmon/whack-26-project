@@ -1,0 +1,146 @@
+.card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Not display: none, which can make a webview reload. */
+.card-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.card-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--bar-height);
+  gap: 6px;
+  padding: 0 6px;
+  background: var(--surface-raised);
+  cursor: grab;
+  touch-action: none;
+}
+
+.card-bar:active {
+  cursor: grabbing;
+}
+
+.card-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-buttons {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.card-buttons button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.card-buttons button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.card-buttons button:disabled {
+  color: var(--text-muted);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.card-buttons button.active {
+  color: #0b0d12;
+  background: var(--accent);
+}
+
+.card-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.card-page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+/* A webview swallows pointer events, which would end a drag the moment the cursor crossed it. */
+.gesturing .card-page {
+  pointer-events: none;
+}
+
+.card-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  animation: loading 1s ease-in-out infinite alternate;
+}
+
+@keyframes loading {
+  from {
+    opacity: 0.2;
+  }
+}
+
+.card-text {
+  position: absolute;
+  inset: 0;
+  padding: 10px 14px 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.card-fallback {
+  background: var(--surface);
+}
+
+.card-fallback-note {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+}
+
+/* Sits above the content, which would otherwise catch the press first. */
+.card > .resize-corner {
+  z-index: 1;
+}
+
+.minimized-tab {
+  position: absolute;
+  z-index: 6;
+  width: 180px;
+  height: 32px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}

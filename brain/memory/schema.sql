@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS profile (
     game TEXT PRIMARY KEY,
     brief TEXT NOT NULL DEFAULT '',  -- What the game is, its goals and vocabulary. Learned as data.
-    data TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(data)),  -- regions, readers, entity_types
+    data TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(data)),  -- regions, readers
     updated_at REAL NOT NULL
 );
 

@@ -26,8 +26,8 @@ def test_unknown_game_gets_an_empty_profile(conn: sqlite3.Connection) -> None:
 def test_merge_keeps_keys_it_does_not_mention(conn: sqlite3.Connection) -> None:
     store = ProfileStore(conn)
     store.merge_data("g", {"regions": {"hp": [0, 0, 1, 1]}})
-    merged = store.merge_data("g", {"entity_types": ["boss"]})
-    assert merged.data == {"regions": {"hp": [0, 0, 1, 1]}, "entity_types": ["boss"]}
+    merged = store.merge_data("g", {"readers": ["hp"]})
+    assert merged.data == {"regions": {"hp": [0, 0, 1, 1]}, "readers": ["hp"]}
     assert store.get("g") == merged
 
 
