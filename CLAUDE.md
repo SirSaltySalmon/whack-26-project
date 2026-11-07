@@ -92,6 +92,7 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 python -m brain --live                     # run against the live game
+python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --replay <session-dir>     # run from a recorded session
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)

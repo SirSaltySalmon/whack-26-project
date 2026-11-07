@@ -55,6 +55,9 @@ from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
 log = logging.getLogger(__name__)
 
+# Flux updates several times a second, and each update repeats the whole turn so far.
+PARTIAL_LOG_INTERVAL_S = 1.0
+
 
 class EchoGate(FrameProcessor):
     """Swaps mic audio for silence while the partner's voice may be in the room.
@@ -142,6 +145,7 @@ class PipecatVoice:
         self._subtitles = SubtitleOnlyVoice(link)
         self._mood = MoodTracker()
         self._last_partial = ""
+        self._last_partial_logged = 0.0
         self.bot_speaking = False
         self.user_speaking = False
         self._end_of_turn_at: float | None = None
@@ -231,12 +235,16 @@ class PipecatVoice:
         if not text or text == self._last_partial:
             return
         self._last_partial = text
+        now = time.monotonic()
+        if now - self._last_partial_logged >= PARTIAL_LOG_INTERVAL_S:
+            self._last_partial_logged = now
+            log.info("Hearing: %s", text)
         self._bus.publish(PlayerSpeechPartial(transcript=text))
         self._publish_mood(self._mood.add_text(text))
 
     def _publish_mood(self, mood: Mood | None) -> None:
         if mood is not None:
-            log.info("Player mood: %s", mood)
+            log.debug("Player mood: %s", mood)
             self._bus.publish(PlayerMood(mood.label, mood.valence, mood.intensity))
 
     def on_bot_started(self) -> None:
@@ -281,6 +289,7 @@ class PipecatVoice:
             if not transcript:
                 return
             self._end_of_turn_at = time.monotonic()
-            log.info("Player: %s", transcript)
-            self._publish_mood(self._mood.add_text(transcript, final=True))
+            mood = self._mood.add_text(transcript, final=True)
+            log.info("Player (%s): %s", mood.label if mood else "unknown", transcript)
+            self._publish_mood(mood)
             self._bus.publish(PlayerSpeech(transcript=transcript))

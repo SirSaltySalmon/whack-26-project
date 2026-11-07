@@ -17,9 +17,12 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--live", action="store_true", help="capture the live screen")
     mode.add_argument("--replay", type=Path, metavar="SESSION_DIR", help="feed a recorded session")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="show debug and library log lines"
+    )
     args = parser.parse_args()
 
-    configure_logging()
+    configure_logging(args.verbose)
     try:
         asyncio.run(run(Settings(), replay_dir=args.replay))
     except KeyboardInterrupt:
