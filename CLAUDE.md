@@ -164,6 +164,8 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Overlay shows subtitles, memory toasts, questions and settings
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
+- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as an observed `playthrough / progress` fact. The same call drafts questions for the player (where they're up to, plus up to 2 more, such as their goal), queued through the question budget. Check the guesses and questions on real Terraria hotbars
+- [ ] Advice: with hints on, a director rule offers a tip on what to do next every `advice_gap_s` (300 s) in a quiet moment, never in danger; the talker can answer SKIP to stay quiet
 - [ ] Barks (WP6): pre-generated per voice into `data/barks/`, played for mapped events and the looking filler, else the talker. Check event-to-bark under 300 ms and that barge-in stops one
 
 **Done, with no keys or game**

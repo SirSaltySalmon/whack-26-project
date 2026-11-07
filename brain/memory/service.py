@@ -6,6 +6,7 @@ Other tracks call:
 - `take_question()` when the director's question budget allows asking one
 - `wonder()` when something about the game is unclear and there's no guess to store
 - `remember()` to store a claim about the player or playthrough
+- `current_fact()` for the most trusted current value, before spending a model call on it
 """
 
 import asyncio
@@ -27,10 +28,10 @@ from brain.events import (
 )
 from brain.memory.context import render_context
 from brain.memory.db import Database
-from brain.memory.export import export_vault
+from brain.memory.export import export_quietly
 from brain.memory.facts import FactStore
 from brain.memory.gather import gather_context
-from brain.memory.models import NoteKind, Question, RememberResult, Session, Source
+from brain.memory.models import Fact, NoteKind, Question, RememberResult, Session, Source
 from brain.memory.notes import NoteDraft, NoteWriter
 from brain.memory.profile import PlayerStore, ProfileStore
 from brain.memory.sessions import SessionStore
@@ -150,6 +151,12 @@ class MemoryService:
         await self._announce(result)
         return result
 
+    async def current_fact(self, subject: str, attribute: str) -> Fact | None:
+        found = await self._database.run(
+            lambda _: self._facts.current(self._game, subject, attribute, 1)
+        )
+        return found[0] if found else None
+
     async def load_settings(self, model: type[ModelT]) -> ModelT:
         return await self._database.run(lambda _: self._player.load_settings(model))
 
@@ -244,7 +251,8 @@ class MemoryService:
         )
         self._last_note_ts = to_ts
         await self._apply_draft(draft, {question.id for question in questions})
-        await self._export()
+        if self._vault_dir is not None:
+            await export_quietly(self._database, self._vault_dir, self._game)
         return True
 
     async def _apply_draft(self, draft: NoteDraft, open_ids: set[int]) -> None:
@@ -272,16 +280,6 @@ class MemoryService:
         except ValueError:
             # Model output is untrusted, so one bad fact shouldn't discard the rest of the note.
             log.warning("Rejected a drafted fact: %r %r", subject, attribute, exc_info=True)
-
-    async def _export(self) -> None:
-        if self._vault_dir is None:
-            return
-        vault_dir = self._vault_dir
-        try:
-            await self._database.run(lambda conn: export_vault(conn, vault_dir, self._game))
-        except OSError:
-            # The vault is only a view: SQLite already has everything.
-            log.exception("Vault export to %s failed", vault_dir)
 
     async def finish(self) -> None:
         """Saves whatever's left, writes the recap and closes the session."""

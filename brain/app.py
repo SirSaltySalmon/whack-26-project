@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -20,6 +20,7 @@ from brain.config import WS_HOST, Settings
 from brain.director.director import Director
 from brain.director.personalities import PersonalityBook, load_personalities
 from brain.events import EventBus
+from brain.learner.progress import ProgressScout
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
@@ -28,6 +29,7 @@ from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
 from brain.perception.focus import Focus, FocusIntervals
+from brain.perception.observation import Observation
 from brain.perception.observer import Observer
 from brain.perception.tracker import ObservationTracker
 from brain.replay.source import ReplayFrameSource
@@ -52,7 +54,12 @@ def _talker(factory: LLMFactory) -> GeminiClient | None:
 
 
 def _observer(
-    settings: Settings, factory: LLMFactory, buffer: RingBuffer, link: OverlayLink, bus: EventBus
+    settings: Settings,
+    factory: LLMFactory,
+    buffer: RingBuffer,
+    link: OverlayLink,
+    bus: EventBus,
+    on_observation: Callable[[Observation, float], None] | None = None,
 ) -> Observer | None:
     try:
         vision = factory.observer()
@@ -75,6 +82,33 @@ def _observer(
         ),
         settings.ai_image_max_edge_px,
         settings.mask_padding_px,
+        on_observation,
+    )
+
+
+def _progress_scout(
+    settings: Settings,
+    factory: LLMFactory,
+    buffer: RingBuffer,
+    link: OverlayLink,
+    memory: MemoryService,
+) -> ProgressScout | None:
+    try:
+        vision = factory.vision()
+    except LLMUnavailableError as exc:
+        log.warning("Not guessing the player's progress: %s", exc)
+        return None
+    return ProgressScout(
+        buffer,
+        link,
+        vision,
+        memory,
+        settings.game_title,
+        max_edge_px=settings.closeup_max_edge_px,
+        mask_padding_px=settings.mask_padding_px,
+        max_calls=settings.progress_max_vision_calls,
+        retry_gap_s=settings.progress_retry_gap_s,
+        recheck_s=settings.progress_recheck_s,
     )
 
 
@@ -148,7 +182,15 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         link.frame_scale_override = live_frame_scale()
     capture = CaptureLoop(source, buffer, link, settings.capture_fps, window)
     # Replays are tests and fallbacks, so they never spend money on vision.
-    observer = None if replay_dir else _observer(settings, factory, buffer, link, bus)
+    scout = None if replay_dir else _progress_scout(settings, factory, buffer, link, memory)
+    observer = (
+        None
+        if replay_dir
+        else _observer(settings, factory, buffer, link, bus, scout.notice if scout else None)
+    )
+    if observer is None:
+        # Nothing would wake it.
+        scout = None
 
     voice = create_voice(settings, bus, link)
 
@@ -210,6 +252,8 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         send=link.send,
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
+        advice_gap_s=settings.advice_gap_s,
+        advice_quiet_s=settings.advice_quiet_s,
         page_excerpt=open_page.excerpt_for if open_page else None,
         barks=barks,
         voice_id=voice_id,
@@ -230,6 +274,8 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             tasks.create_task(_survive("Voice", voice.run()))
             if observer:
                 tasks.create_task(_survive("Observer", observer.run()))
+            if scout:
+                tasks.create_task(_survive("Progress", scout.run()))
             tasks.create_task(memory.run())
             if startup_voice:
                 # In the background: until a bark is ready, its event goes to the talker instead.

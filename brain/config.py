@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     # The question budget, so asking the player doesn't turn into nagging.
     question_gap_s: float = 90.0
     question_quiet_s: float = 20.0
+    # Unasked-for tips on what to do next, only with hints on. 0 turns them off.
+    advice_gap_s: float = 300.0
+    advice_quiet_s: float = 30.0
 
     # Names what memory is filed under. It's data, so the brain has no game-specific logic.
     game_title: str = "Unknown game"
@@ -115,6 +118,10 @@ class Settings(BaseSettings):
     learner_frame_gap_s: float = 5.0
     learner_max_vision_calls: int = 6  # Per session. Shares Gemini's free-tier quota
     learner_relearn_gap_s: float = 300.0
+    # Guessing the player's progress from their gear, when memory doesn't know it.
+    progress_max_vision_calls: int = 3  # Per session. Shares Gemini's free-tier quota
+    progress_retry_gap_s: float = 120.0
+    progress_recheck_s: float = 900.0  # How long a sure guess stands before looking again
     profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
 
     # Pre-generated barks.
