@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     learner_max_vision_calls: int = 6  # Per session. Shares Gemini's free-tier quota
     learner_relearn_gap_s: float = 300.0
     profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
+    # Draws each learned HUD region over the game with what its reader reads. Also --debug-regions.
+    debug_regions: bool = False
 
     # Pre-generated barks.
     barks_dir: Path = Path("data/barks")

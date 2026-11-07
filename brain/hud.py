@@ -5,7 +5,9 @@ reader change shows up when a recorded session is replayed. The learner only run
 it calls a vision model.
 """
 
-from collections.abc import Callable
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from brain.capture.ring_buffer import RingBuffer
@@ -21,6 +23,13 @@ from brain.perception.ocr import OcrWorker
 from brain.perception.reader_engine import ReaderEngine
 from brain.research import WikiResearch
 from brain.server import OverlayLink
+from shared.protocol import BrainMessage
+from shared.protocol.messages import DebugRegion, DebugRegions
+
+log = logging.getLogger(__name__)
+
+# The overlay hides the view 3 s after the last message, so twice a second keeps it steady.
+DEBUG_INTERVAL_S = 0.5
 
 
 @dataclass
@@ -106,3 +115,20 @@ def live_state(
     """
     rest = {key: value for key, value in observer.items() if key not in readers}
     return {**voice, **readers, **rest}
+
+
+async def send_debug_regions(
+    readers: ReaderEngine, send: Callable[[BrainMessage], Awaitable[None]]
+) -> None:
+    """Shows where each reader looks and what it reads, over the game, for debugging."""
+    log.info("Drawing the HUD regions over the game (--debug-regions)")
+    shown = False
+    while True:
+        views = readers.debug_view()
+        # An empty list clears the view, so it's sent once when the readers go away.
+        if views or shown:
+            regions = [DebugRegion(name=v.name, rect=v.rect, status=v.status, display=v.display)
+                       for v in views]  # fmt: skip
+            await send(DebugRegions(regions=regions))
+            shown = bool(views)
+        await asyncio.sleep(DEBUG_INTERVAL_S)

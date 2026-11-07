@@ -99,6 +99,7 @@ pip install -r requirements-dev.txt
 python -m brain --live                     # run against the live game
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
+python -m brain --live --debug-regions     # also draw the learned HUD regions over the game
 python -m brain --replay <session-dir>     # run from a recorded session
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)

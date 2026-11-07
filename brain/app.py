@@ -20,7 +20,7 @@ from brain.config import WS_HOST, Settings
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
-from brain.hud import build_hud, live_state
+from brain.hud import build_hud, live_state, send_debug_regions
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
@@ -229,6 +229,10 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             tasks.create_task(_survive("Readers", hud.readers.run()))
             if hud.learner:
                 tasks.create_task(_survive("Learner", hud.learner.run()))
+            if settings.debug_regions:
+                tasks.create_task(
+                    _survive("Debug view", send_debug_regions(hud.readers, link.send))
+                )
             tasks.create_task(memory.run())
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))

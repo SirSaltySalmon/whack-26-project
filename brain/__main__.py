@@ -27,13 +27,21 @@ def main() -> None:
         help="also take player turns typed on stdin, such as `5: what's that` to wait 5 s first",
     )
     parser.add_argument(
+        "--debug-regions",
+        action="store_true",
+        help="draw the learned HUD regions over the game, with what each reader reads",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="show debug and library log lines"
     )
     args = parser.parse_args()
 
     configure_logging(args.verbose)
     try:
-        asyncio.run(run(Settings(), replay_dir=args.replay, typed=args.typed))
+        settings = Settings()
+        if args.debug_regions:
+            settings = settings.model_copy(update={"debug_regions": True})
+        asyncio.run(run(settings, replay_dir=args.replay, typed=args.typed))
     except KeyboardInterrupt:
         log.info("Stopped by user")
 
