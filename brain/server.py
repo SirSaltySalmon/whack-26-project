@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
@@ -47,6 +48,12 @@ class OverlayLink:
         self.settings = Settings()
         self.personalities: list[str] = []
         self.voices: list[VoiceOption] = []
+        # Sees every message, even with no overlay connected, so a recording or replay logs them
+        # all. It runs on the loop, so it must be quick.
+        self.on_send: Callable[[BrainMessage], None] | None = None
+        # Replay sets this to the recorded scale: the recorded rects are DIPs at that scale, so
+        # masking must keep using it whatever scale the live overlay runs at.
+        self.pinned_display_scale: float | None = None
 
     def _settings_state(self) -> SettingsState:
         return SettingsState(
@@ -58,6 +65,12 @@ class OverlayLink:
         return self._socket is not None
 
     async def send(self, message: BrainMessage) -> None:
+        if self.on_send is not None:
+            try:
+                self.on_send(message)
+            except Exception:
+                # A recorder failure must never stop the overlay getting its messages.
+                log.exception("on_send hook failed for %s; sending anyway", message.type)
         socket = self._socket
         if socket is None:
             log.debug("Overlay not connected; dropped %s", message.type)
@@ -72,6 +85,17 @@ class OverlayLink:
         if self._socket is socket:
             self._socket = None
             self.rects = ()
+
+    def _apply_display_scale(self, reported: float) -> None:
+        pinned = self.pinned_display_scale
+        if pinned is None:
+            self.display_scale = reported
+        elif reported != pinned:
+            log.warning(
+                "Overlay reports display scale %s but replay pinned %s; masking keeps the pin",
+                reported,
+                pinned,
+            )
 
     async def handle_text(self, text: str) -> None:
         try:
@@ -88,7 +112,7 @@ class OverlayLink:
                         message.protocol_version,
                         PROTOCOL_VERSION,
                     )
-                self.display_scale = message.display_scale
+                self._apply_display_scale(message.display_scale)
                 await self.send(self._settings_state())
                 self._bus.publish(OverlayConnected(display_scale=message.display_scale))
             case OverlayRects():

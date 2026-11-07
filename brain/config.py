@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     # Recording a session for replay. Only runs with --record, because it stores screen and mic.
     record_fps: int = 5
     record_max_gb: float = 10.0
+    # Replay answers with the recorded lines, so it needs no network. True asks the real talker.
+    replay_live_talker: bool = False
+    # After the last recorded item, time for the last reply to reach the overlay before exiting.
+    replay_exit_grace_s: float = 2.0
 
     # Compiled readers.
     reader_tick_s: float = 0.2

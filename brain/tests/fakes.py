@@ -19,7 +19,7 @@ from brain.llm.base import Detail, SchemaT, ToolCall, ToolDeclaration, ToolStep
 from brain.perception.coords import CropRegion
 from brain.voice.barks import Bark
 from shared.protocol import BrainMessage
-from shared.protocol.messages import QuestionAsk, Rect
+from shared.protocol.messages import QuestionAsk, Rect, Settings
 
 
 class FakeVoice:
@@ -56,6 +56,8 @@ class FakeVoice:
 class FakeOverlay:
     def __init__(self, display_scale: float = 1.0, rects: Iterable[Rect] = ()) -> None:
         self.display_scale = display_scale
+        self.pinned_display_scale: float | None = None
+        self.settings = Settings()
         self.rects = tuple(rects)
         self.sent: list[BrainMessage] = []
 
