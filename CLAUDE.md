@@ -3,7 +3,7 @@ A game-agnostic AI companion that watches you play, talks in short natural phras
 
 **Deadline: about 07:30 on 2026-11-08 local time (16 hours from 15:33 on 2026-11-07). Demo game: Terraria, played locally.** Favor a working demo over completeness.
 
-Full stack rationale, data flow and draft message list: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Personality options (undecided): [docs/PERSONALITIES.md](docs/PERSONALITIES.md).
+Full stack rationale, data flow and draft message list: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plan changes and why: [docs/DECISIONS.md](docs/DECISIONS.md). Personality options (undecided): [docs/PERSONALITIES.md](docs/PERSONALITIES.md).
 
 ## Stack
 Two processes joined by a localhost WebSocket:
@@ -41,13 +41,14 @@ Don't propose: Tauri, an LLM deciding when to speak, continuous vision model wat
 - A seeded profile may exist in `fixtures/` as a demo fallback. If it's used on stage, say so.
 
 **Memory and trust**
+- Memory stores the play session, not a game encyclopedia: session notes, plus facts about the player and this playthrough. Enemy stats and similar details come from wiki lookups. Live game state stays in RAM.
 - Every fact stores its source (`player`, `observed`, `wiki`), confidence and validity window.
 - Default authority: player > observed > wiki. For current game state, a fresh observation beats anything remembered.
 - Wiki facts stay tentative until confirmed by the player or the screen.
 - Never overwrite silently. Close the old fact's validity window; if trusted sources conflict, ask the player.
 - Low confidence means ask, not guess. Questions go through the director with their own budget so it doesn't nag.
 - Fight context drift: the talker only gets a small pre-assembled context, never raw session history. Use rolling summaries.
-- SQLite is the source of truth. Obsidian is an optional export.
+- SQLite is the source of truth, including Markdown session notes. The Obsidian vault is a one-way export.
 
 **Speech**
 - Talker replies are capped at 12 words.
@@ -155,6 +156,6 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 7. Settings: proactive hints or conversation only, personality, voice
 8. Replay mode
 
-**Stretch (only after freeze-ready must-haves):** tilt meter, relationship points, visual customization, Obsidian export, post-mortems.
+**Stretch (only after freeze-ready must-haves):** tilt meter, relationship points, visual customization, post-mortems.
 
 **If behind at hour 10, cut in this order:** sqlite-vec and fastembed (keep FTS5), Exa, Cartesia backup, Rive or Lottie avatar (use CSS), memory consolidation.

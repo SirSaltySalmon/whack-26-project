@@ -17,7 +17,7 @@ EVENT BUS ─► DIRECTOR (budgets, cooldowns, priorities) ─┬─► REFLEX: 
                                                         ├─► TALKER: fast LLM ─► TTS (streamed, with subtitles)
                                                         └─► SLOW: Gemini vision (learn regions, answer, point) and post-mortems, consolidation
 
-All paths read and write SQLite: profile, entities, facts, events, summaries, questions, player
+All paths read and write SQLite: profile, sessions, events, session notes, facts, questions, player, wiki cache
 All paths render via WebSocket to the overlay: avatar, pointer, subtitles, cards, "memory updated" toasts
 Overlay reports element rectangles back to the brain ─► used for masking
 ```
@@ -36,12 +36,12 @@ Overlay reports element rectangles back to the brain ─► used for masking
 | **Talker LLM** | `gemini-3.5-flash-lite` on the free tier; streaming, 12-word cap | Stable and free. Low time to first token still needs measuring. Small pre-assembled context | Large models on the voice path; paid models (no budget) |
 | **Vision and profile learner** | `gemini-3.6-flash` (stable); try `gemini-3.8-flash` (new) | Low resolution by default, full-resolution crops on demand. Structured JSON and pointing coordinates from one provider | Moondream (only if Gemini's coordinates prove too slow) |
 | **Deep reasoning** | `gemini-3.6-flash` with higher thinking | Post-mortems, profile cleanup, deciding which questions are worth asking. Latency doesn't matter here, but it shares quota with vision | Claude (no API credits) |
-| **Memory** | SQLite in WAL mode with JSON1 and FTS5; then sqlite-vec with fastembed (`BAAI/bge-small-en-v1.5`, 384 dimensions) | Fixed schema with a learned game profile and a fact graph. WAL lets fast loops read while the slow loop writes. Local embeddings avoid a network call during recall | Zep, Mem0, Letta (more infrastructure, nowhere to put learned regions) |
-| **Web research** | MediaWiki `action=parse` on the game's wiki; Exa as fallback | Researches the title at startup to pre-fill tentative `entity_types`, then prefetches during downtime | Perplexity (slow); loading live pages in the overlay |
+| **Memory** | SQLite in WAL mode with JSON1 and FTS5; then sqlite-vec with fastembed (`BAAI/bge-small-en-v1.5`, 384 dimensions) | Fixed schema with a learned game profile, session notes and a small set of player and playthrough facts. WAL lets fast loops read while the slow loop writes. Local embeddings avoid a network call during recall | Zep, Mem0, Letta (more infrastructure, nowhere to put learned regions) |
+| **Web research** | MediaWiki `action=parse` on the game's wiki; Exa as fallback | Researches the title at startup to pre-fill the game brief and tentative `entity_types`, then prefetches during downtime. Pages are cached as lookup material, not stored as memory | Perplexity (slow); loading live pages in the overlay |
 | **Director / event bus** | Plain Python: asyncio queues and a rules module | Deterministic, instant, testable | An LLM deciding when to talk |
 | **Tilt meter (stretch)** | Mic loudness and pitch, death streaks, profanity in transcripts | Cheap, and the behavior change is easy to see | Hume in the critical path |
 | **Demo safety** | Replay mode recording frames, audio and events | Fallback if the network or game fails on stage, and the main test harness | — |
-| **Export (optional)** | Markdown post-mortems and retros in an Obsidian folder | Shows off what it remembers | Obsidian as the store |
+| **Export** | One-way export of session notes and facts to an Obsidian vault | Shows off what it remembers | Obsidian as the store |
 
 ## Overlay and capture
 
@@ -69,15 +69,20 @@ Gemini returns boxes as `[ymin, xmin, ymax, xmax]`. Test at 100% and 150% Window
 
 | Table | Holds |
 |---|---|
-| `profile` | The learned game profile: regions, readers, `entity_types` |
-| `entities` | Things in the game |
-| `facts` | Claims about entities, with source, confidence and validity window |
-| `events` | What happened and when |
-| `summaries` | Rolling session summaries |
-| `questions` | Open and answered clarifying questions |
+| `profile` | The learned game profile: game brief, regions, readers, `entity_types` |
+| `sessions` | Each play session of a game |
+| `events` | Notable moments and conversation turns, by session |
+| `session_notes` | Markdown notes on each session: rolling notes while playing, and a recap at the end |
+| `facts` | Claims about the player and this playthrough, with source, confidence and validity window |
+| `questions` | Open and answered clarifying questions, linked to the facts they settle |
 | `player` | Preferences and settings |
+| `wiki_cache` | Fetched wiki pages. This is lookup material, not memory |
 
-Trust rules are in [CLAUDE.md](../CLAUDE.md#rules-that-must-hold).
+Live game state stays in RAM with the readers, so a fresh value always reaches the talker.
+
+SQLite is the source of truth. Notes and facts are exported one way to an Obsidian vault for reading, so edits made in the vault don't flow back.
+
+Trust rules are in [CLAUDE.md](../CLAUDE.md#rules-that-must-hold). The reasoning behind this model is in the [decision log](DECISIONS.md).
 
 ## Wiki research
 
