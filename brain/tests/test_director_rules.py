@@ -3,29 +3,21 @@ from brain.events import GameEvent, OverlayConnected, PlayerSpeech
 
 
 def test_overlay_connection_is_announced() -> None:
-    assert decide(OverlayConnected(display_scale=1.0), DirectorState(), True) == [
-        Say("Brain connected.")
-    ]
+    assert decide(OverlayConnected(display_scale=1.0), DirectorState()) == [Say("Brain connected.")]
 
 
-def test_player_speech_is_answered_even_when_not_proactive() -> None:
+def test_player_speech_is_answered() -> None:
     event = PlayerSpeech(transcript="what's that?")
-    assert decide(event, DirectorState(), False) == [AskTalker("what's that?")]
-
-
-def test_game_events_stay_quiet_when_not_proactive() -> None:
-    assert decide(GameEvent("death", ts=1.0), DirectorState(), False) == []
+    assert decide(event, DirectorState()) == [AskTalker("what's that?")]
 
 
 def test_game_events_go_to_the_talker_with_their_details() -> None:
     event = GameEvent("danger_started", {"level": "high"}, ts=1.0)
-    assert decide(event, DirectorState(), True) == [
-        ReactToEvent("danger_started", {"level": "high"})
-    ]
+    assert decide(event, DirectorState()) == [ReactToEvent("danger_started", {"level": "high"})]
 
 
 def test_barks_respect_the_cooldown() -> None:
     state = DirectorState(bark_cooldown_s=8.0)
-    assert decide(GameEvent("death", ts=10.0), state, True)
-    assert decide(GameEvent("death", ts=15.0), state, True) == []
-    assert decide(GameEvent("death", ts=18.0), state, True)
+    assert decide(GameEvent("death", ts=10.0), state)
+    assert decide(GameEvent("death", ts=15.0), state) == []
+    assert decide(GameEvent("death", ts=18.0), state)

@@ -77,15 +77,16 @@ class DirectorState:
     greeted: bool = False
 
 
-def _may_ask(ts: float, state: DirectorState, proactive: bool) -> bool:
-    if not proactive or state.in_danger or state.last_activity_at is None:
+def _may_ask(ts: float, state: DirectorState) -> bool:
+    if state.in_danger or state.last_activity_at is None:
         return False
     if ts - state.last_activity_at < state.question_quiet_s:
         return False
     return state.last_question_at is None or ts - state.last_question_at >= state.question_gap_s
 
 
-def decide(event: Event, state: DirectorState, proactive: bool) -> list[Action]:
+def decide(event: Event, state: DirectorState) -> list[Action]:
+    """The hints setting isn't an input: it changes what the partner says, not when it talks."""
     match event:
         case OverlayConnected():
             state.last_activity_at = event.ts
@@ -101,15 +102,12 @@ def decide(event: Event, state: DirectorState, proactive: bool) -> list[Action]:
         case PlayerSpeech():
             state.last_activity_at = event.ts
             started_at, state.turn_started_at = state.turn_started_at, None
-            # Always answer the player, even when proactive hints are off.
             return [AskTalker(event.transcript, started_at)]
         case GameEvent():
             if event.name in _DANGER_RISING:
                 state.in_danger = True
             elif event.name == _DANGER_OVER:
                 state.in_danger = False
-            if not proactive:
-                return []
             cooling = (
                 state.last_bark_at is not None
                 and event.ts - state.last_bark_at < state.bark_cooldown_s
@@ -121,7 +119,7 @@ def decide(event: Event, state: DirectorState, proactive: bool) -> list[Action]:
             # TODO(track 3): use the personality's pre-generated barks where they fit.
             return [ReactToEvent(event.name, event.data)]
         case Tick():
-            if not _may_ask(event.ts, state, proactive):
+            if not _may_ask(event.ts, state):
                 return []
             state.last_question_at = event.ts
             return [AskQuestion()]

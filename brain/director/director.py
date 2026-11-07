@@ -92,7 +92,7 @@ class Director:
             self._handle(Tick())
 
     def _handle(self, event: Event) -> None:
-        for action in decide(event, self._state, self._proactive()):
+        for action in decide(event, self._state):
             self._dispatch(action)
 
     def _dispatch(self, action: Action) -> None:
@@ -173,6 +173,7 @@ class Director:
                 TurnContext(action.started_at),
                 looking,
                 self._line("done"),
+                hints=self._proactive(),
             )
         except (LLMUnavailableError, LLMEmptyResponseError) as exc:
             log.warning("Player turn unavailable: %s", exc)
@@ -211,6 +212,7 @@ class Director:
             self._max_words,
             context,
             self._personalities.tone(name),
+            hints=self._proactive(),
         )
         if text:
             await self._speak(text)

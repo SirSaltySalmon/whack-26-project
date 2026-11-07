@@ -57,7 +57,7 @@ export function SettingsPanel({
             onClick={() => onChange({ ...settings, proactive: true })}
           />
           <Choice
-            label="Only when I talk"
+            label="Just chat"
             on={!proactive}
             onClick={() => onChange({ ...settings, proactive: false })}
           />

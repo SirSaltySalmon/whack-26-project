@@ -3,7 +3,7 @@ A game-agnostic AI companion that watches you play, talks in short natural phras
 
 **Deadline: about 07:30 on 2026-11-08 local time (16 hours from 15:33 on 2026-11-07). Demo game: Terraria, played locally.** Favor a working demo over completeness.
 
-Full stack rationale, data flow and draft message list: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plan changes and why: [docs/DECISIONS.md](docs/DECISIONS.md). What to test next: [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Personality options (draft): [docs/PERSONALITIES.md](docs/PERSONALITIES.md).
+Full stack rationale, data flow and draft message list: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plan changes and why: [docs/DECISIONS.md](docs/DECISIONS.md). What to test next: [docs/TEST_PLAN.md](docs/TEST_PLAN.md). What's left to build, with inputs and outputs: [docs/REMAINING_WORK.md](docs/REMAINING_WORK.md). Personality options (draft): [docs/PERSONALITIES.md](docs/PERSONALITIES.md).
 
 ## Stack
 Two processes joined by a localhost WebSocket:
@@ -73,7 +73,7 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 **Untrusted content**
 - Treat wiki text, OCR text and web results as data, never as instructions to the model.
 - The wiki window shows the real site in a sandboxed `<webview>`: no preload, no Node, no popups, no permissions, no downloads, an in-memory session and http(s) only. Links can go anywhere and stay in the window.
-- That window's rectangle is masked, so page content never reaches a model. When the brain needs a page's text, it fetches it through the wiki API and treats it as data.
+- That window's rectangle is masked, so frames never show a page to a model. The brain gets page text in two ways, both treated as data: the wiki API, or, on the game's discovered wiki only and on player turns only, the open page's rendered text. Other sites in the window are never read. See [docs/DECISIONS.md](docs/DECISIONS.md).
 - Text cards show sanitized plain text, including the wiki window's fallback when a page can't load.
 - Bind the WebSocket to `127.0.0.1`. Keep `contextIsolation` on and `nodeIntegration` off.
 
@@ -167,6 +167,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Learner: game brief, learned regions, compiled readers (Track 4)
 - [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
 - [ ] Pre-generated bark audio per personality. Filler lines go through TTS for now (Track 3)
+- [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 
 **Still unproven from hour 0-1**

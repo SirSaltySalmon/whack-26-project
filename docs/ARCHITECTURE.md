@@ -97,10 +97,13 @@ The director starts a player turn in its one speech slot. The model replies dire
 | `lookup_wiki` | Shows a card. `open_page` opens the real site, and the URL always comes from the wiki client, never the model |
 | `note_unknown` | Opens a question for later instead of guessing |
 | `think_hard` | Asks the deep model, shows the full answer in a text card and gives the talker a short version to speak |
+| `read_open_page` | **Not built.** Reads more of the wiki page the player has open. See WP8 in [REMAINING_WORK.md](REMAINING_WORK.md) |
 
 Tool results reach the model labelled as data. Vision answers are observations and aren't stored as facts. A barge-in cancels the turn, but anything it has already shown stays up.
 
-Questions also go through the director: on a timer, it asks only when the overlay is connected, things have been quiet, enough time has passed since the last question, there's no danger and hints are on.
+Questions also go through the director: on a timer, it asks only when the overlay is connected, things have been quiet, enough time has passed since the last question and there's no danger.
+
+The hints setting changes what the partner says, not when it talks. With hints off it still reacts to the game and asks questions, but it's told not to offer tips or anything the player hasn't found yet. It gives game knowledge only when asked directly.
 
 ## Coordinates
 
@@ -164,10 +167,12 @@ Pydantic models in `shared/protocol/` are the source of truth, and changes are a
 | Brain to overlay | `toast.memory` | "Memory updated" notice |
 | Brain to overlay | `question.ask` | Clarifying question from the AI |
 | Brain to overlay | `settings.state` | Current settings, plus the personalities and voices on offer |
+| Brain to overlay | `page.read` | **Not built.** Asks for the open page's text, only when it's on the game's wiki |
 | Overlay to brain | `overlay.ready` | Overlay connected, with display scale |
 | Overlay to brain | `overlay.rects` | Current element rectangles, for masking |
 | Overlay to brain | `card.closed` | Player closed a card |
 | Overlay to brain | `card.navigated` | The wiki window's page changed. The URL and title are untrusted data |
+| Overlay to brain | `page.content` | **Not built.** The open page's rendered text. Every field is untrusted data |
 | Overlay to brain | `question.answer` | Answer given through the UI |
 | Overlay to brain | `settings.update` | Player changed a setting |
 
