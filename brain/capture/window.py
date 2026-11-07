@@ -7,11 +7,13 @@ matched by process name because game titles can change: Terraria's differs per l
 import ctypes
 import logging
 import os
+import sys
 from ctypes import wintypes
 from typing import Any
 
 import numpy as np
 
+from brain.capture.window_mac import MacGameWindow
 from brain.perception.coords import CropRegion
 
 log = logging.getLogger(__name__)
@@ -140,3 +142,9 @@ class GameWindow:
             ctypes.POINTER(wintypes.DWORD),
         ]
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+
+def create_game_window(process_name: str) -> "GameWindow | MacGameWindow":
+    if sys.platform == "darwin":
+        return MacGameWindow(process_name)
+    return GameWindow(process_name)

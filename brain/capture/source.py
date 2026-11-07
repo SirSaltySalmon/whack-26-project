@@ -1,6 +1,11 @@
-"""Frame sources. Each returns BGR arrays in physical pixels, or None when nothing is new."""
+"""Frame sources. Each returns BGR arrays, or None when nothing is new.
+
+Frames are in physical pixels on Windows. On macOS, mss returns points instead (half the
+pixels on a Retina screen), which are the same units as the overlay's DIPs.
+"""
 
 import logging
+import sys
 from typing import Any, Protocol
 
 import numpy as np
@@ -45,7 +50,7 @@ class MssSource:
     def start(self) -> None:
         import mss
 
-        self._sct = mss.mss()
+        self._sct = mss.MSS()
 
     def grab(self) -> np.ndarray | None:
         if self._sct is None:
@@ -81,4 +86,14 @@ class FallbackSource:
 
 
 def default_live_source() -> FrameSource:
-    return FallbackSource()
+    # dxcam is Windows-only, so on macOS trying it would only log a traceback.
+    return MssSource() if sys.platform == "darwin" else FallbackSource()
+
+
+def live_frame_scale() -> float | None:
+    """Frame pixels per overlay DIP when it isn't the display's own scale, else None.
+
+    mss on macOS captures in points, so frames already match the overlay's DIPs even though
+    the overlay reports a devicePixelRatio of 2 on a Retina screen.
+    """
+    return 1.0 if sys.platform == "darwin" else None

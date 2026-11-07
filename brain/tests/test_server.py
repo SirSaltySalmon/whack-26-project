@@ -67,3 +67,69 @@ def test_websites_are_refused() -> None:
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws", headers={"origin": "https://evil.example"}):
             pass
+<<<<<<< Updated upstream
+=======
+
+
+VOICES_JSON = [{"name": "Ava", "id": "voice-1"}, {"name": "Sam", "id": "voice-2"}]
+
+
+def offering_options() -> tuple[TestClient, OverlayLink, EventBus]:
+    client, link, bus = make()
+    link.personalities = ["supportive", "protective"]
+    link.voices = [VoiceOption.model_validate(voice) for voice in VOICES_JSON]
+    return client, link, bus
+
+
+def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
+    client, link, _ = offering_options()
+    link.settings = Settings(proactive=False, personality="protective", voice_id="voice-2")
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        state = socket.receive_json()
+    assert state["type"] == "settings.state"
+    assert state["personalities"] == ["supportive", "protective"]
+    assert state["voices"] == VOICES_JSON
+    assert state["settings"] == {
+        "proactive": False,
+        "personality": "protective",
+        "voice_id": "voice-2",
+    }
+
+
+def test_settings_state_after_an_update_still_offers_them_and_shows_the_change() -> None:
+    client, link, bus = offering_options()
+    events = bus.subscribe()
+    chosen = {"proactive": False, "personality": "protective", "voice_id": "voice-2"}
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        socket.receive_json()
+        socket.send_text(json.dumps({"type": "settings.update", "settings": chosen}))
+        state = socket.receive_json()
+    assert state["type"] == "settings.state"
+    assert state["settings"] == chosen
+    assert state["personalities"] == ["supportive", "protective"]
+    assert state["voices"] == VOICES_JSON
+    assert link.settings == Settings.model_validate(chosen)
+    changes = [event for event in drain(events) if isinstance(event, SettingsChanged)]
+    assert [change.settings for change in changes] == [Settings.model_validate(chosen)]
+
+
+def test_settings_state_with_nothing_to_offer_sends_empty_lists() -> None:
+    client, _, _ = make()
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        state = socket.receive_json()
+    assert state["personalities"] == [] and state["voices"] == []
+
+
+def test_frame_scale_override_wins_over_the_reported_scale() -> None:
+    # mss on macOS captures in points, so a Retina overlay's 2.0 must not be applied to frames.
+    client, link, _ = make()
+    link.frame_scale_override = 1.0
+    with client.websocket_connect("/ws", headers={"origin": "file://"}) as socket:
+        socket.send_text(ready())
+        socket.receive_json()
+    assert link.reported_scale == 1.5
+    assert link.display_scale == 1.0
+>>>>>>> Stashed changes

@@ -21,7 +21,7 @@ import cv2  # noqa: E402
 from brain.capture.loop import CaptureLoop  # noqa: E402
 from brain.capture.ring_buffer import RingBuffer  # noqa: E402
 from brain.capture.source import default_live_source  # noqa: E402
-from brain.capture.window import GameWindow  # noqa: E402
+from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
 from shared.protocol.messages import Rect  # noqa: E402
 
@@ -60,7 +60,9 @@ async def main() -> None:
 
     fps = settings.capture_fps
     buffer = RingBuffer(fps * settings.ring_buffer_seconds)
-    capture = CaptureLoop(default_live_source(), buffer, NoOverlay(), fps, GameWindow(args.process))
+    capture = CaptureLoop(
+        default_live_source(), buffer, NoOverlay(), fps, create_game_window(args.process)
+    )
     print(f"Saving {args.count} screenshots of '{args.process}', one every {args.every:g}s.")
     print("Click into the game now and keep playing.")
 
