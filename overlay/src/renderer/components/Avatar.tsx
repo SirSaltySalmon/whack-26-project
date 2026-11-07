@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { logger } from "../../lib/logger.ts";
 import type { State } from "../../lib/protocol.generated.ts";
 import { useFrameGesture } from "../hooks/useFrameGesture.ts";
 import { useHovered } from "../hooks/useHovered.ts";
@@ -8,14 +10,34 @@ import {
   type Frame,
 } from "../logic/layout.ts";
 
-/** Placeholder until there's art. Swap this for an image or animation in the same 3:4 frame. */
-function AvatarArt({ state }: { state: State }) {
-  return <div className="avatar-art" data-state={state} />;
+/**
+ * The picture, fitted inside the 3:4 frame with its transparent parts showing the game. If the
+ * picture can't load, the plain circle stands in so the partner never disappears.
+ */
+function AvatarArt({ state, src }: { state: State; src: string }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (failedSrc === src) {
+    return <div className="avatar-art" data-state={state} />;
+  }
+  return (
+    <img
+      className="avatar-image"
+      data-state={state}
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => {
+        logger.warn("Avatar image failed to load; showing the placeholder");
+        setFailedSrc(src);
+      }}
+    />
+  );
 }
 
 interface AvatarProps {
   frame: Frame;
   state: State;
+  imageSrc: string;
   onFrame(frame: Frame): void;
   onFrameEnd(frame: Frame): void;
   /** Reopens the wiki window. Null when there's nothing to reopen. */
@@ -30,6 +52,7 @@ interface AvatarProps {
 export function Avatar({
   frame,
   state,
+  imageSrc,
   onFrame,
   onFrameEnd,
   onOpenWiki,
@@ -62,7 +85,7 @@ export function Avatar({
         height: frame.height,
       }}
     >
-      <AvatarArt state={state} />
+      <AvatarArt state={state} src={imageSrc} />
       <div className="avatar-controls">
         <div
           className="avatar-grip"

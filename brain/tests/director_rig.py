@@ -12,6 +12,7 @@ from brain.director.personalities import Personality, PersonalityBook
 from brain.events import Event, EventBus, OverlayConnected, Tick
 from brain.llm.base import ToolStep
 from brain.tests.fakes import FakeMemory, FakeOverlay, FakeTextLLM, FakeVoice, ScriptedToolLLM
+from brain.voice.barks import BarkBank
 
 QUIET_S = 20.0
 GAP_S = 90.0
@@ -81,6 +82,9 @@ class Rig:
         quiet_s: float = QUIET_S,
         gap_s: float = GAP_S,
         bark_events: Mapping[str, str] | None = None,
+        page_excerpt: Callable[[str], str | None] | None = None,
+        barks: BarkBank | None = None,
+        voice_id: str | None = None,
     ) -> None:
         self.bus = EventBus()
         self.voice = voice or FakeVoice()
@@ -100,9 +104,11 @@ class Rig:
             send=self.overlay.send,
             question_gap_s=gap_s,
             question_quiet_s=quiet_s,
+            page_excerpt=page_excerpt,
+            barks=barks,
+            voice_id=lambda: voice_id,
+            bark_events=bark_events or {},
         )
-        # WP6 makes this a Director argument. Until then, only the rules know about the map.
-        self.director._state.bark_events = bark_events or {}
 
     async def _on_spoken(self, text: str) -> None:
         self.spoken.append(text)

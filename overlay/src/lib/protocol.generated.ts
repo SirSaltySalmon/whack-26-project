@@ -15,7 +15,8 @@ export type Brain =
   | CardClose
   | MemoryToast
   | QuestionAsk
-  | SettingsState;
+  | SettingsState
+  | PageRead;
 export type Final = boolean;
 export type Text = string;
 export type Type = "subtitle.chunk";
@@ -59,21 +60,23 @@ export type Type9 = "settings.state";
 export type Id = string;
 export type Name = string;
 export type Voices = VoiceOption[];
+export type RequestId = string;
+export type Type10 = "page.read";
 export type Control = ControlHello | MemoryQuery | ContextPreview | SettingsUpdate | VoicePreview | ControlShutdown;
 export type ProtocolVersion = number;
-export type Type10 = "control.hello";
+export type Type11 = "control.hello";
 export type IncludeHistory = boolean;
 export type Limit = number;
-export type RequestId = string;
-export type Text3 = string;
-export type Type11 = "memory.query";
 export type RequestId1 = string;
+export type Text3 = string;
+export type Type12 = "memory.query";
+export type RequestId2 = string;
 export type Text4 = string;
-export type Type12 = "memory.context_preview";
-export type Type13 = "settings.update";
+export type Type13 = "memory.context_preview";
+export type Type14 = "settings.update";
 export type Text5 = string;
-export type Type14 = "voice.preview";
-export type Type15 = "control.shutdown";
+export type Type15 = "voice.preview";
+export type Type16 = "control.shutdown";
 export type ControlReply = MemoryResults | MemoryContext | BrainStatus | SettingsState | MemoryToast | ControlError;
 export type ElapsedMs = number;
 export type Attribute = string;
@@ -97,12 +100,12 @@ export type Options1 = string[];
 export type Status = "open" | "answered" | "dropped";
 export type Text6 = string;
 export type Questions = QuestionView[];
-export type RequestId2 = string;
-export type Type16 = "memory.results";
+export type RequestId3 = string;
+export type Type17 = "memory.results";
 export type Context = string;
 export type ElapsedMs1 = number;
-export type RequestId3 = string;
-export type Type17 = "memory.context";
+export type RequestId4 = string;
+export type Type18 = "memory.context";
 export type GameTitle = string;
 export type Listening = boolean;
 export type Mode = "live" | "replay";
@@ -110,35 +113,44 @@ export type SessionId = number | null;
 export type Speaking = boolean;
 export type Talking = boolean;
 export type Tools = boolean;
-export type Type18 = "brain.status";
+export type Type19 = "brain.status";
 export type Watching = boolean;
 export type WikiUrl = string | null;
 export type Message = string;
-export type RequestId4 = string | null;
-export type Type19 = "control.error";
+export type RequestId5 = string | null;
+export type Type20 = "control.error";
 export type GameProcess = string;
 export type GameTitle1 = string;
 export type Personalities1 = string[];
 export type ProtocolVersion1 = number;
 export type Voices1 = VoiceOption[];
-export type Overlay = OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate;
+export type Overlay =
+  OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent;
 export type DisplayScale = number;
 export type Height1 = number;
 export type ProtocolVersion2 = number;
-export type Type20 = "overlay.ready";
+export type Type21 = "overlay.ready";
 export type Width1 = number;
 export type ElementId = string;
 export type Rects = ElementRect[];
-export type Type21 = "overlay.rects";
+export type Type22 = "overlay.rects";
 export type CardId3 = string;
-export type Type22 = "card.closed";
+export type Type23 = "card.closed";
 export type CardId4 = string;
 export type Title2 = string | null;
-export type Type23 = "card.navigated";
+export type Type24 = "card.navigated";
 export type Url = string;
 export type Answer1 = string;
 export type QuestionId1 = string;
-export type Type24 = "question.answer";
+export type Type25 = "question.answer";
+export type CardId5 = string;
+export type RequestId6 = string;
+export type Text7 = string;
+export type Title3 = string | null;
+export type Truncated = boolean;
+export type Type26 = "page.content";
+export type Url1 = string;
+export type VisibleText = string;
 
 /**
  * Exists only so one JSON Schema document can describe every direction.
@@ -228,9 +240,16 @@ export interface VoiceOption {
   id: Id;
   name: Name;
 }
+/**
+ * Asks for the wiki window's rendered text. The brain sends it only for its own wiki's host.
+ */
+export interface PageRead {
+  request_id: RequestId;
+  type?: Type10;
+}
 export interface ControlHello {
   protocol_version: ProtocolVersion;
-  type?: Type10;
+  type?: Type11;
 }
 /**
  * Empty text lists the newest facts instead of searching.
@@ -238,42 +257,42 @@ export interface ControlHello {
 export interface MemoryQuery {
   include_history?: IncludeHistory;
   limit?: Limit;
-  request_id: RequestId;
+  request_id: RequestId1;
   text?: Text3;
-  type?: Type11;
+  type?: Type12;
 }
 /**
  * Asks for the exact context the talker would get for this query.
  */
 export interface ContextPreview {
-  request_id: RequestId1;
+  request_id: RequestId2;
   text: Text4;
-  type?: Type12;
+  type?: Type13;
 }
 export interface SettingsUpdate {
   settings: Settings;
-  type?: Type13;
+  type?: Type14;
 }
 /**
  * Speak this sample line in the current voice, if the partner isn't already talking.
  */
 export interface VoicePreview {
   text: Text5;
-  type?: Type14;
+  type?: Type15;
 }
 /**
  * Stop the brain cleanly, so the session is closed and its note written.
  */
 export interface ControlShutdown {
-  type?: Type15;
+  type?: Type16;
 }
 export interface MemoryResults {
   elapsed_ms: ElapsedMs;
   facts: Facts;
   notes: Notes;
   questions: Questions;
-  request_id: RequestId2;
-  type?: Type16;
+  request_id: RequestId3;
+  type?: Type17;
 }
 export interface FactView {
   attribute: Attribute;
@@ -302,8 +321,8 @@ export interface QuestionView {
 export interface MemoryContext {
   context: Context;
   elapsed_ms: ElapsedMs1;
-  request_id: RequestId3;
-  type?: Type17;
+  request_id: RequestId4;
+  type?: Type18;
 }
 /**
  * Which parts of the partner are running, so the Control Center can show what's on.
@@ -316,14 +335,14 @@ export interface BrainStatus {
   speaking: Speaking;
   talking: Talking;
   tools: Tools;
-  type?: Type18;
+  type?: Type19;
   watching: Watching;
   wiki_url?: WikiUrl;
 }
 export interface ControlError {
   message: Message;
-  request_id?: RequestId4;
-  type?: Type19;
+  request_id?: RequestId5;
+  type?: Type20;
 }
 /**
  * Printed by `python -m brain --describe`, before anything starts. Never holds key values.
@@ -343,7 +362,7 @@ export interface OverlayReady {
   display_scale: DisplayScale;
   height: Height1;
   protocol_version: ProtocolVersion2;
-  type?: Type20;
+  type?: Type21;
   width: Width1;
 }
 /**
@@ -351,7 +370,7 @@ export interface OverlayReady {
  */
 export interface OverlayRects {
   rects: Rects;
-  type?: Type21;
+  type?: Type22;
 }
 export interface ElementRect {
   element_id: ElementId;
@@ -359,7 +378,7 @@ export interface ElementRect {
 }
 export interface CardClosed {
   card_id: CardId3;
-  type?: Type22;
+  type?: Type23;
 }
 /**
  * The wiki window's page changed. The URL and title come from a website: treat them as data.
@@ -367,11 +386,25 @@ export interface CardClosed {
 export interface CardNavigated {
   card_id: CardId4;
   title?: Title2;
-  type?: Type23;
+  type?: Type24;
   url: Url;
 }
 export interface QuestionAnswer {
   answer: Answer1;
   question_id: QuestionId1;
-  type?: Type24;
+  type?: Type25;
+}
+/**
+ * The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
+ * treat all of it as untrusted data.
+ */
+export interface PageContent {
+  card_id: CardId5;
+  request_id: RequestId6;
+  text: Text7;
+  title?: Title3;
+  truncated?: Truncated;
+  type?: Type26;
+  url: Url1;
+  visible_text: VisibleText;
 }

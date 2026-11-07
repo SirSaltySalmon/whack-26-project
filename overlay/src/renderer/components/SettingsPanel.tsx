@@ -1,11 +1,14 @@
 import type { Settings, SettingsState } from "../../lib/protocol.generated.ts";
+import type { AvatarImage } from "../hooks/useAvatarImage.ts";
 import type { Frame } from "../logic/layout.ts";
 import { TEXT_CARD_LIMITS } from "../logic/layout.ts";
 import { SettingsFields } from "../shared/SettingsFields.tsx";
+import { AvatarSettings } from "./AvatarSettings.tsx";
 import { CardWindow } from "./CardWindow.tsx";
 
 interface SettingsPanelProps {
   state: SettingsState | null;
+  avatar: AvatarImage;
   frame: Frame;
   onFrame(frame: Frame): void;
   onChange(settings: Settings): void;
@@ -14,6 +17,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({
   state,
+  avatar,
   frame,
   onFrame,
   onChange,
@@ -43,6 +47,8 @@ export function SettingsPanel({
             onChange={onChange}
           />
         )}
+        {/* Visual only, so it works before the brain connects. */}
+        <AvatarSettings avatar={avatar} />
       </div>
     </CardWindow>
   );

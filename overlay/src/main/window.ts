@@ -1,7 +1,12 @@
 import { join } from "node:path";
 import { BrowserWindow, ipcMain, screen } from "electron";
-import { IPC_REQUEST_TYPING, IPC_SET_MOUSE_CAPTURE } from "../lib/bridge.ts";
+import {
+  IPC_READ_PAGE,
+  IPC_REQUEST_TYPING,
+  IPC_SET_MOUSE_CAPTURE,
+} from "../lib/bridge.ts";
 import { logger } from "../lib/logger.ts";
+import { readOpenPage } from "./pageGuard.ts";
 
 function releaseMouse(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true });
@@ -74,6 +79,11 @@ function wireInput(win: BrowserWindow): void {
   });
   // Clicking back into the game ends typing, and the overlay goes back to never taking focus.
   win.on("blur", () => win.setFocusable(false));
+
+  // Only the overlay may ask: a web page has no bridge, and this refuses any other sender too.
+  ipcMain.handle(IPC_READ_PAGE, (event) =>
+    event.sender === win.webContents ? readOpenPage() : null,
+  );
 }
 
 function wireRecovery(win: BrowserWindow): void {

@@ -69,3 +69,7 @@ class UnknownInput(BaseModel):
 
 class ThinkInput(BaseModel):
     question: str = Field(description="The question to reason through.")
+
+
+class ReadPageInput(BaseModel):
+    question: str = Field(description="What to find on the open wiki page, in plain words.")

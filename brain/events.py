@@ -87,6 +87,19 @@ class CardPageChanged(Event):
 
 
 @dataclass(frozen=True)
+class PageContentReceived(Event):
+    """The wiki window's rendered text, in reply to a page read. Every field is untrusted."""
+
+    request_id: str
+    card_id: str
+    url: str
+    title: str | None
+    text: str
+    visible_text: str
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class QuestionAnswered(Event):
     question_id: str
     answer: str

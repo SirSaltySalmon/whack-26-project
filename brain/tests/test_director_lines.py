@@ -1,15 +1,33 @@
 """What the director says besides plain replies: questions, barks, and how settings shape it."""
 
 import asyncio
+from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
+from brain.agent.tools import Tool, TurnContext
+from brain.director.personalities import Personality, PersonalityBook
 from brain.director.talker import HINTS_OFF, HINTS_ON
-from brain.events import GameEvent, OverlayConnected, PlayerSpeech, PlayerStartedSpeaking
-from brain.llm.base import ToolStep
-from brain.tests.director_rig import TONE, Rig, Stuck, settle
-from brain.tests.fakes import FakeMemory, FakeTextLLM, FakeVoice, ScriptedToolLLM
+from brain.events import (
+    GameEvent,
+    OverlayConnected,
+    PlayerSpeech,
+    PlayerStartedSpeaking,
+    SettingsChanged,
+)
+from brain.llm.base import ToolCall, ToolStep
+from brain.tests.director_rig import DONE, LOOKING, TONE, Rig, Stuck, settle, until
+from brain.tests.fakes import (
+    FakeBarkSynth,
+    FakeMemory,
+    FakeTextLLM,
+    FakeVoice,
+    ScriptedToolLLM,
+)
+from brain.voice.barks import BarkBank
 from shared.protocol.messages import QuestionAsk
+from shared.protocol.messages import Settings as OverlaySettings
 
 QUESTION = QuestionAsk(question_id="q1", text="Where's your base?", options=["East", "West"])
 BARKS = {"danger_started": "danger"}
@@ -158,3 +176,86 @@ async def test_a_context_failure_still_answers_the_player(
         await rig.publish(PlayerSpeech(transcript="hello"))
     assert rig.voice.said == ["Reply."]
     assert "Couldn't build the talker's context" in caplog.text
+
+
+BARK_BOOK = PersonalityBook(
+    default="calm",
+    personalities={
+        "calm": Personality(
+            tone=TONE,
+            lines={"looking": [LOOKING], "done": [DONE], "danger": ["Heads up."]},
+        )
+    },
+)
+
+
+async def _ready_bank(tmp_path: Path, voice: str = "voiceA") -> BarkBank:
+    bank = BarkBank(BARK_BOOK, FakeBarkSynth(), tmp_path, "model", 24000)
+    await bank.prepare(voice)
+    return bank
+
+
+async def test_a_ready_bark_plays_without_the_talker(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO")
+    talker = FakeTextLLM(["Should not be used."])
+    bank = await _ready_bank(tmp_path)
+    rig = Rig(talker=talker, bark_events=BARKS, barks=bank, voice_id="voiceA")
+    async with rig.running():
+        await rig.publish(GameEvent("danger_started"))
+    assert [bark.text for bark in rig.voice.played] == ["Heads up."]
+    assert rig.voice.said == [] and talker.prompts == []
+    assert rig.spoken == ["Heads up."]
+    assert "Latency: event to bark" in caplog.text
+
+
+async def test_a_dropped_bark_isnt_remembered_as_said(tmp_path: Path) -> None:
+    bank = await _ready_bank(tmp_path)
+    rig = Rig(voice=FakeVoice(accepts=False), bark_events=BARKS, barks=bank, voice_id="voiceA")
+    async with rig.running():
+        await rig.publish(GameEvent("danger_started"))
+    assert len(rig.voice.played) == 1
+    assert rig.spoken == []
+
+
+async def test_a_bark_for_another_voice_falls_back_to_the_talker(tmp_path: Path) -> None:
+    talker = FakeTextLLM(["That looks rough."])
+    bank = await _ready_bank(tmp_path, voice="voiceA")
+    rig = Rig(talker=talker, bark_events=BARKS, barks=bank, voice_id="voiceB")
+    async with rig.running():
+        await rig.publish(GameEvent("danger_started"))
+    assert rig.voice.played == []
+    assert rig.voice.said == ["That looks rough."]
+
+
+async def test_the_looking_filler_plays_its_bark_when_ready(tmp_path: Path) -> None:
+    class NoInput(BaseModel):
+        pass
+
+    async def check(_arguments: NoInput, _turn: TurnContext) -> str:
+        return "a man in brown"
+
+    bank = await _ready_bank(tmp_path)
+    agent = ScriptedToolLLM([ToolStep("", (ToolCall("check", {}),)), ToolStep("Found it.")])
+    rig = Rig(
+        agent=agent,
+        tools=[Tool("check", "Checks the screen.", NoInput, check)],
+        barks=bank,
+        voice_id="voiceA",
+    )
+    async with rig.running():
+        await rig.publish(PlayerSpeech(transcript="what's that"))
+    assert [bark.text for bark in rig.voice.played] == [LOOKING]
+    assert rig.voice.said == ["Found it."]
+
+
+async def test_changing_voice_prepares_its_barks(tmp_path: Path) -> None:
+    synth = FakeBarkSynth()
+    bank = BarkBank(BARK_BOOK, synth, tmp_path, "model", 24000)
+    rig = Rig(barks=bank, voice_id="voiceA")
+    async with rig.running():
+        await rig.publish(SettingsChanged(settings=OverlaySettings(voice_id="voiceB")))
+        await until(lambda: bank.get("calm", "danger", 0, "voiceB") is not None)
+    assert rig.voice.voice_id == "voiceB"
+    assert {call[1] for call in synth.calls} == {"voiceB"}

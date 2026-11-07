@@ -20,6 +20,7 @@ from brain.agent.schemas import (
     LookReply,
     PointInput,
     PointReply,
+    ReadPageInput,
     ThinkInput,
     UnknownInput,
     WikiInput,
@@ -31,6 +32,7 @@ from brain.memory.context import CONTEXT_PREAMBLE
 from brain.perception.closeup import Closeup, make_closeup
 from brain.perception.coords import NormalizedBox, box_to_dip_rect
 from brain.research import WikiResearch, card_message
+from brain.research.open_page import NOTHING_OPEN, OpenPage
 from shared.protocol import BrainMessage
 from shared.protocol.messages import CardShow, PointerFly
 
@@ -93,6 +95,8 @@ class AgentTools:
         self._limits = limits
         # Set once the wiki has been found, which happens in the background at startup.
         self.research: WikiResearch | None = None
+        # Set by the app on live runs, where the overlay can read the wiki window.
+        self.open_page: OpenPage | None = None
 
     def registry(self) -> ToolRegistry:
         return ToolRegistry(
@@ -120,6 +124,13 @@ class AgentTools:
                     "game knowledge you aren't sure of, or when asked to open the wiki.",
                     WikiInput,
                     self._lookup_wiki,
+                ),
+                Tool(
+                    "read_open_page",
+                    "Read more of the wiki page the player has open. Use when OPEN PAGE doesn't "
+                    "answer them, or they ask about the page they're reading.",
+                    ReadPageInput,
+                    self._read_open_page,
                 ),
                 Tool(
                     "note_unknown",
@@ -224,6 +235,11 @@ class AgentTools:
         # The URL comes from the wiki client, so the model can't send the window anywhere else.
         await self._overlay.send(card_message(card, open_page=arguments.open_page))
         return card.context_text()
+
+    async def _read_open_page(self, arguments: ReadPageInput, _turn: TurnContext) -> str:
+        if self.open_page is None:
+            return NOTHING_OPEN
+        return self.open_page.read(arguments.question)
 
     async def _note_unknown(self, arguments: UnknownInput, _turn: TurnContext) -> str:
         opened = await self._memory.wonder(

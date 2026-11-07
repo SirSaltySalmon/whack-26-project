@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 from brain.capture.loop import CaptureLoop  # noqa: E402
 from brain.capture.ring_buffer import RingBuffer  # noqa: E402
 from brain.capture.source import default_live_source  # noqa: E402
-from brain.capture.window import GameWindow  # noqa: E402
+from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
 from brain.events import EventBus, GameEvent  # noqa: E402
 from brain.llm.factory import LLMFactory  # noqa: E402
@@ -50,7 +50,11 @@ async def main() -> int:
     events = bus.subscribe()
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
     capture = CaptureLoop(
-        default_live_source(), buffer, overlay, settings.capture_fps, GameWindow(args.process)
+        default_live_source(),
+        buffer,
+        overlay,
+        settings.capture_fps,
+        create_game_window(args.process),
     )
     ages: list[float] = []
 

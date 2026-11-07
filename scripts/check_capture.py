@@ -23,7 +23,7 @@ import cv2  # noqa: E402
 from brain.capture.loop import CaptureLoop  # noqa: E402
 from brain.capture.ring_buffer import Frame, RingBuffer  # noqa: E402
 from brain.capture.source import default_live_source  # noqa: E402
-from brain.capture.window import GameWindow  # noqa: E402
+from brain.capture.window import create_game_window  # noqa: E402
 from brain.config import Settings  # noqa: E402
 from shared.protocol.messages import Rect  # noqa: E402
 
@@ -84,7 +84,7 @@ async def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     buffer = RingBuffer(args.fps * settings.ring_buffer_seconds)
     capture = CaptureLoop(
-        default_live_source(), buffer, NoOverlay(), args.fps, GameWindow(args.process)
+        default_live_source(), buffer, NoOverlay(), args.fps, create_game_window(args.process)
     )
     print(f"Capturing '{args.process}' for {args.seconds:.0f}s. Keep the game in front.")
 

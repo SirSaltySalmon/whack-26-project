@@ -54,6 +54,8 @@ class PlayBark:
     kind: str  # A LineKind
     event: str  # The GameEvent name, for logs
     data: dict[str, Any]  # Passed on, in case there's no bark and it falls back
+    # When the event happened, for the event-to-bark latency log. Not part of what was decided.
+    ts: float | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -131,7 +133,7 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             state.last_activity_at = event.ts
             kind = state.bark_events.get(event.name)
             if kind is not None:
-                return [PlayBark(kind, event.name, event.data)]
+                return [PlayBark(kind, event.name, event.data, ts=event.ts)]
             return [ReactToEvent(event.name, event.data)]
         case Tick():
             if not _may_ask(event.ts, state):

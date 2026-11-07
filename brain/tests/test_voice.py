@@ -136,11 +136,17 @@ class FakeWorker:
     async def queue_frame(self, frame: Any) -> None:
         self.queued.append(frame)
 
+    async def queue_frames(self, frames: Any) -> None:
+        self.queued.extend(frames)
 
-def _speaking_voice(user_speaking: bool) -> tuple["PipecatVoice", FakeWorker]:
+
+def _speaking_voice(
+    user_speaking: bool, overlay: FakeOverlay | None = None
+) -> tuple["PipecatVoice", FakeWorker]:
     voice = PipecatVoice.__new__(PipecatVoice)
     worker = FakeWorker()
     voice._worker = worker  # type: ignore[assignment]
+    voice._link = overlay or FakeOverlay()  # type: ignore[assignment]
     voice._speaks = True
     voice.user_speaking = user_speaking
     return voice, worker
@@ -152,11 +158,19 @@ async def test_pipecat_voice_drops_a_bark_while_the_player_is_talking() -> None:
     assert worker.queued == []
 
 
-async def test_pipecat_voice_plays_a_bark_while_the_player_is_quiet() -> None:
-    # Doesn't check how it plays, because WP6 replaces live TTS here with the pre-generated audio.
-    voice, worker = _speaking_voice(user_speaking=False)
-    assert await voice.play(BARK) is True
-    assert worker.queued
+async def test_pipecat_voice_queues_a_bark_as_20_ms_audio_chunks() -> None:
+    from pipecat.frames.frames import OutputAudioRawFrame
+
+    overlay = FakeOverlay()
+    voice, worker = _speaking_voice(user_speaking=False, overlay=overlay)
+    bark = Bark(text="Careful.", pcm=bytes(960 * 3 + 100), sample_rate=24000)
+    assert await voice.play(bark) is True
+    # Audio only, no live TTS: 20 ms at 24 kHz is 480 samples, 960 bytes.
+    assert all(isinstance(frame, OutputAudioRawFrame) for frame in worker.queued)
+    assert [len(frame.audio) for frame in worker.queued] == [960, 960, 960, 100]
+    assert {(frame.sample_rate, frame.num_channels) for frame in worker.queued} == {(24000, 1)}
+    chunks = [m for m in overlay.sent if isinstance(m, SubtitleChunk)]
+    assert [(chunk.text, chunk.final) for chunk in chunks] == [("Careful.", True)]
 
 
 async def test_pipecat_voice_without_speech_shows_a_bark_as_a_subtitle() -> None:

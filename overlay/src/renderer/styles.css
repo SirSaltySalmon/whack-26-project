@@ -81,6 +81,70 @@ button {
   animation: react 0.5s ease-in-out infinite alternate;
 }
 
+/* The picture keeps its shape inside the 3:4 frame. drop-shadow follows its transparent outline,
+   so the state glow traces the character, not a box. */
+.avatar-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.55));
+  animation: image-breathe 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.avatar-image[data-state="listening"] {
+  filter: drop-shadow(0 0 6px var(--listening))
+    drop-shadow(0 0 2px var(--listening));
+  animation-duration: 1.6s;
+}
+
+.avatar-image[data-state="talking"] {
+  filter: drop-shadow(0 0 6px var(--talking));
+  animation: image-talk 0.42s ease-in-out infinite alternate;
+}
+
+.avatar-image[data-state="reacting"] {
+  filter: drop-shadow(0 0 6px var(--reacting));
+  animation: image-react 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes image-breathe {
+  50% {
+    transform: scale(1.02, 1.03);
+  }
+}
+
+@keyframes image-talk {
+  to {
+    transform: scale(1.04, 1.06);
+  }
+}
+
+@keyframes image-react {
+  to {
+    transform: translateY(-6%) rotate(-3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-image {
+    animation: none !important;
+  }
+}
+
+/* Opened from the "Choose image" button instead, which matches the other settings. */
+.avatar-picker {
+  display: none;
+}
+
+.option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 @keyframes breathe {
   50% {
     transform: translate(-50%, -50%) scale(1.04);

@@ -50,9 +50,14 @@ _FRAME_ORDER, _EVENT_ORDER, _MESSAGE_ORDER = 0, 1, 2
 class ReplayLink(Protocol):
     """What replay needs from the overlay link. OverlayLink fits it."""
 
-    display_scale: float
     pinned_display_scale: float | None
     settings: Settings
+
+    # A property on OverlayLink, so it can also fold in a capture's own scale.
+    @property
+    def display_scale(self) -> float: ...
+    @display_scale.setter
+    def display_scale(self, value: float) -> None: ...
 
     async def send(self, message: BrainMessage) -> None: ...
 

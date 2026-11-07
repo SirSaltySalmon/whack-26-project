@@ -5,6 +5,7 @@ import logging
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import uvicorn
 
@@ -13,17 +14,17 @@ from brain.agent.handlers import AgentLimits, AgentTools
 from brain.agent.tools import ToolRegistry
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
-from brain.capture.source import default_live_source
-from brain.capture.window import GameWindow
+from brain.capture.source import default_live_source, live_frame_scale
+from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
 from brain.control import ControlLink, ShutdownRequested, stop_when
+from brain.control_wiring import StatusParts, build_control
 from brain.director.director import Director
-from brain.director.personalities import load_personalities
+from brain.director.personalities import PersonalityBook, load_personalities
 from brain.events import EventBus
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
-from brain.memory.browse import browse
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
@@ -40,11 +41,12 @@ from brain.replay.wiring import (
     replay_talker,
 )
 from brain.research import ExaSearch, WikiResearch
+from brain.research.open_page import OpenPage
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
+from brain.voice.barks import BarkBank, ElevenLabsSynth
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
-from shared.protocol.control import BrainStatus
 from shared.protocol.messages import Settings as OverlaySettings
 
 log = logging.getLogger(__name__)
@@ -110,6 +112,14 @@ async def _find_wiki(
         await control.push_status()
 
 
+def _bark_bank(settings: Settings, book: PersonalityBook) -> BarkBank:
+    key = settings.elevenlabs_api_key
+    if key is None:
+        log.info("No ElevenLabs key, so barks are never generated; cached ones still play")
+    synth = ElevenLabsSynth(key.get_secret_value()) if key else None
+    return BarkBank(book, synth, settings.barks_dir, settings.tts_model, settings.tts_sample_rate)
+
+
 async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
     """Keeps a failure in an optional part, such as no audio device, from ending the brain."""
     try:
@@ -153,12 +163,14 @@ async def run(
 
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
     replay = ReplayLoop(replay_dir, buffer, bus, link, speed=speed) if replay_dir else None
+    if not replay_dir:
+        link.frame_scale_override = live_frame_scale()
     capture = replay or CaptureLoop(
         default_live_source(),
         buffer,
         link,
         settings.capture_fps,
-        GameWindow(settings.game_process),
+        create_game_window(settings.game_process),
     )
     # Replays are tests and fallbacks, so they never spend money on vision.
     observer = None if replay_dir else _observer(settings, factory, buffer, link, bus)
@@ -188,6 +200,7 @@ async def run(
         talker = live_talker
     # Replays never spend money on vision, so they get plain replies with no tools.
     tools = None
+    open_page = None
     if live_talker is not None:
         tools = AgentTools(
             buffer,
@@ -204,6 +217,22 @@ async def run(
             ),
             look_vision=factory.closeup,
         )
+        live_tools = tools
+
+        def wiki_host() -> str | None:
+            # None until the wiki is found in the background, and then no page is read.
+            research = live_tools.research
+            return urlparse(research.site.info.server).hostname if research else None
+
+        open_page = OpenPage(bus, link.send, wiki_host)
+        tools.open_page = open_page
+
+    # Replays get no barks: they'd spend TTS, and a cached one would replace a recorded line.
+    barks = None if replay_dir else _bark_bank(settings, personalities)
+
+    def voice_id() -> str | None:
+        # Matches the voice PipecatVoice picks: the player's choice, then the configured default.
+        return link.settings.voice_id or settings.elevenlabs_voice_id
 
     director = Director(
         bus,
@@ -221,36 +250,14 @@ async def run(
         send=link.send,
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
+        page_excerpt=open_page.excerpt_for if open_page else None,
+        barks=barks,
+        voice_id=voice_id,
     )
+    startup_voice = voice_id()
 
-    def status() -> BrainStatus:
-        listening = not isinstance(voice, SubtitleOnlyVoice)
-        voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
-        research = tools.research if tools else None
-        return BrainStatus(
-            mode="replay" if replay_dir else "live",
-            game_title=settings.game_title,
-            session_id=memory.session.id,
-            watching=observer is not None,
-            listening=listening,
-            speaking=listening and settings.elevenlabs_api_key is not None and bool(voice_id),
-            talking=talker is not None,
-            tools=tools is not None,
-            wiki_url=research.site.api_url if research else None,
-        )
-
-    stop = asyncio.Event()
-    control = ControlLink(
-        link,
-        bus,
-        browse=lambda text, history, limit: database.run(
-            lambda conn: browse(conn, settings.game_title, text, history, limit)
-        ),
-        recall=talker_context,
-        status=status,
-        shutdown=stop.set,
-    )
-    link.mirror = control.mirror
+    parts = StatusParts(replay_dir is not None, voice, observer, talker, tools, voice_id)
+    control, stop = build_control(settings, link, bus, database, memory, parts, talker_context)
 
     config = uvicorn.Config(
         create_app(link, control), host=WS_HOST, port=settings.brain_port, log_level="warning"
@@ -271,8 +278,13 @@ async def run(
             if observer:
                 tasks.create_task(_survive("Observer", observer.run()))
             tasks.create_task(memory.run())
+            if barks and startup_voice:
+                # In the background: until a bark is ready, its event goes to the talker instead.
+                tasks.create_task(_survive("Barks", barks.prepare(startup_voice)))
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools, control)))
+            if open_page:
+                tasks.create_task(_survive("Open page", open_page.run()))
             if typed:
                 tasks.create_task(_survive("Typing", typed_turns(bus)))
             if replay and exit_when_done:

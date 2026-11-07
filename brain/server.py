@@ -13,6 +13,7 @@ from brain.events import (
     CardPageChanged,
     EventBus,
     OverlayConnected,
+    PageContentReceived,
     QuestionAnswered,
     SettingsChanged,
 )
@@ -22,6 +23,7 @@ from shared.protocol.messages import (
     CardNavigated,
     OverlayReady,
     OverlayRects,
+    PageContent,
     QuestionAnswer,
     Rect,
     Settings,
@@ -48,7 +50,10 @@ class OverlayLink:
         self._socket: WebSocket | None = None
         self._send_lock = asyncio.Lock()
         self.rects: tuple[Rect, ...] = ()
-        self.display_scale: float = 1.0
+        # What the overlay reported: its devicePixelRatio.
+        self.reported_scale: float = 1.0
+        # Set when frames aren't in physical pixels, as with mss on macOS.
+        self.frame_scale_override: float | None = None
         self.settings = Settings()
         self.personalities: list[str] = []
         self.voices: list[VoiceOption] = []
@@ -66,6 +71,24 @@ class OverlayLink:
         return SettingsState(
             settings=self.settings, personalities=self.personalities, voices=self.voices
         )
+
+    @property
+    def display_scale(self) -> float:
+        """Frame pixels per overlay DIP: what masking and pointing convert by.
+
+        A replay's pin wins, because its rects were recorded at that scale. Then a capture
+        override, then what the overlay reported.
+        """
+        if self.pinned_display_scale is not None:
+            return self.pinned_display_scale
+        if self.frame_scale_override is not None:
+            return self.frame_scale_override
+        return self.reported_scale
+
+    @display_scale.setter
+    def display_scale(self, value: float) -> None:
+        # Replay sets it from the recording, as it did when this was a plain field.
+        self.reported_scale = value
 
     @property
     def connected(self) -> bool:
@@ -96,10 +119,9 @@ class OverlayLink:
             self.rects = ()
 
     def _apply_display_scale(self, reported: float) -> None:
+        self.reported_scale = reported
         pinned = self.pinned_display_scale
-        if pinned is None:
-            self.display_scale = reported
-        elif reported != pinned:
+        if pinned is not None and reported != pinned:
             log.warning(
                 "Overlay reports display scale %s but replay pinned %s; masking keeps the pin",
                 reported,
@@ -138,6 +160,18 @@ class OverlayLink:
                 )
             case SettingsUpdate():
                 await self.apply_settings(message.settings)
+            case PageContent():
+                self._bus.publish(
+                    PageContentReceived(
+                        request_id=message.request_id,
+                        card_id=message.card_id,
+                        url=message.url,
+                        title=message.title,
+                        text=message.text,
+                        visible_text=message.visible_text,
+                        truncated=message.truncated,
+                    )
+                )
 
     async def apply_settings(self, settings: Settings) -> None:
         """From the overlay's settings card or the Control Center. Both hear the new state."""
