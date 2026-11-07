@@ -121,3 +121,14 @@ def test_settings_state_with_nothing_to_offer_sends_empty_lists() -> None:
         socket.send_text(ready())
         state = socket.receive_json()
     assert state["personalities"] == [] and state["voices"] == []
+
+
+def test_frame_scale_override_wins_over_the_reported_scale() -> None:
+    # mss on macOS captures in points, so a Retina overlay's 2.0 must not be applied to frames.
+    client, link, _ = make()
+    link.frame_scale_override = 1.0
+    with client.websocket_connect("/ws", headers={"origin": "file://"}) as socket:
+        socket.send_text(ready())
+        socket.receive_json()
+    assert link.reported_scale == 1.5
+    assert link.display_scale == 1.0

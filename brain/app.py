@@ -13,8 +13,8 @@ from brain.agent.handlers import AgentLimits, AgentTools
 from brain.agent.tools import ToolRegistry
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
-from brain.capture.source import FrameSource, default_live_source
-from brain.capture.window import GameWindow
+from brain.capture.source import FrameSource, default_live_source, live_frame_scale
+from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
@@ -132,7 +132,9 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
 
     source: FrameSource = ReplayFrameSource(replay_dir) if replay_dir else default_live_source()
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
-    window = None if replay_dir else GameWindow(settings.game_process)
+    window = None if replay_dir else create_game_window(settings.game_process)
+    if not replay_dir:
+        link.frame_scale_override = live_frame_scale()
     capture = CaptureLoop(source, buffer, link, settings.capture_fps, window)
     # Replays are tests and fallbacks, so they never spend money on vision.
     observer = None if replay_dir else _observer(settings, factory, buffer, link, bus)

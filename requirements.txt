@@ -14,8 +14,10 @@ pydantic-settings==2.16.2
 httpx==0.28.1
 
 # Capture. dxcam 0.4.0 is still a dev pre-release, so stay on the latest stable.
-dxcam==0.3.0
+dxcam==0.3.0; sys_platform == "win32"
 mss==10.2.0
+# macOS only: finds the game window. Quartz pulls in pyobjc-framework-Cocoa for AppKit.
+pyobjc-framework-Quartz==13.0; sys_platform == "darwin"
 
 # Perception. rapidocr requires the headless OpenCV build; do not add opencv-python as well.
 opencv-python-headless==5.0.0.93

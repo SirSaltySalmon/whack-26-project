@@ -134,6 +134,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 
 ## Gotchas
 - **dxcam on the main dev machine:** `dxcam.create()` fails with `COMError -2005270524` (feature level not supported), so capture falls back to mss. Check this on the demo machine.
+- **macOS:** capture uses mss and `brain/capture/window_mac.py`, and needs Screen Recording permission for the terminal (without it, frames show only the wallpaper). mss returns points, not Retina pixels, so `live_frame_scale()` overrides the overlay's scale to 1.0. The crop includes the window's title bar. Run the game windowed, not in native fullscreen, or the overlay won't be on its Space. Activate the venv with `source .venv/bin/activate`.
 - **dxcam:** captures per monitor. `grab()` returns `None` when there's no new frame, so a still screen isn't an error. Its built-in buffer defaults to 8 frames, and zero-copy views can be overwritten, so copy frames into our own ring buffer.
 - **Memory use:** a 10-second buffer at 1080p and 10 fps takes about 0.6-0.8 GB, which is why we capture at 5 fps.
 - **Gemini:** set `media_resolution` per image. The default is 1120 tokens per image; low is 280.

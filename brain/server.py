@@ -43,7 +43,10 @@ class OverlayLink:
         self._socket: WebSocket | None = None
         self._send_lock = asyncio.Lock()
         self.rects: tuple[Rect, ...] = ()
-        self.display_scale: float = 1.0
+        # What the overlay reported: its devicePixelRatio.
+        self.reported_scale: float = 1.0
+        # Set when frames aren't in physical pixels, as with mss on macOS.
+        self.frame_scale_override: float | None = None
         self.settings = Settings()
         self.personalities: list[str] = []
         self.voices: list[VoiceOption] = []
@@ -52,6 +55,13 @@ class OverlayLink:
         return SettingsState(
             settings=self.settings, personalities=self.personalities, voices=self.voices
         )
+
+    @property
+    def display_scale(self) -> float:
+        """Frame pixels per overlay DIP: what masking and pointing convert by."""
+        if self.frame_scale_override is not None:
+            return self.frame_scale_override
+        return self.reported_scale
 
     @property
     def connected(self) -> bool:
@@ -88,7 +98,7 @@ class OverlayLink:
                         message.protocol_version,
                         PROTOCOL_VERSION,
                     )
-                self.display_scale = message.display_scale
+                self.reported_scale = message.display_scale
                 await self.send(self._settings_state())
                 self._bus.publish(OverlayConnected(display_scale=message.display_scale))
             case OverlayRects():
