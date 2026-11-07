@@ -25,13 +25,14 @@ from brain.director.rules import (
     AskTalker,
     CancelSpeech,
     DirectorState,
+    GiveAdvice,
     PlayBark,
     ReactToEvent,
     Say,
     SetVoice,
     decide,
 )
-from brain.director.talker import event_prompt, reply
+from brain.director.talker import ADVICE_PROMPT, SKIP, event_prompt, reply
 from brain.events import Event, EventBus, Tick
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, TextLLM, ToolLLM
 from brain.voice.barks import BarkBank
@@ -66,6 +67,8 @@ class Director:
         send: Callable[[BrainMessage], Awaitable[None]] | None = None,
         question_gap_s: float = 90.0,
         question_quiet_s: float = 20.0,
+        advice_gap_s: float = 300.0,
+        advice_quiet_s: float = 30.0,
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
         voice_id: Callable[[], str | None] = lambda: None,
@@ -88,7 +91,11 @@ class Director:
         self._page_excerpt = page_excerpt
         events = self._personalities.event_lines if bark_events is None else bark_events
         self._state = DirectorState(
-            question_gap_s=question_gap_s, question_quiet_s=question_quiet_s, bark_events=events
+            question_gap_s=question_gap_s,
+            question_quiet_s=question_quiet_s,
+            advice_gap_s=advice_gap_s,
+            advice_quiet_s=advice_quiet_s,
+            bark_events=events,
         )
         self._slot: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[None]] = set()
@@ -170,6 +177,10 @@ class Director:
                 await self._play_bark(action)
             case AskQuestion():
                 await self._ask_question()
+            case GiveAdvice():
+                # Hints off means the player wants to find things out themselves.
+                if self._proactive():
+                    await self._talk(ADVICE_PROMPT, query="progress goal next")
             case SetVoice():
                 await self._voice.set_voice(action.voice_id)
                 # This task is already off the speech slot, so generating can take its time.
@@ -282,5 +293,6 @@ class Director:
             self._personalities.tone(name),
             hints=self._proactive(),
         )
-        if text:
+        # Only the advice prompt offers SKIP, but no prompt should ever have it said aloud.
+        if text and text.strip(" .!").upper() != SKIP:
             await self._speak(text)

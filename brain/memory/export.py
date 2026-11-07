@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from brain.memory.context import fact_from_row, format_fact
+from brain.memory.db import Database
 from brain.memory.models import Fact, LoggedEvent, Note, Session
 
 log = logging.getLogger(__name__)
@@ -216,3 +217,11 @@ def export_vault(conn: sqlite3.Connection, vault_dir: Path, game: str) -> list[P
     written = [path for path, text in documents.items() if _write_if_changed(path, text, root)]
     log.info("Vault export for %r: %d of %d files changed", game, len(written), len(documents))
     return written
+
+
+async def export_quietly(database: Database, vault_dir: Path, game: str) -> None:
+    """Logs a failure instead of raising, because the vault is only a view of SQLite."""
+    try:
+        await database.run(lambda conn: export_vault(conn, vault_dir, game))
+    except OSError:
+        log.exception("Vault export to %s failed", vault_dir)

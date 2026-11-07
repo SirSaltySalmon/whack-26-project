@@ -64,6 +64,11 @@ class AskQuestion:
 
 
 @dataclass(frozen=True)
+class GiveAdvice:
+    """Offer a short tip on what to do next. Skipped when the player turned hints off."""
+
+
+@dataclass(frozen=True)
 class CancelSpeech:
     """The player started talking, so drop any reply still being prepared."""
 
@@ -73,7 +78,9 @@ class SetVoice:
     voice_id: str | None
 
 
-Action = Say | AskTalker | ReactToEvent | PlayBark | AskQuestion | CancelSpeech | SetVoice
+Action = (
+    Say | AskTalker | ReactToEvent | PlayBark | AskQuestion | GiveAdvice | CancelSpeech | SetVoice
+)
 
 
 @dataclass
@@ -83,6 +90,10 @@ class DirectorState:
     question_quiet_s: float = 20.0
     last_bark_at: float | None = None
     last_question_at: float | None = None
+    # Advice is rarer than questions: unasked-for tips get old much faster than curiosity does.
+    advice_gap_s: float = 300.0
+    advice_quiet_s: float = 30.0
+    last_advice_at: float | None = None
     # Stays None until the overlay connects, so nothing is asked with no one to answer it.
     last_activity_at: float | None = None
     turn_started_at: float | None = None
@@ -98,6 +109,21 @@ def _may_ask(ts: float, state: DirectorState) -> bool:
     if ts - state.last_activity_at < state.question_quiet_s:
         return False
     return state.last_question_at is None or ts - state.last_question_at >= state.question_gap_s
+
+
+def _may_advise(ts: float, state: DirectorState) -> bool:
+    if state.in_danger or state.last_activity_at is None or state.advice_gap_s <= 0:
+        return False
+    if state.last_advice_at is None:
+        # The clock starts once the player is here, so the first tip isn't the first thing said.
+        state.last_advice_at = ts
+        return False
+    if ts - state.last_activity_at < state.advice_quiet_s:
+        return False
+    # Right after a question, a tip would talk over the player's answer.
+    if state.last_question_at is not None and ts - state.last_question_at < state.advice_quiet_s:
+        return False
+    return ts - state.last_advice_at >= state.advice_gap_s
 
 
 def decide(event: Event, state: DirectorState) -> list[Action]:
@@ -136,10 +162,14 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 return [PlayBark(kind, event.name, event.data, ts=event.ts)]
             return [ReactToEvent(event.name, event.data)]
         case Tick():
-            if not _may_ask(event.ts, state):
-                return []
-            state.last_question_at = event.ts
-            return [AskQuestion()]
+            # Questions first: an answer makes the next tip better.
+            if _may_ask(event.ts, state):
+                state.last_question_at = event.ts
+                return [AskQuestion()]
+            if _may_advise(event.ts, state):
+                state.last_advice_at = event.ts
+                return [GiveAdvice()]
+            return []
         case SettingsChanged():
             # Sending the current voice again is harmless, so this needs no change tracking.
             return [SetVoice(getattr(event.settings, "voice_id", None))]

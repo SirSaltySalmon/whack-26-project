@@ -107,7 +107,7 @@ async def _record_live_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("brain.app.create_game_window", _Window)
     # Frames from _Screen are already in the overlay's units, on any OS.
     monkeypatch.setattr("brain.app.live_frame_scale", lambda: None)
-    monkeypatch.setattr("brain.app._talker", lambda _factory: FakeTextLLM([LINE]))
+    monkeypatch.setattr("brain.app.make_talker", lambda _factory: FakeTextLLM([LINE]))
 
     async def fake_typing(bus: EventBus) -> None:
         # The typed-turn hook is the one place a test can reach the run's bus.

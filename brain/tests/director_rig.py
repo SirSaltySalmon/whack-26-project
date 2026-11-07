@@ -85,6 +85,7 @@ class Rig:
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
         voice_id: str | None = None,
+        advice_gap_s: float = 0.0,  # Off unless a test is about advice
     ) -> None:
         self.bus = EventBus()
         self.voice = voice or FakeVoice()
@@ -104,6 +105,7 @@ class Rig:
             send=self.overlay.send,
             question_gap_s=gap_s,
             question_quiet_s=quiet_s,
+            advice_gap_s=advice_gap_s,
             page_excerpt=page_excerpt,
             barks=barks,
             voice_id=lambda: voice_id,
