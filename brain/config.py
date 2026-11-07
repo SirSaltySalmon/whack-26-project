@@ -30,7 +30,23 @@ class Settings(BaseSettings):
     )
 
     tts_model: str = "eleven_flash_v2_5"
+    elevenlabs_voice_id: str | None = None
     talker_max_words: int = 12
+
+    stt_model: str = "flux-general-en"
+    # Flux's defaults are 0.7 and 5000 ms. A shorter timeout keeps a trailing "um" from holding
+    # the turn open for five seconds.
+    stt_eot_threshold: float = 0.7
+    stt_eot_timeout_ms: int = 3000
+    # Words to boost in transcription, such as boss and item names.
+    stt_keyterms: list[str] = Field(default_factory=list)
+    # For playing without headphones: mute the mic while the partner talks so it can't hear and
+    # interrupt itself. Costs barge-in. The tail covers speaker latency and room echo.
+    voice_half_duplex: bool = False
+    voice_echo_tail_ms: int = 400
+    # PyAudio device indices; None uses the system default.
+    mic_device_index: int | None = None
+    speaker_device_index: int | None = None
 
     capture_fps: int = 5
     ring_buffer_seconds: int = 10
