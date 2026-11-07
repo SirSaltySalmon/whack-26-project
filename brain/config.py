@@ -90,3 +90,22 @@ class Settings(BaseSettings):
 
     note_interval_s: float = 300.0
     note_min_new_events: int = 5
+
+    # Recording a session for replay. Only runs with --record, because it stores screen and mic.
+    record_fps: int = 5
+    record_max_gb: float = 10.0
+
+    # Compiled readers.
+    reader_tick_s: float = 0.2
+    reader_failing_after_s: float = 60.0
+
+    # Learning a game's HUD by vision.
+    learner_frames: int = 3  # Frames sampled per learning pass
+    learner_frame_gap_s: float = 5.0
+    learner_max_vision_calls: int = 6  # Per session. Shares Gemini's free-tier quota
+    learner_relearn_gap_s: float = 300.0
+    profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
+
+    # Pre-generated barks.
+    barks_dir: Path = Path("data/barks")
+    tts_sample_rate: int = 24000  # Pipecat's default output rate

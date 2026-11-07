@@ -11,6 +11,7 @@ from typing import Protocol
 from brain.config import Settings
 from brain.events import EventBus
 from brain.server import OverlayLink
+from brain.voice.barks import Bark
 from shared.protocol.messages import AvatarState, SubtitleChunk
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,10 @@ log = logging.getLogger(__name__)
 class Voice(Protocol):
     async def say(self, text: str) -> bool:
         """Returns whether the text was accepted to be spoken."""
+        ...
+
+    async def play(self, bark: Bark) -> bool:
+        """Plays pre-generated audio. Returns whether it was accepted."""
         ...
 
     async def set_voice(self, voice_id: str | None) -> None: ...
@@ -38,6 +43,9 @@ class SubtitleOnlyVoice:
         await self._link.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=text, final=True))
         await self._link.send(AvatarState(state="idle"))
         return True
+
+    async def play(self, bark: Bark) -> bool:
+        return await self.say(bark.text)
 
     async def set_voice(self, voice_id: str | None) -> None:
         return

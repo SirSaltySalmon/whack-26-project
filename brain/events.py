@@ -23,10 +23,27 @@ class OverlayConnected(Event):
 
 @dataclass(frozen=True)
 class GameEvent(Event):
-    """Something a compiled reader detected. `name` comes from the learned profile."""
+    """Something noticed in the game. `name` is generic, or comes from the learned profile."""
 
     name: str
     data: dict[str, Any] = field(default_factory=dict)
+    # "observer", "reader" or "replay". Lets replay re-run readers without doubling their events.
+    source: str = "observer"
+
+
+@dataclass(frozen=True)
+class ProfileUpdated(Event):
+    """The learner saved new regions or readers, so they should be reloaded."""
+
+    game: str
+
+
+@dataclass(frozen=True)
+class ReadersFailing(Event):
+    """Learned readers keep failing, so they may be out of date."""
+
+    game: str
+    readers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
