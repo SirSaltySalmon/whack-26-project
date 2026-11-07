@@ -4,6 +4,7 @@ import type { Brain, CardShow, State } from "../lib/protocol.generated.ts";
 import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
+import { DebugRegions } from "./components/DebugRegions.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
 import { QuestionPrompt } from "./components/QuestionPrompt.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
@@ -173,6 +174,7 @@ export function App() {
 
   return (
     <>
+      <DebugRegions regions={feed.debugRegions} viewport={viewport} />
       <Avatar
         frame={avatarFrame}
         state={avatarState}
