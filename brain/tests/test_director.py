@@ -253,3 +253,34 @@ async def test_shutting_down_cancels_speech_in_progress() -> None:
         await task
     await settle()
     assert stuck.cancelled and rig.voice.said == []
+
+
+async def test_the_open_page_excerpt_reaches_player_turns_and_never_reactions() -> None:
+    asked: list[str] = []
+
+    def excerpt(transcript: str) -> str:
+        asked.append(transcript)
+        return "OPEN PAGE (test): Skeletron\nIt drops a mask."
+
+    talker = FakeTextLLM(["Reaction."])
+    agent = ScriptedToolLLM([ToolStep("Reply.")])
+    rig = Rig(talker=talker, agent=agent, page_excerpt=excerpt)
+    async with rig.running():
+        await rig.publish(GameEvent("danger_started", ts=100.0))
+        assert rig.voice.said == ["Reaction."]
+        assert "It drops a mask." not in talker.system and asked == []
+
+        await rig.publish(PlayerSpeech(transcript="what does it drop?"))
+    assert rig.voice.said == ["Reaction.", "Reply."]
+    assert asked == ["what does it drop?"]
+    assert "OPEN PAGE (test): Skeletron\nIt drops a mask." in agent.system
+
+
+async def test_a_failing_excerpt_does_not_cost_the_player_their_reply() -> None:
+    def broken(_transcript: str) -> str:
+        raise RuntimeError("bad page")
+
+    rig = Rig(agent=ScriptedToolLLM([ToolStep("Reply.")]), page_excerpt=broken)
+    async with rig.running():
+        await rig.publish(PlayerSpeech(transcript="hello"))
+    assert rig.voice.said == ["Reply."]

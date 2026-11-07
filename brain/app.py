@@ -5,6 +5,7 @@ import logging
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import uvicorn
 
@@ -28,6 +29,7 @@ from brain.perception.observer import Observer
 from brain.perception.tracker import ObservationTracker
 from brain.replay.source import ReplayFrameSource
 from brain.research import ExaSearch, WikiResearch
+from brain.research.open_page import OpenPage
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
 from brain.voice.pipeline import create_voice
@@ -131,6 +133,7 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
     talker = _talker(factory)
     # Replays never spend money on vision, so they get plain replies with no tools.
     tools = None
+    open_page = None
     if talker is not None and not replay_dir:
         tools = AgentTools(
             buffer,
@@ -146,6 +149,15 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
                 settings.pointer_ttl_ms,
             ),
         )
+        live_tools = tools
+
+        def wiki_host() -> str | None:
+            # None until the wiki is found in the background, and then no page is read.
+            research = live_tools.research
+            return urlparse(research.site.info.server).hostname if research else None
+
+        open_page = OpenPage(bus, link.send, wiki_host)
+        tools.open_page = open_page
 
     director = Director(
         bus,
@@ -163,6 +175,7 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         send=link.send,
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
+        page_excerpt=open_page.excerpt_for if open_page else None,
     )
 
     config = uvicorn.Config(
@@ -182,6 +195,8 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             tasks.create_task(memory.run())
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
+            if open_page:
+                tasks.create_task(_survive("Open page", open_page.run()))
             if typed:
                 tasks.create_task(_survive("Typing", typed_turns(bus)))
     finally:

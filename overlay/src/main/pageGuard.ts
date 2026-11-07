@@ -1,5 +1,13 @@
 import { app, session, type WebContents } from "electron";
 import { logger } from "../lib/logger.ts";
+import {
+  type PageText,
+  READ_PAGE_SCRIPT,
+  READ_TIMEOUT_MS,
+  READ_WORLD_ID,
+  toPageText,
+  withTimeout,
+} from "../lib/pageText.ts";
 import { isWebUrl, WEB_PARTITION } from "../lib/web.ts";
 
 /**
@@ -47,7 +55,45 @@ function guardApp(contents: WebContents): void {
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
 }
 
+/** The wiki window's page. There's only one wiki window, so the newest webview is the one. */
+let openPage: WebContents | null = null;
+
+/**
+ * Reads the open page's rendered text in our own isolated world, so the page's scripts can't
+ * tamper with the reader. Resolves to null, with the reason logged, rather than ever throwing.
+ */
+export async function readOpenPage(): Promise<PageText | null> {
+  const contents = openPage;
+  if (contents === null || contents.isDestroyed()) {
+    logger.info("No page to read: the wiki window isn't open");
+    return null;
+  }
+  try {
+    const result: unknown = await withTimeout(
+      contents.executeJavaScriptInIsolatedWorld(READ_WORLD_ID, [
+        { code: READ_PAGE_SCRIPT },
+      ]),
+      READ_TIMEOUT_MS,
+    );
+    if (result === null) {
+      logger.warn(`Page read timed out after ${READ_TIMEOUT_MS} ms`);
+      return null;
+    }
+    // Taken now, not when the read was asked for, so the brain can check the host it came from.
+    const page = toPageText(result, contents.getURL(), contents.getTitle());
+    if (page === null) logger.warn("Page read returned something unexpected");
+    return page;
+  } catch (error: unknown) {
+    logger.warn("Page read failed", error);
+    return null;
+  }
+}
+
 function guardPage(contents: WebContents): void {
+  openPage = contents;
+  contents.once("destroyed", () => {
+    if (openPage === contents) openPage = null;
+  });
   // Links that would open a new window load in this one, so the player stays in the wiki window.
   contents.setWindowOpenHandler(({ url }) => {
     if (isWebUrl(url)) {

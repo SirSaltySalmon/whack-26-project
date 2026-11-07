@@ -13,6 +13,7 @@ import { WebCard } from "./components/WebCard.tsx";
 import { useBrainLink } from "./hooks/useBrainLink.ts";
 import { useClickThrough } from "./hooks/useClickThrough.ts";
 import { useCompanionFeed } from "./hooks/useCompanionFeed.ts";
+import { usePageReader } from "./hooks/usePageReader.ts";
 import { useRectReporter } from "./hooks/useRectReporter.ts";
 import { useViewport } from "./hooks/useViewport.ts";
 import {
@@ -111,6 +112,9 @@ export function App() {
       case "card.close":
         dispatch({ kind: "close", id: message.card_id });
         break;
+      case "page.read":
+        readPage(message.request_id);
+        break;
       default:
         feed.handle(message);
     }
@@ -118,6 +122,10 @@ export function App() {
 
   const link = useBrainLink(onMessage);
   useRectReporter(link.socket, link.generation);
+  const readPage = usePageReader(
+    link.socket,
+    cards.find((card) => card.page !== null)?.id,
+  );
 
   const closeCard = (card: Card): void => {
     dispatch({ kind: "close", id: card.id });

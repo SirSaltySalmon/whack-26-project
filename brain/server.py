@@ -11,6 +11,7 @@ from brain.events import (
     CardPageChanged,
     EventBus,
     OverlayConnected,
+    PageContentReceived,
     QuestionAnswered,
     SettingsChanged,
 )
@@ -20,6 +21,7 @@ from shared.protocol.messages import (
     CardNavigated,
     OverlayReady,
     OverlayRects,
+    PageContent,
     QuestionAnswer,
     Rect,
     Settings,
@@ -107,6 +109,18 @@ class OverlayLink:
                 self.settings = message.settings
                 await self.send(self._settings_state())
                 self._bus.publish(SettingsChanged(settings=message.settings))
+            case PageContent():
+                self._bus.publish(
+                    PageContentReceived(
+                        request_id=message.request_id,
+                        card_id=message.card_id,
+                        url=message.url,
+                        title=message.title,
+                        text=message.text,
+                        visible_text=message.visible_text,
+                        truncated=message.truncated,
+                    )
+                )
 
 
 def create_app(link: OverlayLink) -> FastAPI:
