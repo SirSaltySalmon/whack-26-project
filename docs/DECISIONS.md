@@ -2,6 +2,49 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: The wiki window shows the real site
+
+**Status:** accepted. Replaces the earlier rule against loading live web pages in the overlay. Applies to `overlay/`, `shared/protocol/` and how `brain/` opens pages.
+
+### Why the plan changed
+The player should be able to open, read, minimize and navigate the actual wiki while playing. A sanitized text card can't do that.
+
+The earlier rule mainly guarded against two risks, and both can be handled another way:
+- **Page text reaching the model:** the window's rectangle is masked like every other overlay element, so its content never reaches a model.
+- **Third-party code in the overlay:** the page runs in a sandbox with no access to the app. The brain's WebSocket already refuses connections from websites.
+
+### Decisions
+
+| # | Decision | Effect |
+|---|---|---|
+| 1 | **Use `<webview>`, sandboxed** | No preload, no Node, no popups, no permissions, no downloads, in-memory session, http(s) only |
+| 2 | **Links stay in the window, wherever they go** | The window isn't limited to the wiki's host, so the sandbox is the protection. Links that would open a new window load in this one |
+| 3 | **`body` stays as the fallback** | `card.show` gains an optional `page_url`. If the page can't load, the window shows `body` as text, so research still works offline |
+| 4 | **One wiki window** | A new lookup reuses it. Minimizing keeps the page and scroll position |
+| 5 | **Only player-requested lookups open or change the page** | The partner can't navigate away while the player is reading |
+| 6 | **The character moves by a hover grip** | Its body stays click-through, because the game aims with the mouse. A 3:4 placeholder stands in until there's art |
+| 7 | **The overlay doesn't take keyboard focus** | `focusable: false` until the player chooses to type |
+| 8 | **The pointer doesn't track moving targets** | It sits beside the target and fades after `ttl_ms`. It points at what it can find on screen |
+
+### Options considered for the window
+
+| Option | Result | Reasoning |
+|---|---|---|
+| **A. `<webview>`** | **Chosen** | Has back, forward and page events built in, isn't stopped by `X-Frame-Options`, and is drawn as part of the page. The tradeoff is that Electron's docs warn it can be unstable |
+| B. Sandboxed `<iframe>` | Fallback | wiki.gg sent no framing headers when checked with curl, but Fandom sent `X-Frame-Options: SAMEORIGIN` on a Cloudflare challenge. Navigation controls would have to be built through the main process |
+| C. `WebContentsView` | Rejected | It's expected to draw above the DOM, so the pointer and subtitles would pass behind it. Not tested |
+| D. Sanitized text card only | Rejected | Can't read and navigate the real site. Remains the offline fallback |
+
+### What stays the same
+- Wiki text, OCR text and web results are still data, never instructions to the model.
+- Fetched pages are still lookup material, not memory.
+- `setContentProtection` is still banned, and the overlay must still appear in recordings.
+
+### What other tracks need to know
+- **Track 2 (Capture and perception):** elements can now sit over the HUD, and masks are filled with black. A reader whose region is masked must report the value as unknown, or a covered health bar could read as empty.
+- **Track 3 (Voice and director):** send `page_url` only for lookups the player asked for. Set a short `ttl_ms` on `pointer.fly` for world targets, because the world may scroll during the vision call.
+- **Track 4 (Memory and learning):** `card.show` still needs a sanitized `body` as the fallback. `card.navigated` reports which page is open, and its URL and title are untrusted.
+
 ## 2026-11-07: Replay runs start from a fixed memory snapshot
 
 **Status:** accepted. Applies to `brain/memory/` and `brain/app.py`.

@@ -37,7 +37,7 @@ Overlay reports element rectangles back to the brain ─► used for masking
 | **Vision and profile learner** | `gemini-3.6-flash` (stable); try `gemini-3.8-flash` (new) | Low resolution by default, full-resolution crops on demand. Structured JSON and pointing coordinates from one provider | Moondream (only if Gemini's coordinates prove too slow) |
 | **Deep reasoning** | `gemini-3.6-flash` with higher thinking | Post-mortems, profile cleanup, deciding which questions are worth asking. Latency doesn't matter here, but it shares quota with vision | Claude (no API credits) |
 | **Memory** | SQLite in WAL mode with JSON1 and FTS5; then sqlite-vec with fastembed (`BAAI/bge-small-en-v1.5`, 384 dimensions) | Fixed schema with a learned game profile, session notes and a small set of player and playthrough facts. WAL lets fast loops read while the slow loop writes. Local embeddings avoid a network call during recall | Zep, Mem0, Letta (more infrastructure, nowhere to put learned regions) |
-| **Web research** | MediaWiki `action=parse` on the game's wiki; Exa as fallback | Researches the title at startup to pre-fill the game brief and tentative `entity_types`, then prefetches during downtime. Pages are cached as lookup material, not stored as memory | Perplexity (slow); loading live pages in the overlay |
+| **Web research** | MediaWiki `action=parse` on the game's wiki; Exa as fallback | Researches the title at startup to pre-fill the game brief and tentative `entity_types`, then prefetches during downtime. Pages are cached as lookup material, not stored as memory | Perplexity (slow) |
 | **Director / event bus** | Plain Python: asyncio queues and a rules module | Deterministic, instant, testable | An LLM deciding when to talk |
 | **Tilt meter (stretch)** | Mic loudness and pitch, death streaks, profanity in transcripts | Cheap, and the behavior change is easy to see | Hume in the critical path |
 | **Demo safety** | Replay mode recording frames, audio and events | Fallback if the network or game fails on stage, and the main test harness | — |
@@ -54,6 +54,23 @@ Electron's `setContentProtection` isn't used, because it could also remove the o
 3. Masked areas, with padding, are excluded before perception and before any frame goes to an AI.
 
 Record demos with OBS Display Capture. Check this in the first hour: some OBS users report problems capturing layered or transparent windows.
+
+## Overlay elements
+
+| Element | Behavior |
+|---|---|
+| **Character** | A 3:4 portrait frame, with a placeholder circle until there's art. Its body stays click-through. Hovering shows a grip to move it, a corner to resize it, and a button to reopen the wiki. Position and size are saved locally, and the brain only sees them through `overlay.rects` |
+| **Pointer** | Launches from the character, flies to sit beside the target, shows its label, fades after `ttl_ms` and returns. It doesn't track moving targets, so it points at what it can find on screen |
+| **Wiki window** | The real site in a sandboxed `<webview>`, with back, forward, reload, minimize and close. It can be moved and resized. Minimizing shrinks it to a tab near the character and keeps the page and scroll position. There is one wiki window: a new lookup reuses it |
+| **Text card** | Sanitized plain text in the same movable, resizable, closable frame |
+
+Only lookups the player asked for send `page_url`, so the partner can't change the page while the player is reading it or cover the game mid-fight. Scrolling and clicking links shouldn't take keyboard focus from the game. Typing into a page needs the player to ask for focus, and the game gets no keys until they click back into it.
+
+If a page can't load, the window shows `body` as text, so research still works without a network.
+
+The overlay checks element rectangles about every 100 ms and reports only changes. Capture runs at about 5 fps, so that's frequent enough, and one check covers drags, animations, opening and closing. A fast drag can show briefly past the mask.
+
+Masks are filled with black, so a reader whose region is under an overlay element must report the value as unknown rather than reading the black pixels.
 
 ## Coordinates
 
@@ -100,14 +117,15 @@ A starting point to finalize in hour 1. Pydantic models in `shared/protocol/` ar
 |---|---|---|
 | Brain to overlay | `subtitle.chunk` | Text in sync with audio |
 | Brain to overlay | `avatar.state` | Idle, listening, talking, reacting |
-| Brain to overlay | `pointer.fly` / `pointer.hide` | Move the pointer to a target and label it |
-| Brain to overlay | `card.show` / `card.update` / `card.close` | Info cards |
+| Brain to overlay | `pointer.fly` / `pointer.hide` | Move the pointer to a target and label it. Optional `target` rect and `ttl_ms` |
+| Brain to overlay | `card.show` / `card.update` / `card.close` | Info cards. Optional `page_url` shows a real site, with `body` as its fallback |
 | Brain to overlay | `toast.memory` | "Memory updated" notice |
 | Brain to overlay | `question.ask` | Clarifying question from the AI |
 | Brain to overlay | `settings.state` | Current settings |
 | Overlay to brain | `overlay.ready` | Overlay connected, with display scale |
 | Overlay to brain | `overlay.rects` | Current element rectangles, for masking |
 | Overlay to brain | `card.closed` | Player closed a card |
+| Overlay to brain | `card.navigated` | The wiki window's page changed. The URL and title are untrusted data |
 | Overlay to brain | `question.answer` | Answer given through the UI |
 | Overlay to brain | `settings.update` | Player changed a setting |
 
