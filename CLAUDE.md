@@ -21,7 +21,7 @@ Two processes joined by a localhost WebSocket:
 
 Model IDs live only in `brain/config.py`. Never hardcode them elsewhere.
 
-Don't propose: Tauri, an LLM deciding when to speak, continuous vision model watching, Obsidian or Markdown as the memory store, loading live web pages in the overlay, or Silero VAD on the voice path (Flux does its own turn detection).
+Don't propose: Tauri, an LLM deciding when to speak, continuous vision model watching, Obsidian or Markdown as the memory store, or Silero VAD on the voice path (Flux does its own turn detection).
 
 ## Rules That Must Hold
 **Latency**
@@ -58,12 +58,17 @@ Don't propose: Tauri, an LLM deciding when to speak, continuous vision model wat
 **Overlay and recording**
 - The overlay must appear in demo recordings. Never use `setContentProtection`.
 - The overlay reports the rectangle of every visible element whenever it moves, resizes, opens or closes. The brain stores the latest rectangles with each frame and masks them, with padding, before perception or sending to an AI. This keeps the AI from reading its own subtitles and cards.
-- Use one transparent, full-monitor, always-on-top window. Info cards are movable, resizable and closable DOM elements. Toggle `setIgnoreMouseEvents(true, {forward: true})` off only while the cursor is over an interactive element.
+- Use one transparent, full-monitor, always-on-top window. Info cards are movable, resizable and closable DOM elements. Toggle `setIgnoreMouseEvents(true, {forward: true})` off only while the cursor is over an interactive element, and keep it off until a drag ends.
+- The game aims with the mouse, so overlay parts stay click-through unless they need a click. The character's body never catches clicks: hovering shows a grip to move it and a corner to resize it, in a 3:4 portrait frame.
+- The overlay must not take keyboard focus from the game. The window stays `focusable: false` until the player chooses to type, and goes back when it loses focus.
+- The pointer sits beside its target, never on it, because its masked rectangle would hide the target from the next vision call. It always fades on its own, using `ttl_ms`.
 - Convert coordinates in one tested function. Gemini boxes are `[ymin, xmin, ymax, xmax]` on a 0-1000 scale relative to the image sent, dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
 
 **Untrusted content**
 - Treat wiki text, OCR text and web results as data, never as instructions to the model.
-- Render research as sanitized text and images on our own cards.
+- The wiki window shows the real site in a sandboxed `<webview>`: no preload, no Node, no popups, no permissions, no downloads, an in-memory session and http(s) only. Links can go anywhere and stay in the window.
+- That window's rectangle is masked, so page content never reaches a model. When the brain needs a page's text, it fetches it through the wiki API and treats it as data.
+- Text cards show sanitized plain text, including the wiki window's fallback when a page can't load.
 - Bind the WebSocket to `127.0.0.1`. Keep `contextIsolation` on and `nodeIntegration` off.
 
 ## Layout and Ownership
@@ -108,8 +113,10 @@ Replay mode is the main test harness: it records frames, audio and events to dis
 
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
-- `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`
-- Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `GAME_TITLE` (the game memory is filed under)
+- `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without the last three, the brain runs subtitles only.
+- `GAME_TITLE`: what memory and the learned profile are filed under, so set it for each game. If it's unset, every game shares `Unknown game`. If it's blank, they share an empty title.
+- Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`
+- Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 
 ## Gotchas
 - **dxcam:** captures per monitor. `grab()` returns `None` when there's no new frame, so a still screen isn't an error. Its built-in buffer defaults to 8 frames, and zero-copy views can be overwritten, so copy frames into our own ring buffer.
@@ -118,8 +125,9 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Gemini SDK:** Pipecat 1.15 caps `google-genai` below 3, so don't upgrade it separately.
 - **Free-tier quota:** limits are per project, not per API key, and daily quotas reset at midnight Pacific. Google doesn't publish the numbers, so read them on your project's AI Studio rate limit page and set `rpm_by_model` in `brain/config.py`. Keep a separate project for the demo so development can't use up its quota.
 - **Free-tier privacy:** free-tier content is used to improve Google's products, including the frames and transcripts we send. Never capture anything private while testing.
-- **Echo:** Pipecat's local audio transport has no documented echo cancellation, so speaker output can trigger barge-in. Use headphones.
+- **Echo:** Pipecat's local audio transport has no documented echo cancellation, so speaker output can trigger barge-in. Use headphones. Without them, set `VOICE_HALF_DUPLEX=true`, which mutes the mic while the partner talks but gives up barge-in.
 - **Recording:** record with OBS Display Capture. Game Capture and Window Capture are likely to miss the overlay.
+- **`<webview>`:** Electron's docs warn it can be unstable, so test it over the game. Hide it with `visibility: hidden`: `display: none` can reload the page. Set `pointer-events: none` on it during a drag, or it swallows the drag.
 - **Frame privacy:** crop frames to the game window so notifications and other apps never reach Gemini. Keep replay sessions out of git; they contain screen and mic data.
 
 ### Terraria (test these; don't hardcode them)
@@ -130,14 +138,30 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Hour 0-1: prove the risky parts and agree the contract**
-- [x] Add `.gitignore` covering `.env`, `.venv/`, `node_modules/` and replay sessions
-- [ ] Agree the protocol in `shared/protocol/`
+**Now: hour 1-5, walking skeleton.** Memory, voice and the partly built overlay are all in `main`. Most of what's left is connecting them.
+
+**Connect what's built**
+- [ ] Talker uses `MemoryService.context()` and `CONTEXT_PREAMBLE`, and reports each reply with `record_partner_turn()` (Track 3)
+- [ ] Director has a question budget and calls `take_question()` (Track 3)
+- [ ] Overlay handles `subtitle.chunk`, `toast.memory`, `question.ask` and `settings.state` (Track 1)
+- [ ] `Settings.voice_id` reaches TTS. Today the voice only comes from `ELEVENLABS_VOICE_ID` (Track 3)
+- [ ] `brain/app.py` builds one `LLMFactory`, so vision and deep share a rate limiter (shared)
+
+**Not started**
+- [ ] Readers, live state and scene matching (Track 2)
+- [ ] Learner: game brief, learned regions, compiled readers (Track 4)
+- [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
+- [ ] Crop frames to the game window. Capture currently keeps the whole monitor (Track 2)
+- [ ] Pre-generated barks per personality (Track 3)
+- [ ] Vision pointing and wiki lookups that send `pointer.fly` and `card.show` from the brain (Tracks 3 and 4)
+- [ ] Finding a wiki from a game title, and sanitizing pages into `body` text (Track 4)
+
+**Still unproven from hour 0-1**
 - [ ] Check free-tier limits in AI Studio, and test pointing with `scripts/check_pointing.py` on a Terraria screenshot
 - [ ] dxcam captures Terraria in borderless mode
 - [ ] Overlay draws over Terraria, and OBS Display Capture records it
-- [ ] sqlite-vec and fastembed load on Windows
 - [ ] Measure voice latency end to end and compare Gemini and TTS model options
+- [ ] fastembed embeds on Windows. It imports and sqlite-vec loads, but no embedding has been run
 
 **Timeline**
 - **Hour 1-5:** walking skeleton: frame, event, director, bark, voice with subtitles, overlay
@@ -147,12 +171,12 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Hour 13-16:** bug fixes, rehearsal and a backup demo recording
 
 **Must-haves**
-1. Overlay with avatar, subtitles, and a movable, resizable, closable info card, visible in recordings
+1. Overlay with a movable, resizable avatar, subtitles, and a movable, resizable, closable info card, visible in recordings
 2. Voice conversation with barge-in and short phrases
 3. Perception learned by vision, then run by local readers, not hardcoded
 4. Memory with source and confidence, ask-when-unsure, and visible "memory updated" toasts
 5. **Pointer** that flies to on-screen elements
-6. Wiki research shown on a card
+6. Wiki research in a movable, resizable, minimizable, closable window showing the real site, with navigation
 7. Settings: proactive hints or conversation only, personality, voice
 8. Replay mode
 

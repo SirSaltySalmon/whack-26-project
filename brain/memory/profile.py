@@ -42,7 +42,7 @@ class ProfileStore:
             )
 
     def merge_data(self, game: str, updates: Mapping[str, Any]) -> GameProfile:
-        """Merges top-level keys, so writing entity_types can't lose learned regions."""
+        """Merges top-level keys, so writing readers can't lose learned regions."""
         with self._conn:
             # sqlite3 only opens a transaction before a write, which would leave the read below
             # outside it. json_patch isn't an option: it merges recursively and null deletes keys.
