@@ -5,9 +5,14 @@ import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
+import { QuestionPrompt } from "./components/QuestionPrompt.tsx";
+import { SettingsPanel } from "./components/SettingsPanel.tsx";
+import { Subtitles } from "./components/Subtitles.tsx";
+import { Toasts } from "./components/Toasts.tsx";
 import { WebCard } from "./components/WebCard.tsx";
 import { useBrainLink } from "./hooks/useBrainLink.ts";
 import { useClickThrough } from "./hooks/useClickThrough.ts";
+import { useCompanionFeed } from "./hooks/useCompanionFeed.ts";
 import { useRectReporter } from "./hooks/useRectReporter.ts";
 import { useViewport } from "./hooks/useViewport.ts";
 import {
@@ -22,6 +27,7 @@ import {
   defaultTextFrame,
   defaultWebFrame,
   minimizedTabPosition,
+  questionPlacement,
   TEXT_CARD_LIMITS,
 } from "./logic/layout.ts";
 
@@ -42,6 +48,11 @@ export function App() {
   const pointerSeq = useRef(0);
   const [cards, dispatch] = useReducer(cardsReducer, []);
   const [lastPage, setLastPage] = useState(savedLastPage.load);
+  const feed = useCompanionFeed();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsFrame, setSettingsFrame] = useState(() =>
+    defaultTextFrame(viewport, 0),
+  );
 
   useClickThrough();
 
@@ -100,8 +111,7 @@ export function App() {
         dispatch({ kind: "close", id: message.card_id });
         break;
       default:
-        // Subtitles, toasts, questions and settings aren't built yet.
-        logger.debug(`No handler yet for ${message.type}`);
+        feed.handle(message);
     }
   };
 
@@ -160,6 +170,7 @@ export function App() {
         onFrame={setAvatarFrame}
         onFrameEnd={savedAvatarFrame.save}
         onOpenWiki={reopenWiki}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {cards.map((card) => {
@@ -214,6 +225,38 @@ export function App() {
         </button>
       )}
 
+      {settingsOpen && (
+        <SettingsPanel
+          state={feed.settings}
+          frame={clampFrame(settingsFrame, viewport)}
+          onFrame={setSettingsFrame}
+          onChange={(settings) =>
+            link.socket?.send({ type: "settings.update", settings })
+          }
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {feed.question && (
+        <QuestionPrompt
+          question={feed.question}
+          placement={questionPlacement(avatarFrame, viewport)}
+          onAnswer={(answer) => {
+            if (feed.question) {
+              link.socket?.send({
+                type: "question.answer",
+                question_id: feed.question.question_id,
+                answer,
+              });
+            }
+            feed.dismissQuestion();
+          }}
+          onDismiss={feed.dismissQuestion}
+        />
+      )}
+
+      <Toasts toasts={feed.toasts} onDone={feed.dismissToast} />
+      <Subtitles line={feed.subtitle} />
       <Pointer command={pointer} home={home} viewport={viewport} />
     </>
   );

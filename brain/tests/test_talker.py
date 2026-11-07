@@ -26,8 +26,12 @@ class FakeVoice:
     def __init__(self) -> None:
         self.said: list[str] = []
 
-    async def say(self, text: str) -> None:
+    async def say(self, text: str) -> bool:
         self.said.append(text)
+        return True
+
+    async def set_voice(self, voice_id: str | None) -> None:
+        return
 
     async def run(self) -> None:
         return

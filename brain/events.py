@@ -82,6 +82,11 @@ class SettingsChanged(Event):
     settings: BaseModel
 
 
+@dataclass(frozen=True)
+class Tick(Event):
+    """Time passing. Lets the director's pure rules decide things no other event would prompt."""
+
+
 class EventBus:
     """Fan-out queues. A slow subscriber loses its oldest events rather than stalling fast loops."""
 

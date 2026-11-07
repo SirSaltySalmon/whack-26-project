@@ -25,6 +25,7 @@ from shared.protocol.messages import (
     Settings,
     SettingsState,
     SettingsUpdate,
+    VoiceOption,
 )
 
 log = logging.getLogger(__name__)
@@ -44,6 +45,13 @@ class OverlayLink:
         self.rects: tuple[Rect, ...] = ()
         self.display_scale: float = 1.0
         self.settings = Settings()
+        self.personalities: list[str] = []
+        self.voices: list[VoiceOption] = []
+
+    def _settings_state(self) -> SettingsState:
+        return SettingsState(
+            settings=self.settings, personalities=self.personalities, voices=self.voices
+        )
 
     @property
     def connected(self) -> bool:
@@ -81,7 +89,7 @@ class OverlayLink:
                         PROTOCOL_VERSION,
                     )
                 self.display_scale = message.display_scale
-                await self.send(SettingsState(settings=self.settings))
+                await self.send(self._settings_state())
                 self._bus.publish(OverlayConnected(display_scale=message.display_scale))
             case OverlayRects():
                 self.rects = tuple(item.rect for item in message.rects)
@@ -97,7 +105,7 @@ class OverlayLink:
                 )
             case SettingsUpdate():
                 self.settings = message.settings
-                await self.send(SettingsState(settings=self.settings))
+                await self.send(self._settings_state())
                 self._bus.publish(SettingsChanged(settings=message.settings))
 
 

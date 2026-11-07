@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 
 # The personality name comes from the overlay settings, so swapping one is data, not a branch.
 SYSTEM_PROMPT = """You are the player's {personality} co-op partner, watching their game.
+{tone}
 Everything you write is spoken aloud over live gameplay, so:
 - Reply in {max_words} words or fewer, one sentence, no lists, markdown or emoji.
 - If you can't see or don't know something, say so in a few words rather than guessing."""
@@ -38,13 +39,23 @@ def event_prompt(name: str, data: dict[str, Any]) -> str:
     return EVENT_PROMPT.format(name=name.replace("_", " "), data=json.dumps(data))
 
 
-async def reply(
-    llm: TextLLM, transcript: str, personality: str, max_words: int, context: str = ""
-) -> str | None:
-    """Returns None when there's nothing to say, so the caller can stay quiet."""
-    system = SYSTEM_PROMPT.format(personality=personality, max_words=max_words)
+def build_system(personality: str, tone: str, max_words: int, context: str) -> str:
+    system = SYSTEM_PROMPT.format(personality=personality, tone=tone, max_words=max_words)
     if context:
         system = f"{system}\n\n{CONTEXT_PREAMBLE}\n\n{context}"
+    return system
+
+
+async def reply(
+    llm: TextLLM,
+    transcript: str,
+    personality: str,
+    max_words: int,
+    context: str = "",
+    tone: str = "",
+) -> str | None:
+    """Returns None when there's nothing to say, so the caller can stay quiet."""
+    system = build_system(personality, tone, max_words, context)
     parts: list[str] = []
     try:
         async for chunk in llm.stream_text(system, transcript, MAX_TOKENS):

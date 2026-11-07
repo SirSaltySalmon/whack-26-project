@@ -20,6 +20,7 @@ interface AvatarProps {
   onFrameEnd(frame: Frame): void;
   /** Reopens the wiki window. Null when there's nothing to reopen. */
   onOpenWiki: (() => void) | null;
+  onOpenSettings(): void;
 }
 
 /**
@@ -32,6 +33,7 @@ export function Avatar({
   onFrame,
   onFrameEnd,
   onOpenWiki,
+  onOpenSettings,
 }: AvatarProps) {
   const startMove = useFrameGesture({
     frame,
@@ -79,6 +81,16 @@ export function Avatar({
             Wiki
           </button>
         )}
+        <button
+          className="avatar-settings"
+          data-interactive
+          type="button"
+          title="Settings"
+          aria-label="Settings"
+          onClick={onOpenSettings}
+        >
+          ⚙
+        </button>
         <div
           className="resize-corner"
           data-interactive

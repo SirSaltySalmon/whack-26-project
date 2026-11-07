@@ -2,6 +2,42 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-07: Player turns can use tools, and MCP is a later adapter
+
+**Status:** accepted by the project owner, for the team to review. Applies to `brain/agent/`, `brain/director/` and `brain/llm/`.
+
+Every part of the idea was built, but the partner could only talk. Nothing in the brain sent a pointer, opened the wiki, looked closer at a frame or asked a question.
+
+| # | Decision | Effect |
+|---|---|---|
+| 1 | **The talker's model can call tools, on player turns only** | A plain reply still takes one model call. Game events use the old path with no tools, so they can't start a run of vision calls, and `page_url` is only ever sent because a player asked |
+| 2 | **Rules still decide when to speak** | The model only chooses what to do inside a turn the director started. This doesn't change the rule against an LLM deciding when to talk |
+| 3 | **Tools are plain in-process functions** | `brain/agent/tools.py` holds a name, description, Pydantic input and handler for each, which is also the shape an MCP server needs |
+| 4 | **Speech runs in its own task, with one slot** | The director's decisions stay instant. A player turn replaces what's in the slot, and their next start of turn cancels it |
+| 5 | **The model running the turn never sees images** | `look_closer` and `point_at` make their own vision call and return text. This keeps the turn's context small and vendor-neutral |
+| 6 | **Gemini Flash-Lite runs player turns** | Free, with no new key. Its tool choices and quota are unproven, so see the [test plan](TEST_PLAN.md). The model is one config value |
+
+### Why not MCP now
+MCP still works as a later addition, but it wouldn't have closed this gap, because what was missing was tool calling.
+
+| Option | Result | Reasoning |
+|---|---|---|
+| **In-process registry** | **Chosen** | The tools need the ring buffer, overlay link and database connection, which are all objects inside the brain |
+| Pipecat's `MCPClient` | Rejected | It attaches tools to an LLM context in the pipeline, which we removed on purpose. In 1.15 it also keeps only text results (`mcp_service.py`, `_call_tool_text`), so an image tool would return nothing |
+| Anthropic's MCP connector | Rejected | It needs a URL Anthropic's servers can reach, which would expose game frames |
+| A separate MCP server process | Rejected | It couldn't reach the brain's in-memory frames |
+
+**To add MCP later:** wrap `ToolRegistry` in an MCP server inside the brain. Do this when something outside the brain needs the tools, such as Claude Code. A localhost endpoint would serve game frames, so it needs the same origin checks as the overlay's WebSocket.
+
+### Also checked in Pipecat 1.15
+The no-LLM pipeline holds up against the source. With no aggregator, Flux's turn proposals interrupt nothing, so `TurnBridge`'s manual `broadcast_interruption()` is required, not a workaround. No official example runs this layout, and it hasn't been run live yet.
+
+### What other tracks need to know
+- **Track 1 (Overlay):** subtitles, toasts, questions and settings are built. `settings.state` gains `personalities` and `voices`. Settings and answers use buttons only, so the keyboard stays with the game.
+- **Track 2 (Capture and perception):** `perception/closeup.py` makes the masked crops, and `encode_jpeg` moved there from the observer. Readers and replay are still yours.
+- **Track 3 (Voice and director):** the director now cancels speech by itself, and `Voice.say()` returns whether it spoke. Filler lines go through TTS for now, so pre-generated barks still need doing.
+- **Track 4 (Memory and learning):** `take_question()` and `wonder()` are now called. Nothing writes the game brief yet, so the talker's context has no game description.
+
 ## 2026-11-07: Haiku watches the screen continuously, and only agreeing frames count
 
 **Status:** accepted by Track 2's owner, for the team to review. Replaces "call vision only on a trigger" for screen awareness. Applies to `brain/perception/`, `brain/llm/` and the director.

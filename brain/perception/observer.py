@@ -11,13 +11,13 @@ import cv2
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import EventBus, GameEvent
 from brain.llm.base import LLMUnavailableError, VisionLLM
+from brain.perception.closeup import encode_jpeg
 from brain.perception.masking import mask_overlay
 from brain.perception.observation import OBSERVATION_PROMPT, Observation
 from brain.perception.tracker import ObservationTracker
 
 log = logging.getLogger(__name__)
 
-JPEG_QUALITY = 90
 MAX_OUTPUT_TOKENS = 500
 REPLY_TIMEOUT_S = 10.0
 # A reply takes about 1.6 s, so at 0.8 s intervals a few overlap. Past this, the model is falling
@@ -39,10 +39,7 @@ def prepare_image(frame: Frame, display_scale: float, padding_px: int, max_edge_
     scale = min(1.0, max_edge_px / max(height, width))
     if scale < 1.0:
         masked = cv2.resize(masked, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    ok, encoded = cv2.imencode(".jpg", masked, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-    if not ok:
-        raise ValueError("Could not encode the frame as JPEG")
-    return encoded.tobytes()
+    return encode_jpeg(masked)
 
 
 class Observer:

@@ -5,7 +5,13 @@ from base64 import standard_b64encode
 
 import anthropic
 
-from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, RateLimiter, SchemaT
+from brain.llm.base import (
+    Detail,
+    LLMEmptyResponseError,
+    LLMUnavailableError,
+    RateLimiter,
+    SchemaT,
+)
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +24,13 @@ class ClaudeClient:
         self._limiter = limiter
 
     async def vision_json(
-        self, prompt: str, image: bytes, media_type: str, schema: type[SchemaT], max_tokens: int
+        self,
+        prompt: str,
+        image: bytes,
+        media_type: str,
+        schema: type[SchemaT],
+        max_tokens: int,
+        detail: Detail = "low",  # Claude reads the image at the size it's sent, so this is unused.
     ) -> SchemaT:
         if not self._limiter.try_acquire():
             raise LLMUnavailableError(f"Local rate limit reached for {self._model}")

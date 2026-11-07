@@ -484,6 +484,13 @@
     },
     "SettingsState": {
       "properties": {
+        "personalities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Personalities",
+          "type": "array"
+        },
         "settings": {
           "$ref": "#/$defs/Settings"
         },
@@ -492,6 +499,13 @@
           "default": "settings.state",
           "title": "Type",
           "type": "string"
+        },
+        "voices": {
+          "items": {
+            "$ref": "#/$defs/VoiceOption"
+          },
+          "title": "Voices",
+          "type": "array"
         }
       },
       "required": [
@@ -545,6 +559,24 @@
         "text"
       ],
       "title": "SubtitleChunk",
+      "type": "object"
+    },
+    "VoiceOption": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "id"
+      ],
+      "title": "VoiceOption",
       "type": "object"
     }
   },

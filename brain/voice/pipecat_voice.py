@@ -31,6 +31,7 @@ from pipecat.frames.frames import (
     InterruptionFrame,
     TTSSpeakFrame,
     TTSTextFrame,
+    TTSUpdateSettingsFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -151,7 +152,10 @@ class PipecatVoice:
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
-        speaks = settings.elevenlabs_api_key is not None and bool(settings.elevenlabs_voice_id)
+        # A voice the player chose earlier beats the configured default.
+        self._default_voice = settings.elevenlabs_voice_id
+        voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
+        speaks = settings.elevenlabs_api_key is not None and bool(voice_id)
         self._speaks = speaks
         transport = LocalAudioTransport(
             LocalAudioTransportParams(
@@ -179,12 +183,12 @@ class PipecatVoice:
             stt,
             self._bridge,
         ]
-        if settings.elevenlabs_api_key is not None and settings.elevenlabs_voice_id:
+        if settings.elevenlabs_api_key is not None and voice_id:
             tts = ElevenLabsTTSService(
                 api_key=settings.elevenlabs_api_key.get_secret_value(),
                 settings=ElevenLabsTTSService.Settings(
                     model=settings.tts_model,
-                    voice=settings.elevenlabs_voice_id,
+                    voice=voice_id,
                 ),
             )
             processors += [tts, transport.output(), SpokenOutputTap(self)]
@@ -196,16 +200,22 @@ class PipecatVoice:
             idle_timeout_secs=None,
         )
 
-    async def say(self, text: str) -> None:
+    async def say(self, text: str) -> bool:
         if self.user_speaking:
             # The director owns priorities; this only stops us talking over the player.
             log.info("Player is talking; dropped: %s", text)
-            return
+            return False
         if not self._speaks:
-            await self._subtitles.say(text)
-            return
+            return await self._subtitles.say(text)
         log.info("Say: %s", text)
         await self._worker.queue_frame(TTSSpeakFrame(text))
+        return True
+
+    async def set_voice(self, voice_id: str | None) -> None:
+        voice_id = voice_id or self._default_voice
+        if self._speaks and voice_id:
+            delta = ElevenLabsTTSService.Settings(voice=voice_id)
+            await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C

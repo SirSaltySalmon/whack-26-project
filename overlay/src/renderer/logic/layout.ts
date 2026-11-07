@@ -106,6 +106,29 @@ export function defaultTextFrame(viewport: Size, stackIndex: number): Frame {
   );
 }
 
+export interface QuestionPlacement {
+  left: number;
+  bottom: number;
+}
+
+const QUESTION_WIDTH = 300; // Keep equal to .question's width in companion.css.
+const QUESTION_GAP = 12;
+
+/** Beside the character, on whichever side has room, so it reads as the character asking. */
+export function questionPlacement(
+  avatar: Frame,
+  viewport: Size,
+): QuestionPlacement {
+  const right = avatar.x + avatar.width + QUESTION_GAP;
+  const fitsRight = right + QUESTION_WIDTH <= viewport.width;
+  return {
+    left: fitsRight
+      ? right
+      : Math.max(0, avatar.x - QUESTION_GAP - QUESTION_WIDTH),
+    bottom: Math.max(0, viewport.height - avatar.y - avatar.height),
+  };
+}
+
 const TAB_SIZE: Size = { width: 180, height: 32 };
 const TAB_GAP = 8;
 

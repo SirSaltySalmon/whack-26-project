@@ -80,12 +80,16 @@ def best_title(query: str, titles: list[str]) -> str:
     return max(named, key=len) if named else titles[0]
 
 
-def card_message(card: WikiCard, card_id: str | None = None) -> CardShow:
+def card_message(
+    card: WikiCard, card_id: str | None = None, *, open_page: bool = False
+) -> CardShow:
+    """Set open_page only for lookups the player asked for, so a page can't change under them."""
     return CardShow(
         card_id=card_id or f"wiki-{uuid.uuid4().hex[:8]}",
         title=card.title,
         body=card.body_text(),
         source_url=card.source_url,
+        page_url=card.source_url if open_page else None,
     )
 
 

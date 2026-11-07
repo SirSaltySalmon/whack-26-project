@@ -51,10 +51,14 @@ export type Options = string[];
 export type QuestionId = string;
 export type Text2 = string;
 export type Type8 = "question.ask";
+export type Personalities = string[];
 export type Personality = string;
 export type Proactive = boolean;
 export type VoiceId = string | null;
 export type Type9 = "settings.state";
+export type Id = string;
+export type Name = string;
+export type Voices = VoiceOption[];
 export type Overlay = OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate;
 export type DisplayScale = number;
 export type Height1 = number;
@@ -146,13 +150,19 @@ export interface QuestionAsk {
   type?: Type8;
 }
 export interface SettingsState {
+  personalities?: Personalities;
   settings: Settings;
   type?: Type9;
+  voices?: Voices;
 }
 export interface Settings {
   personality?: Personality;
   proactive?: Proactive;
   voice_id?: VoiceId;
+}
+export interface VoiceOption {
+  id: Id;
+  name: Name;
 }
 export interface OverlayReady {
   display_scale: DisplayScale;

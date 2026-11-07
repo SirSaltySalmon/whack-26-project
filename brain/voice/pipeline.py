@@ -17,7 +17,11 @@ log = logging.getLogger(__name__)
 
 
 class Voice(Protocol):
-    async def say(self, text: str) -> None: ...
+    async def say(self, text: str) -> bool:
+        """Returns whether the text was accepted to be spoken."""
+        ...
+
+    async def set_voice(self, voice_id: str | None) -> None: ...
 
     async def run(self) -> None: ...
 
@@ -28,11 +32,15 @@ class SubtitleOnlyVoice:
     def __init__(self, link: OverlayLink) -> None:
         self._link = link
 
-    async def say(self, text: str) -> None:
+    async def say(self, text: str) -> bool:
         log.info("Say: %s", text)
         await self._link.send(AvatarState(state="talking"))
         await self._link.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=text, final=True))
         await self._link.send(AvatarState(state="idle"))
+        return True
+
+    async def set_voice(self, voice_id: str | None) -> None:
+        return
 
     async def run(self) -> None:
         return

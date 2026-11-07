@@ -2,12 +2,16 @@
 
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Callable
-from typing import Protocol, TypeVar
+from collections.abc import AsyncIterator, Callable, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
+
+# How closely a vision model should look. Low is the default; high is for when the player asks.
+Detail = Literal["low", "high"]
 
 
 class LLMUnavailableError(RuntimeError):
@@ -24,8 +28,52 @@ class TextLLM(Protocol):
 
 class VisionLLM(Protocol):
     async def vision_json(
-        self, prompt: str, image: bytes, media_type: str, schema: type[SchemaT], max_tokens: int
+        self,
+        prompt: str,
+        image: bytes,
+        media_type: str,
+        schema: type[SchemaT],
+        max_tokens: int,
+        detail: Detail = "low",
     ) -> SchemaT: ...
+
+
+@dataclass(frozen=True)
+class ToolDeclaration:
+    name: str
+    description: str
+    parameters: dict[str, Any]  # JSON Schema
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    args: dict[str, Any]
+    id: str | None = None
+
+
+@dataclass(frozen=True)
+class ToolStep:
+    """One model response: tools it wants to run, or the text of its reply."""
+
+    text: str
+    calls: tuple[ToolCall, ...] = ()
+
+
+class ToolChat(Protocol):
+    """A single turn's conversation. It holds the history, because providers need it back as-is."""
+
+    async def send(self, text: str) -> ToolStep: ...
+
+    async def send_results(
+        self, results: Sequence[tuple[ToolCall, str]], allow_tools: bool = True
+    ) -> ToolStep: ...
+
+
+class ToolLLM(Protocol):
+    def tool_chat(
+        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+    ) -> ToolChat: ...
 
 
 class PointTarget(BaseModel):

@@ -98,9 +98,17 @@ class QuestionAsk(BaseModel):
     options: list[str] = Field(default_factory=list)
 
 
+class VoiceOption(BaseModel):
+    name: str
+    id: str
+
+
 class SettingsState(BaseModel):
     type: Literal["settings.state"] = "settings.state"
     settings: Settings
+    # What the settings panel can offer.
+    personalities: list[str] = Field(default_factory=list)
+    voices: list[VoiceOption] = Field(default_factory=list)
 
 
 # --- Overlay to brain ---

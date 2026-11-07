@@ -5,6 +5,8 @@ from pathlib import Path
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from shared.protocol.messages import VoiceOption
+
 WS_HOST = "127.0.0.1"  # Localhost only: this socket carries game and player data.
 
 
@@ -40,6 +42,8 @@ class Settings(BaseSettings):
 
     tts_model: str = "eleven_flash_v2_5"
     elevenlabs_voice_id: str | None = None
+    # Voices offered in the overlay's settings, as JSON: [{"name": "Rachel", "id": "..."}].
+    voice_options: list[VoiceOption] = Field(default_factory=list)
     talker_max_words: int = 12
 
     stt_model: str = "flux-general-en"
@@ -64,6 +68,16 @@ class Settings(BaseSettings):
     ring_buffer_seconds: int = 10
     ai_image_max_edge_px: int = 1280
     mask_padding_px: int = 8
+    # For when the player asks for a closer look, which can afford more than the continuous reports.
+    closeup_max_edge_px: int = 1920
+    # Older frames mean the game isn't in front, so the partner should say it can't see.
+    look_max_frame_age_s: float = 15.0
+    # Short, because the world may scroll away from whatever was pointed at.
+    pointer_ttl_ms: int = 4000
+
+    # The question budget, so asking the player doesn't turn into nagging.
+    question_gap_s: float = 90.0
+    question_quiet_s: float = 20.0
 
     # Names what memory is filed under. It's data, so the brain has no game-specific logic.
     game_title: str = "Unknown game"
