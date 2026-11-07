@@ -20,6 +20,7 @@ from brain.config import WS_HOST, Settings
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
+from brain.hud import build_hud, live_state
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
@@ -143,15 +144,28 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
 
     voice = create_voice(settings, bus, link)
 
+    # Set below, once the agent tools that find the wiki exist.
+    tools: AgentTools | None = None
+    hud = build_hud(
+        settings,
+        factory,
+        database,
+        buffer,
+        link,
+        bus,
+        observer,
+        lambda: tools.research if tools else None,
+        live=not replay_dir,
+    )
+
     async def talker_context(query: str) -> str:
-        # What the partner hears and sees now, on top of what memory knows. Mood goes first
-        # because it's short and memory cuts this to a fixed length.
-        live = {**voice.live_state(), **(observer.live_state() if observer else {})}
+        # What the partner hears and sees now, on top of what memory knows.
+        observed = observer.live_state() if observer else {}
+        live = live_state(voice.live_state(), hud.readers.live_state(), observed)
         return await memory.context(live, query)
 
     talker = _talker(factory)
     # Replays never spend money on vision, so they get plain replies with no tools.
-    tools = None
     open_page = None
     if talker is not None and not replay_dir:
         tools = AgentTools(
@@ -212,6 +226,9 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             tasks.create_task(_survive("Voice", voice.run()))
             if observer:
                 tasks.create_task(_survive("Observer", observer.run()))
+            tasks.create_task(_survive("Readers", hud.readers.run()))
+            if hud.learner:
+                tasks.create_task(_survive("Learner", hud.learner.run()))
             tasks.create_task(memory.run())
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
@@ -220,6 +237,7 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             if typed:
                 tasks.create_task(_survive("Typing", typed_turns(bus)))
     finally:
+        hud.close()
         if tools and tools.research:
             await tools.research.aclose()
         database.close()

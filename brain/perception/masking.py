@@ -10,6 +10,8 @@ from brain.perception.coords import CropRegion, dip_to_physical
 from brain.perception.profile_schema import Box
 from shared.protocol.messages import Rect
 
+_ROUNDING_SLACK = 1e-6
+
 
 def _frame_pixels(
     rect_dip: Rect, display_scale: float, padding_px: int, region: CropRegion | None
@@ -48,6 +50,20 @@ def mask_overlay(
     return masked
 
 
+def box_pixels(box: Box, width: int, height: int) -> tuple[int, int, int, int]:
+    """Left, top, right and bottom in frame pixels, clipped to the frame.
+
+    Rounds outward, so a reader's crop can't reach a pixel box_is_masked didn't consider.
+    """
+    # Without the tolerance, float error such as 220.00000000000003 would round out a whole pixel.
+    return (
+        max(0, math.floor(box.x * width + _ROUNDING_SLACK)),
+        max(0, math.floor(box.y * height + _ROUNDING_SLACK)),
+        min(width, math.ceil((box.x + box.w) * width - _ROUNDING_SLACK)),
+        min(height, math.ceil((box.y + box.h) * height - _ROUNDING_SLACK)),
+    )
+
+
 def box_is_masked(box: Box, frame: Frame, display_scale: float, padding_px: int) -> bool:
     """True if any overlay rectangle overlaps this box. Uses frame.overlay_rects and frame.region.
 
@@ -56,11 +72,7 @@ def box_is_masked(box: Box, frame: Frame, display_scale: float, padding_px: int)
     disagree about what's covered.
     """
     height, width = frame.image.shape[:2]
-    # Round outward too, so a crop can't reach a pixel this check didn't consider.
-    box_left = math.floor(box.x * width)
-    box_top = math.floor(box.y * height)
-    box_right = math.ceil((box.x + box.w) * width)
-    box_bottom = math.ceil((box.y + box.h) * height)
+    box_left, box_top, box_right, box_bottom = box_pixels(box, width, height)
     for rect_dip in frame.overlay_rects:
         left, top, right, bottom = _frame_pixels(rect_dip, display_scale, padding_px, frame.region)
         if left < box_right and box_left < right and top < box_bottom and box_top < bottom:

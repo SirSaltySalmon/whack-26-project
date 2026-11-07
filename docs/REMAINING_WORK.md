@@ -16,8 +16,8 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP1](#wp1-test-fakes-and-tests) | Fakes and the tests in the test plan | `CLAUDE.md` testing rule | **Done**, apart from WP8's tests | All | WP0 |
 | [WP2](#wp2-test-tooling) | Typed turns, overlay demo | Testing with no mic | **Done** | Shared, 1 | WP0 |
 | [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | Required | 2 | WP0 |
-| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | Required | 2 | WP0 |
-| [WP5](#wp5-learner) | Game brief, regions, reader specs | Must-have 3 | Required | 4 | WP0, works with WP4 |
+| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | **Built**, not yet run live. Scene matching skipped | 2 | WP0 |
+| [WP5](#wp5-learner) | Game brief, regions, reader specs | Must-have 3 | **Built**, not yet run live | 4 | WP0, works with WP4 |
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | Required | 3 | WP0 |
 | [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | Required | All | Keys, a game |
 | [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | Required | 1, 3, 4 | WP0 |

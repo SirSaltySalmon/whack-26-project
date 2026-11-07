@@ -128,6 +128,11 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] With hints off, about 10 reactions and questions stay free of tips and of anything not yet found. This depends on the model following its prompt, so read them
 - [ ] Pointer accuracy on HUD and on moving world targets, with `pointer_ttl_ms` tuned
 - [ ] Terraria's pixel font reads well in an enlarged `look_closer` crop
+- [ ] Learning: with `GAME_TITLE` set and no profile, the log shows `Learning where the HUD is`, then `Reader health (...) kept` or `rejected` with a reason, and a "Learned where your ..." toast. It makes at most 6 Gemini calls
+- [ ] With `--debug-regions`, boxes sit on the HUD elements, turn grey under a card dragged over them, and show values that follow the game
+- [ ] Taking damage below 25% logs `Reader health: health_low` and the reaction comes within about a second. The observer doesn't raise a second `health_low`
+- [ ] Resizing the game window logs `Readers paused` and a relearn follows
+- [ ] `scripts/export_profile.py` saves a fixture, and `PROFILE_FIXTURE` loads it on a fresh database with a `SEEDED profile` warning
 - [ ] A 30-minute session: no drift in replies, cost near the estimate, and notes appear in the vault
 
 ## Known gaps these tests won't close

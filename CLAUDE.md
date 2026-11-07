@@ -102,6 +102,7 @@ python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --replay <session-dir>     # run from a recorded session
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
+python scripts/export_profile.py          # save the learned HUD as a fixture for PROFILE_FIXTURE
 python scripts/save_screenshots.py        # save test screenshots of the game
 ruff check --fix brain; ruff format brain
 npm --prefix overlay install
@@ -172,8 +173,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [x] Stage 0, apart from what needs a mouse or a visible window
 
 **Not started**
-- [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
-- [ ] Learner: game brief, learned regions, compiled readers (Track 4)
+- [ ] Run the learner and readers live (WP4 and WP5 are built and tested on synthetic frames). Scene matching is skipped
 - [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
 - [ ] Pre-generated bark audio per personality. Filler lines go through TTS for now (Track 3)
 - [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
