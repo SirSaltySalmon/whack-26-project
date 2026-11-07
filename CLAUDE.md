@@ -86,7 +86,7 @@ Four people own one track each. Stay inside your track; say so before editing an
 - Every vendor sits behind one interface, so a swap is a one-line config change.
 
 ## Commands
-`brain/` has starter code and `overlay/` has only folders and a dependency list, so the overlay `run` commands are still planned. Update this section as they change. `uv` isn't installed on the main dev machine, so use venv and pip.
+Update this section as commands change. `uv` isn't installed on the main dev machine, so use venv and pip.
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
@@ -97,7 +97,10 @@ ruff check --fix brain; ruff format brain
 npm --prefix overlay install
 npm --prefix overlay run dev
 npm --prefix overlay run typecheck
+npm --prefix overlay test
 npm --prefix overlay run format
+npm --prefix overlay run gen:protocol      # after any change in shared/protocol/, with the venv active
+python scripts/overlay_demo.py             # drives the overlay with no game, mic or API keys
 ```
 
 ## Testing
