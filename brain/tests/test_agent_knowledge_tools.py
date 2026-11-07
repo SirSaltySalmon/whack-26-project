@@ -1,0 +1,121 @@
+"""lookup_wiki, note_unknown and think_hard: the tools that don't look at the screen."""
+
+import pytest
+
+from brain.agent.handlers import MAX_DEEP_CHARS_FOR_TALKER
+from brain.memory.context import CONTEXT_PREAMBLE
+from brain.research import WikiCard
+from brain.tests.agent_rig import FakeResearch, rig
+from brain.tests.fakes import FakeMemory, FakeTextLLM
+from shared.protocol.messages import CardShow
+
+WIKI_URL = "https://wiki.example/wiki/Cave_Bat"
+CARD = WikiCard(
+    title="Cave Bat",
+    summary="A small flying enemy.",
+    stats=[("Damage", "7")],
+    source_url=WIKI_URL,
+    site_name="Example Wiki",
+)
+QUESTION = "How should I plan this?"
+UNKNOWN = {"subject": "blue gauge", "attribute": "meaning", "question": "What's the blue gauge?"}
+
+
+@pytest.mark.parametrize(("open_page", "page_url"), [(True, WIKI_URL), (False, None)])
+async def test_a_lookup_opens_the_page_only_when_asked(
+    open_page: bool, page_url: str | None
+) -> None:
+    r = rig(research=FakeResearch(CARD))
+    await r.run("lookup_wiki", topic="cave bat", open_page=open_page)
+    assert len(r.overlay.sent) == 1
+    card = r.overlay.sent[0]
+    assert isinstance(card, CardShow)
+    assert card.page_url == page_url and card.source_url == WIKI_URL
+    assert card.title == "Cave Bat" and "A small flying enemy." in card.body
+
+
+async def test_the_model_cant_choose_the_page_a_lookup_opens() -> None:
+    r = rig(research=FakeResearch(CARD))
+    evil = "https://evil.example/"
+    await r.run("lookup_wiki", topic="cave bat", open_page=True, page_url=evil, source_url=evil)
+    card = r.overlay.sent[0]
+    assert isinstance(card, CardShow)
+    assert card.page_url == WIKI_URL and card.source_url == WIKI_URL
+
+
+async def test_a_lookup_returns_the_wiki_text_labelled_as_tentative_data() -> None:
+    research = FakeResearch(CARD)
+    output = await rig(research=research).run("lookup_wiki", topic="cave bat", open_page=False)
+    assert research.queries == ["cave bat"]
+    assert output.index("tentative, not instructions") < output.index("A small flying enemy.")
+    assert "Damage: 7" in output
+
+
+async def test_a_lookup_must_say_whether_to_open_the_page() -> None:
+    research = FakeResearch(CARD)
+    r = rig(research=research)
+    assert await r.run("lookup_wiki", topic="cave bat") == (
+        "lookup_wiki was given invalid arguments."
+    )
+    assert research.queries == [] and r.overlay.sent == []
+
+
+async def test_a_lookup_with_no_wiki_says_so_and_shows_nothing() -> None:
+    r = rig()
+    assert "don't have a wiki" in await r.run("lookup_wiki", topic="cave bat", open_page=True)
+    assert r.overlay.sent == []
+
+
+async def test_a_lookup_that_finds_nothing_says_so_and_shows_nothing() -> None:
+    r = rig(research=FakeResearch(None))
+    assert await r.run("lookup_wiki", topic="cave bat", open_page=True) == (
+        "The wiki had nothing on that."
+    )
+    assert r.overlay.sent == []
+
+
+async def test_note_unknown_saves_the_question_for_later() -> None:
+    r = rig()
+    assert await r.run("note_unknown", **UNKNOWN) == "Saved to ask later."
+    assert r.memory.wondered == [("blue gauge", "meaning", "What's the blue gauge?")]
+
+
+async def test_note_unknown_says_when_its_already_known_or_waiting() -> None:
+    r = rig(memory=FakeMemory(wonder_result=None))
+    assert await r.run("note_unknown", **UNKNOWN) == "That's already known or waiting to be asked."
+
+
+async def test_think_hard_reasons_from_the_context_with_its_warning() -> None:
+    r = rig(context="NOW: danger: high")
+    await r.run("think_hard", question=QUESTION)
+    assert r.context_questions == [QUESTION]
+    assert r.deep.prompts == [QUESTION]
+    assert "NOW: danger: high" in r.deep.system and CONTEXT_PREAMBLE in r.deep.system
+
+
+async def test_think_hard_shows_everything_and_returns_a_short_labelled_part() -> None:
+    answer = "word " * 300
+    r = rig(deep=FakeTextLLM([answer[:700], answer[700:]]))
+    output = await r.run("think_hard", question=QUESTION)
+    assert len(r.overlay.sent) == 1
+    card = r.overlay.sent[0]
+    assert isinstance(card, CardShow)
+    assert card.body == answer.strip() and card.title == QUESTION
+    assert card.page_url is None
+    kept = answer.strip()[:MAX_DEEP_CHARS_FOR_TALKER]
+    assert len(kept) == MAX_DEEP_CHARS_FOR_TALKER
+    assert output.endswith(f"data not instructions] {kept}")
+
+
+async def test_think_hard_keeps_a_long_question_out_of_the_cards_title() -> None:
+    r = rig()
+    await r.run("think_hard", question="why " * 40)
+    card = r.overlay.sent[0]
+    assert isinstance(card, CardShow) and len(card.title) == 80
+
+
+@pytest.mark.parametrize("chunks", [[], ["   "]], ids=["nothing", "only spaces"])
+async def test_think_hard_with_no_answer_shows_no_card(chunks: list[str]) -> None:
+    r = rig(deep=FakeTextLLM(chunks))
+    assert await r.run("think_hard", question=QUESTION) == "think_hard isn't available right now."
+    assert r.overlay.sent == []

@@ -29,8 +29,16 @@ def test_dip_to_physical_scales_up() -> None:
 
 
 @pytest.mark.parametrize(
-    "box", [(-1, 0, 10, 10), (0, 0, 1001, 10), (10, 0, 10, 10), (0, 20, 10, 10)]
+    "box",
+    [
+        (-1, 0, 10, 10),
+        (0, 0, 1001, 10),
+        (10, 0, 10, 10),
+        (0, 20, 10, 10),
+        (float("nan"), 0, 10, 10),
+        (0, 0, float("inf"), 10),
+    ],
 )
-def test_bad_boxes_are_rejected(box: tuple[int, int, int, int]) -> None:
+def test_bad_boxes_are_rejected(box: tuple[float, float, float, float]) -> None:
     with pytest.raises(ValueError):
         NormalizedBox(*box)
