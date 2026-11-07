@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 log = logging.getLogger(__name__)
 
 
@@ -46,6 +48,13 @@ class CardClosedByPlayer(Event):
 class QuestionAnswered(Event):
     question_id: str
     answer: str
+
+
+@dataclass(frozen=True)
+class SettingsChanged(Event):
+    """The player changed a setting. Typed loosely so this module stays free of the protocol."""
+
+    settings: BaseModel
 
 
 class EventBus:

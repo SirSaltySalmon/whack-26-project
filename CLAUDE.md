@@ -109,7 +109,7 @@ Replay mode is the main test harness: it records frames, audio and events to dis
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`
-- Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`
+- Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `GAME_TITLE` (the game memory is filed under)
 
 ## Gotchas
 - **dxcam:** captures per monitor. `grab()` returns `None` when there's no new frame, so a still screen isn't an error. Its built-in buffer defaults to 8 frames, and zero-copy views can be overwritten, so copy frames into our own ring buffer.
