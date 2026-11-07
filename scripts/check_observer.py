@@ -24,6 +24,7 @@ from brain.capture.window import GameWindow  # noqa: E402
 from brain.config import Settings  # noqa: E402
 from brain.events import EventBus, GameEvent  # noqa: E402
 from brain.llm.factory import LLMFactory  # noqa: E402
+from brain.perception.focus import Focus, FocusIntervals  # noqa: E402
 from brain.perception.observation import Observation  # noqa: E402
 from brain.perception.observer import Observer  # noqa: E402
 from brain.perception.tracker import ObservationTracker  # noqa: E402
@@ -68,7 +69,14 @@ async def main() -> int:
         LLMFactory(settings).observer(),
         bus,
         ObservationTracker(),
-        settings.observer_interval_s,
+        Focus(
+            FocusIntervals(
+                settings.observer_interval_low_s,
+                settings.observer_interval_medium_s,
+                settings.observer_interval_high_s,
+            ),
+            settings.focus_hold_s,
+        ),
         settings.ai_image_max_edge_px,
         settings.mask_padding_px,
         on_observation=show,

@@ -32,7 +32,7 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 
 **Data ingestion**
 - Capture locally at about 5 fps into a full-resolution, 10-second ring buffer in RAM.
-- Haiku reports on the newest frame every 0.8 s while the game is in front. See [docs/DECISIONS.md](docs/DECISIONS.md). A report counts only once consecutive frames agree (`brain/perception/tracker.py`), and even then it's an observation, not a fact.
+- Haiku reports on the newest frame every 1.3 s while the game is in front, or every 0.8 s or 0.6 s for 5 s after a boost (`brain/perception/focus.py`). Danger boosts it by rule and keeps it boosted while it lasts; a player turn can boost it with `watch_closely`. See [docs/DECISIONS.md](docs/DECISIONS.md). A report counts only once consecutive frames agree (`brain/perception/tracker.py`), and even then it's an observation, not a fact.
 - Call Gemini vision only on a trigger: learning the game, the player asking, or an event. Free-tier quotas won't sustain streaming.
 - Send downscaled frames at `media_resolution` low by default. Send full-resolution crops only when the player asks or an event fires.
 - Send every LLM call through a local per-model rate limiter that refuses rather than waits. When over quota, fall back to cached barks or stay quiet.

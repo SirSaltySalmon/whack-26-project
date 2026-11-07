@@ -1,4 +1,7 @@
-"""Asks the vision model about the newest frame on a timer, and publishes what gets confirmed."""
+"""Asks the vision model about the newest frame on a timer, and publishes what gets confirmed.
+
+The timer runs at the rate Focus sets. Danger boosts it here, by rule, with no extra model call.
+"""
 
 import asyncio
 import logging
@@ -12,17 +15,18 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import EventBus, GameEvent
 from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.perception.closeup import encode_jpeg
+from brain.perception.focus import Focus
 from brain.perception.masking import mask_overlay
 from brain.perception.observation import OBSERVATION_PROMPT, Observation
-from brain.perception.tracker import ObservationTracker
+from brain.perception.tracker import ELEVATED, ObservationTracker
 
 log = logging.getLogger(__name__)
 
 MAX_OUTPUT_TOKENS = 500
 REPLY_TIMEOUT_S = 10.0
-# A reply takes about 1.6 s, so at 0.8 s intervals a few overlap. Past this, the model is falling
-# behind and more requests would only pay for out-of-date answers.
-MAX_IN_FLIGHT = 4
+# A reply takes about 1.6-2.7 s, so at the fastest interval, 0.6 s, a few overlap. Past this, the
+# model is falling behind and more requests would only pay for out-of-date answers.
+MAX_IN_FLIGHT = 5
 # An older frame means capture stopped, usually because the game isn't in front.
 MAX_FRAME_AGE_S = 2.0
 
@@ -50,7 +54,7 @@ class Observer:
         vision: VisionLLM,
         bus: EventBus,
         tracker: ObservationTracker,
-        interval_s: float,
+        focus: Focus,
         max_edge_px: int,
         mask_padding_px: int,
         on_observation: Callable[[Observation, float], None] | None = None,
@@ -60,7 +64,7 @@ class Observer:
         self._vision = vision
         self._bus = bus
         self._tracker = tracker
-        self._interval_s = interval_s
+        self.focus = focus
         self._max_edge_px = max_edge_px
         self._padding_px = mask_padding_px
         self._on_observation = on_observation
@@ -70,15 +74,32 @@ class Observer:
         self._unavailable = False
 
     def live_state(self) -> dict[str, str]:
-        return self._tracker.live_state(time.monotonic())
+        # Focus keeps its own clock, so tests can move it.
+        return {**self._tracker.live_state(time.monotonic()), **self.focus.live_state()}
 
     async def run(self) -> None:
-        log.info("Observer reporting on a frame every %.1f s", self._interval_s)
+        intervals = self.focus.intervals
+        log.info(
+            "Observer reporting every %.1f s, faster on a boost (%.1f s, %.1f s)",
+            intervals.low_s,
+            intervals.medium_s,
+            intervals.high_s,
+        )
+        last_tick = float("-inf")
         try:
             while True:
-                started = time.monotonic()
-                self._tick(started)
-                await asyncio.sleep(max(0.0, self._interval_s - (time.monotonic() - started)))
+                now = time.monotonic()
+                due = last_tick + self.focus.interval_s()
+                if now >= due:
+                    last_tick = now
+                    self._tick(now)
+                    continue
+                # A boost mid-wait shortens the wait, rather than waiting out the slow interval.
+                self.focus.changed.clear()
+                try:
+                    await asyncio.wait_for(self.focus.changed.wait(), due - now)
+                except TimeoutError:
+                    pass
         finally:
             for task in self._tasks:
                 task.cancel()
@@ -136,6 +157,19 @@ class Observer:
         self._last_applied_ts = frame_ts
         if self._on_observation:
             self._on_observation(observation, frame_ts)
-        for change in self._tracker.update(observation, frame_ts):
+        changes = self._tracker.update(observation, frame_ts)
+        for change in changes:
             log.info("Confirmed %s: %s", change.name, change.data)
             self._bus.publish(GameEvent(change.name, change.data))
+        self._refocus(observation, [change.name for change in changes])
+
+    def _refocus(self, observation: Observation, changes: list[str]) -> None:
+        """Keeps watching closely while there's danger, then drops back once the hold runs out."""
+        danger = self._tracker.danger
+        if danger is not None:
+            self.focus.boost("high" if danger == "high" else "medium", "fight")
+        elif observation.danger_level in ELEVATED:
+            # One frame isn't believed, but looking again sooner confirms or clears it faster.
+            self.focus.boost("medium", "possible danger")
+        if "health_low" in changes:
+            self.focus.boost("high", "low health")

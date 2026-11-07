@@ -8,7 +8,9 @@ from typing import Any
 
 import uvicorn
 
+from brain.agent.focus_tool import watch_tool
 from brain.agent.handlers import AgentLimits, AgentTools
+from brain.agent.tools import ToolRegistry
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import FrameSource, default_live_source
@@ -24,6 +26,7 @@ from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
+from brain.perception.focus import Focus, FocusIntervals
 from brain.perception.observer import Observer
 from brain.perception.tracker import ObservationTracker
 from brain.replay.source import ReplayFrameSource
@@ -58,10 +61,24 @@ def _observer(
         vision,
         bus,
         ObservationTracker(),
-        settings.observer_interval_s,
+        Focus(
+            FocusIntervals(
+                settings.observer_interval_low_s,
+                settings.observer_interval_medium_s,
+                settings.observer_interval_high_s,
+            ),
+            settings.focus_hold_s,
+        ),
         settings.ai_image_max_edge_px,
         settings.mask_padding_px,
     )
+
+
+def _registry(tools: AgentTools | None, observer: Observer | None) -> ToolRegistry | None:
+    if tools is None:
+        return None
+    # Only offered while something is watching, or the boost would do nothing.
+    return tools.registry().including(watch_tool(observer.focus)) if observer else tools.registry()
 
 
 async def _find_wiki(settings: Settings, database: Database, tools: AgentTools) -> None:
@@ -157,7 +174,7 @@ async def run(settings: Settings, replay_dir: Path | None = None) -> None:
         context=talker_context,
         on_spoken=memory.record_partner_turn,
         agent=talker if tools else None,
-        tools=tools.registry() if tools else None,
+        tools=_registry(tools, observer),
         personalities=personalities,
         take_question=memory.take_question,
         send=link.send,

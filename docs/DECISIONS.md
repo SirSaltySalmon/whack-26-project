@@ -2,6 +2,21 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+
+## 2026-11-07: Look less often by default, and faster for a few seconds when it matters
+
+**Status:** accepted by the project owner, who asked for the levels; the details below are ours. Changes the 0.8 s rate in the Haiku entry below. Applies to `brain/perception/focus.py`, `brain/perception/observer.py`, `brain/agent/focus_tool.py` and `brain/config.py`.
+
+Most of the time nothing is happening, so reporting every 0.8 s paid for frames that said the same thing.
+
+- **Three levels:** low every 1.3 s (the default), medium every 0.8 s and high every 0.6 s. A boost lasts 5 s (`focus_hold_s`) and then drops back by itself. Repeating a boost restarts the hold rather than adding to it.
+- **Danger boosts by rule, with no model call.** One frame reporting danger boosts to medium once its reply arrives, so the frames that follow come sooner. Confirmed danger holds medium or high for as long as it lasts, and low health holds high. This covers most exciting moments without the talker doing anything.
+- **The talker can boost with `watch_closely`,** for what rules can't see, such as the player saying "watch this". Tools only run on player turns, so it can't be called more often than the player talks. It's a quick tool, so it doesn't say "one sec" or block a barge-in. Its only extra cost is the follow-up model call any tool needs.
+- **The talker is told, not prompted.** While a boost runs, and for 15 s after it ends, its context says so. The end isn't an event, so it never makes the partner speak, and the wording tells it there's nothing to act on.
+- **A boost wakes the observer early.** A boost during a 1.3 s wait reports straight away, rather than finishing the wait.
+- **Costs:** about $1.15 an hour at low, $1.85 at medium and $2.45 at high. The Haiku spending cap rose from 90 to 120 a minute to fit high plus `look_closer`. Up to 5 requests can be in flight, up from 4.
+- **Slower to notice danger at low:** the second, confirming frame goes out 1.3 s after the first rather than 0.8 s, before the first reply can boost anything, so confirmed danger arrives about 0.5 s later. Lower `observer_interval_low_s` if that's too slow on stage.
+
 ## 2026-11-07: Replies stay short unless the player asks for more
 
 **Status:** accepted by the project owner. Replaces the 12-word hard cap (decision 2 of the voice entry below still holds: a reply is collected before TTS). Applies to `brain/director/talker.py`, `brain/agent/turn.py` and `brain/config.py`.

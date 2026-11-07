@@ -8,6 +8,7 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import EventBus, GameEvent
 from brain.llm.base import LLMUnavailableError, SchemaT
 from brain.perception.coords import CropRegion
+from brain.perception.focus import Focus, FocusIntervals
 from brain.perception.observation import Observation
 from brain.perception.observer import MAX_FRAME_AGE_S, MAX_IN_FLIGHT, Observer, prepare_image
 from brain.perception.tracker import ObservationTracker
@@ -31,6 +32,10 @@ def report(level: str = "medium") -> Observation:
         notable=None,
         unsure=[],
     )
+
+
+def focus() -> Focus:
+    return Focus(FocusIntervals(1.3, 0.8, 0.6), 5.0)
 
 
 class FakeVision:
@@ -60,7 +65,7 @@ def make_frame(ts: float | None = None) -> Frame:
 def observer(vision: FakeVision, bus: EventBus | None = None) -> tuple[Observer, RingBuffer]:
     buffer = RingBuffer(5)
     built = Observer(
-        buffer, Overlay(), vision, bus or EventBus(), ObservationTracker(), 0.8, 1280, 0
+        buffer, Overlay(), vision, bus or EventBus(), ObservationTracker(), focus(), 1280, 0
     )
     return built, buffer
 
@@ -133,7 +138,7 @@ async def test_late_replies_are_dropped() -> None:
         FakeVision(),
         EventBus(),
         ObservationTracker(),
-        0.8,
+        focus(),
         1280,
         0,
         on_observation=lambda _, ts: seen.append(ts),

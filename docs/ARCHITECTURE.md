@@ -11,7 +11,7 @@ Vendor details were checked on 2026-11-07. Re-measure latency on the demo machin
 ## Data flow
 
 ```
-dxcam ─► ring buffer (full-res, 10s) ─┬─► mask overlay rects ─► downscale ─► HAIKU OBSERVER (every 0.8 s) ─► tracker (agreeing frames only) ─┬─► live state in RAM
+dxcam ─► ring buffer (full-res, 10s) ─┬─► mask overlay rects ─► downscale ─► HAIKU OBSERVER (every 1.3 s, 0.8 or 0.6 s on a boost) ─► tracker (agreeing frames only) ─┬─► live state in RAM
                                       │                                                                                                      └─► EVENT BUS
                                       ├─► (not built) scene match ─► compiled readers (OCR/colour) ─► EVENT BUS
                                       └─► player turns only: masked full-res crop ─► TOOLS
@@ -37,7 +37,7 @@ Overlay reports element rectangles back to the brain ─► used for masking
 | **Overlay / UI** | Electron, React, Vite; Motion for the pointer; Rive or Lottie for the avatar, CSS if short on time | `setIgnoreMouseEvents(true, {forward: true})` makes the overlay click-through but still hoverable, so interaction switches on when the cursor reaches a card. Requires the game in borderless or windowed mode | Tauri (no `forward` option) |
 | **Brain** | Python 3.12, asyncio, FastAPI WebSocket | Voice, CV and LLM SDKs in one language and event loop | Node backend (weaker CV and voice ecosystem) |
 | **Capture** | dxcam (`ra1nty/DXcam`, wheels for Python 3.10-3.14); mss as fallback | Fast DXGI capture into our own ring buffer, with downscaled copies for the AI | Electron `desktopCapturer` (frames would have to be piped to Python) |
-| **Screen awareness** | `claude-haiku-5-5` on the newest frame every 0.8 s, reports count only once frames agree | Works in any game with nothing learned first. A confirmed report is about 2.4 s old. See the [decision log](DECISIONS.md) | Moondream (missed most fights and all health values); Gemini free tier (can't sustain the rate) |
+| **Screen awareness** | `claude-haiku-5-5` on the newest frame every 1.3 s, or 0.8-0.6 s for 5 s after a boost from danger or the `watch_closely` tool; reports count only once frames agree | Works in any game with nothing learned first. A confirmed report is about 2.4 s old. See the [decision log](DECISIONS.md) | Moondream (missed most fights and all health values); Gemini free tier (can't sustain the rate) |
 | **Local perception** | OpenCV and numpy for colour readers and frame diffs; `imagehash` for scene matching; RapidOCR. **Not built yet** | Readers compiled from learned regions would give reactions under a second, with no LLM | — |
 | **Voice pipeline** | Pipecat with local audio transport | Easy to inject director events, reports per-turn latency. The pipeline holds no LLM: the director calls the talker and passes text to TTS | LiveKit Agents (turn model tied to LiveKit); Gemini Live and OpenAI Realtime (less control over when it speaks) |
 | **STT and end of turn** | Deepgram Flux via `DeepgramFluxSTTService` | Transcription and turn detection in one model. `StartOfTurn` drives barge-in, and `enable_eager_end_of_turn` can cut latency | Nova-3 with Smart Turn; Silero on the voice path (Flux doesn't need it) |
@@ -88,7 +88,7 @@ Masks are filled with black, so a reader whose region is under an overlay elemen
 
 ## Player turns and tools
 
-The director starts a player turn in its one speech slot. The model replies directly, which takes one call, or asks for tools. On its first tool call the partner says a short filler line, because results take seconds. A turn makes at most three model calls, and the last has tools turned off so it ends in words.
+The director starts a player turn in its one speech slot. The model replies directly, which takes one call, or asks for tools. On its first slow tool call the partner says a short filler line, because results take seconds. Quick tools, such as `watch_closely`, skip it. A turn makes at most three model calls, and the last has tools turned off so it ends in words.
 
 | Tool | What it does |
 |---|---|
@@ -97,9 +97,23 @@ The director starts a player turn in its one speech slot. The model replies dire
 | `lookup_wiki` | Shows a card. `open_page` opens the real site, and the URL always comes from the wiki client, never the model |
 | `note_unknown` | Opens a question for later instead of guessing |
 | `think_hard` | Asks the deep model, shows the full answer in a text card and gives the talker a short version to speak |
+| `watch_closely` | Makes the observer report every 0.8 s (medium) or 0.6 s (high) instead of 1.3 s, for 5 s, then drops back by itself. For moments rules can't see, such as "watch this": danger already boosts by rule. Offered only while the observer runs |
 | `read_open_page` | **Not built.** Reads more of the wiki page the player has open. See WP8 in [REMAINING_WORK.md](REMAINING_WORK.md) |
 
-Tool results reach the model labelled as data. Vision answers are observations and aren't stored as facts. A barge-in cancels the turn, but anything it has already shown stays up.
+Tool results reach the model labelled as data. Vision answers are observations and aren't stored as facts. A barge-in cancels a turn that hasn't started a slow tool, but anything it has already shown stays up. A turn that has started one finishes and answers once the player stops talking.
+
+### Focus: how often the observer looks
+
+`brain/perception/focus.py` sets the observer's rate. It holds one boost per reason, the highest level wins, and each boost expires 5 s (`focus_hold_s`) after it was last renewed.
+
+| Reason | Level | Set by |
+|---|---|---|
+| `possible danger` | medium | One frame reporting danger, so the frames that follow come sooner |
+| `fight` | medium or high, matching confirmed danger | Every report while danger is confirmed, so it lasts the whole fight |
+| `low health` | high | The `health_low` event |
+| `player turn` | medium or high | The `watch_closely` tool |
+
+The talker sees `watching` in its live state while a boost runs and for 15 s after it ends. That's context, not an event, so the end of a boost never makes the partner speak.
 
 Questions also go through the director: on a timer, it asks only when the overlay is connected, things have been quiet, enough time has passed since the last question and there's no danger.
 

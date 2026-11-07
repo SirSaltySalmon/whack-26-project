@@ -36,6 +36,8 @@ class Tool:
     # Takes an instance of input_model. Returns text for the model, labelled as untrusted data.
     handler: Callable[[Any, TurnContext], Awaitable[str]]
     timeout_s: float = 10.0
+    # Finishes at once, so it needs no "one sec" line and nothing to survive a barge-in for.
+    quick: bool = False
 
 
 class ToolRegistry:
@@ -47,6 +49,13 @@ class ToolRegistry:
             ToolDeclaration(tool.name, tool.description, tool.input_model.model_json_schema())
             for tool in self._tools.values()
         ]
+
+    def is_quick(self, call: ToolCall) -> bool:
+        tool = self._tools.get(call.name)
+        return tool is not None and tool.quick
+
+    def including(self, *tools: Tool) -> "ToolRegistry":
+        return ToolRegistry([*self._tools.values(), *tools])
 
     async def run(self, call: ToolCall, turn: TurnContext) -> str:
         """Always returns text. A failed tool is something the model can tell the player about."""

@@ -127,7 +127,7 @@ Use headphones.
 - [ ] Spoken turn, end to end
 - [ ] Subtitles arrive in step with the audio
 - [ ] Interrupting mid-sentence stops the audio and ends the subtitle
-- [ ] Interrupting during a tool call drops the reply, and a card already shown stays up
+- [ ] Interrupting a plain reply drops it. Talking during `look_closer` doesn't: the answer comes once you stop, and a card already shown stays up
 - [ ] `End of turn to first audio` is under 1 s for a plain reply. If not, stream by sentence and compare TTS models
 - [ ] Switching voice in settings changes the next line, and survives a restart (needs `VOICE_OPTIONS`)
 - [ ] A quiet stretch brings up a question. Answering by button or out loud shows a memory toast, and it doesn't ask during danger
@@ -138,6 +138,9 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] The overlay draws over Terraria, and OBS Display Capture records it
 - [ ] Frames contain only the game, and our own UI is masked (save one with `scripts/save_screenshots.py`)
 - [ ] A fight raises an observer event, then a reaction, with hints on or off
+- [ ] Focus: calm play logs reports about every 1.3 s. A fight logs `Watching the game at medium focus` (or high), and `low` again about 5 s after it ends
+- [ ] "Watch this" before something exciting calls `watch_closely` with no filler line, and a plain chat turn never calls it. It isn't called again while a boost runs
+- [ ] After a boost ends, the partner doesn't remark on it
 - [ ] With hints off, about 10 reactions and questions stay free of tips and of anything not yet found. This depends on the model following its prompt, so read them
 - [ ] Pointer accuracy on HUD and on moving world targets, with `pointer_ttl_ms` tuned
 - [ ] Terraria's pixel font reads well in an enlarged `look_closer` crop

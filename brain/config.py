@@ -31,7 +31,12 @@ class Settings(BaseSettings):
     # resolution, long enough that players talked over it. Falls back to vision_model
     # without ANTHROPIC_API_KEY.
     closeup_model: str = "claude-haiku-5-5"
-    observer_interval_s: float = 0.8
+    # Seconds between screen reports. Low is the default; a boost raises it to medium or high
+    # for focus_hold_s, renewed while danger lasts. See brain/perception/focus.py.
+    observer_interval_low_s: float = 1.3
+    observer_interval_medium_s: float = 0.8
+    observer_interval_high_s: float = 0.6
+    focus_hold_s: float = 5.0
 
     # Requests per minute we allow ourselves, per model. These are cautious placeholders: Google
     # doesn't publish free-tier numbers, so set them from your project's AI Studio rate limit page.
@@ -39,8 +44,9 @@ class Settings(BaseSettings):
         default_factory=lambda: {
             "gemini-3.5-flash-lite": 10,
             "gemini-3.6-flash": 6,
-            # One frame per 0.8 s is 75 a minute. This is our own spending cap, not a quota.
-            "claude-haiku-5-5": 90,
+            # One frame per 0.6 s at high focus is 100 a minute, plus look_closer. This is our
+            # own spending cap, not a quota.
+            "claude-haiku-5-5": 120,
         }
     )
 
