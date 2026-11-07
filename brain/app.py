@@ -18,7 +18,7 @@ from brain.capture.source import FrameSource, default_live_source, live_frame_sc
 from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
 from brain.director.director import Director
-from brain.director.personalities import load_personalities
+from brain.director.personalities import PersonalityBook, load_personalities
 from brain.events import EventBus
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
@@ -35,6 +35,7 @@ from brain.research import ExaSearch, WikiResearch
 from brain.research.open_page import OpenPage
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
+from brain.voice.barks import BarkBank, ElevenLabsSynth
 from brain.voice.pipeline import create_voice
 from brain.voice.typed import typed_turns
 from shared.protocol.messages import Settings as OverlaySettings
@@ -97,6 +98,14 @@ async def _find_wiki(settings: Settings, database: Database, tools: AgentTools) 
         log.warning("No wiki found for %s", title)
     else:
         log.info("Using the wiki at %s", tools.research.site.api_url)
+
+
+def _bark_bank(settings: Settings, book: PersonalityBook) -> BarkBank:
+    key = settings.elevenlabs_api_key
+    if key is None:
+        log.info("No ElevenLabs key, so barks are never generated; cached ones still play")
+    synth = ElevenLabsSynth(key.get_secret_value()) if key else None
+    return BarkBank(book, synth, settings.barks_dir, settings.tts_model, settings.tts_sample_rate)
 
 
 async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
@@ -179,6 +188,12 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         open_page = OpenPage(bus, link.send, wiki_host)
         tools.open_page = open_page
 
+    barks = _bark_bank(settings, personalities)
+
+    def voice_id() -> str | None:
+        # Matches the voice PipecatVoice picks: the player's choice, then the configured default.
+        return link.settings.voice_id or settings.elevenlabs_voice_id
+
     director = Director(
         bus,
         voice,
@@ -196,7 +211,10 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
         page_excerpt=open_page.excerpt_for if open_page else None,
+        barks=barks,
+        voice_id=voice_id,
     )
+    startup_voice = voice_id()
 
     config = uvicorn.Config(
         create_app(link), host=WS_HOST, port=settings.brain_port, log_level="warning"
@@ -213,6 +231,9 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
             if observer:
                 tasks.create_task(_survive("Observer", observer.run()))
             tasks.create_task(memory.run())
+            if startup_voice:
+                # In the background: until a bark is ready, its event goes to the talker instead.
+                tasks.create_task(_survive("Barks", barks.prepare(startup_voice)))
             if tools:
                 tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
             if open_page:

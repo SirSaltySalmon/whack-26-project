@@ -164,6 +164,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Overlay shows subtitles, memory toasts, questions and settings
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
+- [ ] Barks (WP6): pre-generated per voice into `data/barks/`, played for mapped events and the looking filler, else the talker. Check event-to-bark under 300 ms and that barge-in stops one
 
 **Done, with no keys or game**
 - [x] Shared contract for the remaining work (WP0)
@@ -175,7 +176,6 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
 - [ ] Learner: game brief, learned regions, compiled readers (Track 4)
 - [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
-- [ ] Pre-generated bark audio per personality. Filler lines go through TTS for now (Track 3)
 - [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 

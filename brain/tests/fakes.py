@@ -53,6 +53,20 @@ class FakeVoice:
         return dict(self.live)
 
 
+class FakeBarkSynth:
+    """Returns a little silence per line, and records every line it was asked for."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def synthesize(self, text: str, voice_id: str, model: str, sample_rate: int) -> bytes:
+        self.calls.append((text, voice_id, model, sample_rate))
+        if self.fail:
+            raise RuntimeError("quota exceeded")
+        return bytes(sample_rate // 50 * 2)  # 20 ms
+
+
 class FakeOverlay:
     def __init__(self, display_scale: float = 1.0, rects: Iterable[Rect] = ()) -> None:
         self.display_scale = display_scale

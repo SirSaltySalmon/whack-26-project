@@ -12,11 +12,13 @@ finishes, says its answer once they stop talking, and then their next turn runs.
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 
 from brain.agent.tools import ToolRegistry, TurnContext
 from brain.agent.turn import run_turn
-from brain.director.personalities import LineKind, PersonalityBook, load_personalities
+from brain.director.context import gather_context, open_page_excerpt
+from brain.director.lines import Lines, play_bark
+from brain.director.personalities import PersonalityBook, load_personalities
 from brain.director.rules import (
     Action,
     AskQuestion,
@@ -32,6 +34,7 @@ from brain.director.rules import (
 from brain.director.talker import event_prompt, reply
 from brain.events import Event, EventBus, Tick
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, TextLLM, ToolLLM
+from brain.voice.barks import BarkBank
 from brain.voice.pipeline import Voice
 from shared.protocol import BrainMessage
 from shared.protocol.messages import QuestionAsk
@@ -64,6 +67,9 @@ class Director:
         question_gap_s: float = 90.0,
         question_quiet_s: float = 20.0,
         page_excerpt: Callable[[str], str | None] | None = None,
+        barks: BarkBank | None = None,
+        voice_id: Callable[[], str | None] = lambda: None,
+        bark_events: Mapping[str, str] | None = None,
     ) -> None:
         self._events = bus.subscribe()
         self._voice = voice
@@ -76,17 +82,18 @@ class Director:
         self._agent = agent
         self._tools = tools
         self._personalities = personalities or load_personalities()
+        self._lines = Lines(self._personalities, personality, voice_id, barks)
         self._take_question = take_question
         self._send = send
         self._page_excerpt = page_excerpt
+        events = self._personalities.event_lines if bark_events is None else bark_events
         self._state = DirectorState(
-            question_gap_s=question_gap_s, question_quiet_s=question_quiet_s
+            question_gap_s=question_gap_s, question_quiet_s=question_quiet_s, bark_events=events
         )
         self._slot: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[None]] = set()
         # True while the turn in the slot is running a tool, so it isn't cancelled.
         self.checking = False
-        self._lines_said = 0
 
     async def run(self) -> None:
         ticker = asyncio.create_task(self._tick())
@@ -160,18 +167,23 @@ class Director:
             case ReactToEvent():
                 await self._talk(event_prompt(action.name, action.data), query=action.name)
             case PlayBark():
-                # WP6 plays the bark here when one is ready. Until then, the talker reacts instead.
-                await self._talk(event_prompt(action.event, action.data), query=action.event)
+                await self._play_bark(action)
             case AskQuestion():
                 await self._ask_question()
             case SetVoice():
                 await self._voice.set_voice(action.voice_id)
+                # This task is already off the speech slot, so generating can take its time.
+                await self._lines.prepare(action.voice_id)
             case CancelSpeech():
                 self._cancel_slot()
 
-    def _line(self, kind: LineKind) -> str:
-        self._lines_said += 1
-        return self._personalities.line(self._personality(), kind, self._lines_said)
+    async def _play_bark(self, action: PlayBark) -> None:
+        bark = self._lines.bark(action.kind)
+        if bark is None:
+            # Not generated yet, no ElevenLabs key, or no such line: react the slow way instead.
+            await self._talk(event_prompt(action.event, action.data), query=action.event)
+        elif await play_bark(self._voice, bark, action.event, action.ts) and self._on_spoken:
+            await self._on_spoken(bark.text)
 
     async def _speak(self, text: str, wait_s: float = 0.0) -> None:
         """Says it, waiting up to wait_s for the player to stop talking first."""
@@ -188,9 +200,9 @@ class Director:
 
     async def _player_turn(self, action: AskTalker, agent: ToolLLM, tools: ToolRegistry) -> None:
         started = time.monotonic()
-        context = await self._gather_context(action.transcript)
+        context = await gather_context(self._context, action.transcript)
         # Player turns only. _talk never gets this, so page text can't reach a game-event reaction.
-        excerpt = self._open_page_excerpt(action.transcript)
+        excerpt = open_page_excerpt(self._page_excerpt, action.transcript)
         if excerpt:
             context = f"{context}\n\n{excerpt}" if context else excerpt
         name = self._personality()
@@ -198,7 +210,8 @@ class Director:
         async def looking() -> None:
             self.checking = True
             # The result takes seconds, and silence would read as not having heard them.
-            await self._voice.say(self._line("looking"))
+            text, bark = self._lines.next("looking")
+            await (self._voice.play(bark) if bark else self._voice.say(text))
 
         try:
             await self._run_player_turn(action, agent, tools, started, context, name, looking)
@@ -226,16 +239,16 @@ class Director:
                 context,
                 TurnContext(action.started_at),
                 looking,
-                self._line("done"),
+                self._lines.text("done"),
                 hints=self._proactive(),
             )
         except (LLMUnavailableError, LLMEmptyResponseError) as exc:
             log.warning("Player turn unavailable: %s", exc)
-            text = self._line("unavailable")
+            text = self._lines.text("unavailable")
         except Exception:
             # A vendor error of any kind still gets an answer rather than silence.
             log.exception("Player turn failed")
-            text = self._line("unavailable")
+            text = self._lines.text("unavailable")
         log.info("Latency: player turn took %.0f ms", (time.monotonic() - started) * 1000)
         if text:
             # After a tool, the player may well be talking while they wait, so hold the answer.
@@ -258,7 +271,7 @@ class Director:
         if self._talker is None:
             log.warning("No talker LLM configured; ignoring: %s", prompt)
             return
-        context = await self._gather_context(query)
+        context = await gather_context(self._context, query)
         name = self._personality()
         text = await reply(
             self._talker,
@@ -271,23 +284,3 @@ class Director:
         )
         if text:
             await self._speak(text)
-
-    def _open_page_excerpt(self, transcript: str) -> str | None:
-        if self._page_excerpt is None:
-            return None
-        try:
-            return self._page_excerpt(transcript)
-        except Exception:
-            # The wiki page is a bonus; the turn goes ahead without it.
-            log.exception("Couldn't match the open page")
-            return None
-
-    async def _gather_context(self, query: str) -> str:
-        if self._context is None:
-            return ""
-        try:
-            return await self._context(query)
-        except Exception:
-            # A reply without memory beats no reply at all.
-            log.exception("Couldn't build the talker's context")
-            return ""
