@@ -53,5 +53,14 @@ class Settings(BaseSettings):
     ai_image_max_edge_px: int = 1280
     mask_padding_px: int = 8
 
+    # Names what memory is filed under. It's data, so the brain has no game-specific logic.
+    game_title: str = "Unknown game"
+
     db_path: Path = Path("data/brain.sqlite3")
     sessions_dir: Path = Path("sessions")
+    # One-way export for reading. SQLite stays the source of truth.
+    vault_dir: Path = Path("data/vault")
+    replay_snapshot: Path = Path("fixtures/replay_memory.sql")
+
+    note_interval_s: float = 300.0
+    note_min_new_events: int = 5
