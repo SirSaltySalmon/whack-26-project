@@ -1,5 +1,19 @@
-import { DEFAULT_VOICE_STYLE } from "../../lib/launcher.ts";
-import type { Settings, VoiceOption } from "../../lib/protocol.generated.ts";
+import {
+  DEFAULT_MEMORY_SEARCH,
+  DEFAULT_VOICE_STYLE,
+} from "../../lib/launcher.ts";
+import type {
+  MemorySearch,
+  Settings,
+  VoiceOption,
+} from "../../lib/protocol.generated.ts";
+
+const MEMORY_SEARCH_CHOICES: readonly { mode: MemorySearch; label: string }[] =
+  [
+    { mode: "keyword", label: "Keywords" },
+    { mode: "hybrid", label: "Both" },
+    { mode: "semantic", label: "Meaning" },
+  ];
 
 export interface SettingsChoices {
   settings: Settings;
@@ -48,6 +62,7 @@ export function SettingsFields({
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
   const style = settings.voice_style ?? DEFAULT_VOICE_STYLE;
+  const memorySearch = settings.memory_search ?? DEFAULT_MEMORY_SEARCH;
   return (
     <>
       <h3 className="settings-heading">Hints</h3>
@@ -126,6 +141,22 @@ export function SettingsFields({
       <p className="settings-hint">
         Expressive varies pitch and pace with what's said. Classic is the
         original steadier voice. Applies from the next line.
+      </p>
+      <h3 className="settings-heading">Memory search</h3>
+      <div className="settings-row">
+        {MEMORY_SEARCH_CHOICES.map(({ mode, label }) => (
+          <Choice
+            key={mode}
+            label={label}
+            on={memorySearch === mode}
+            onClick={() => onChange({ ...settings, memory_search: mode })}
+          />
+        ))}
+      </div>
+      <p className="settings-hint">
+        How the partner finds what it remembers about your words. Meaning also
+        catches different wording, like "house" for "base", using a small local
+        model that loads in the background. Both uses keywords and meaning.
       </p>
     </>
   );

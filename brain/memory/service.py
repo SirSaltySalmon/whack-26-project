@@ -40,6 +40,7 @@ from brain.memory.models import Fact, NoteKind, Question, RememberResult, Sessio
 from brain.memory.note_flow import NoteFlow
 from brain.memory.notes import NoteWriter
 from brain.memory.profile import PlayerStore, ProfileStore
+from brain.memory.semantic import SemanticRecall
 from brain.memory.sessions import SessionStore
 from brain.memory.toasts import toast_for
 from brain.memory.unknowns import UnknownStore
@@ -70,10 +71,12 @@ class MemoryService:
         question_typed_timeout_s: float = 45.0,
         question_max_turns: int = 2,
         question_check_s: float = 1.0,
+        semantic: SemanticRecall | None = None,
         clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._database = database
+        self._semantic = semantic
         self._bus = bus
         self._events = bus.subscribe()
         self._send = send
@@ -130,10 +133,13 @@ class MemoryService:
     # --- Called by other tracks ---
     async def context(self, live_state: Mapping[str, str], query: str | None = None) -> str:
         started = time.perf_counter()
-        session_id, asked_id = self.session.id, self._watch.pending
+        session_id, asked = self.session.id, self._watch.pending
+        vector = await self._semantic.query(query) if self._semantic else None
         text = await self._database.run(
             lambda conn: render_context(
-                gather_context(conn, self._game, session_id, live_state, query, asked_id=asked_id)
+                gather_context(
+                    conn, self._game, session_id, live_state, query, asked_id=asked, vector=vector
+                )
             )
         )
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -178,17 +184,10 @@ class MemoryService:
     ) -> RememberResult:
         """`tentative` is for an inference rather than a reading: stored unconfirmed, no question.
         Raises ValueError for empty text or an out-of-range confidence."""
-        session_id = self.session.id
+        game, session_id = self._game, self.session.id
         result = await self._database.run(
             lambda _: self._facts.remember(
-                self._game,
-                subject,
-                attribute,
-                value,
-                source,
-                confidence,
-                session_id,
-                tentative=tentative,
+                game, subject, attribute, value, source, confidence, session_id, tentative=tentative
             )
         )
         await self._settle(result)

@@ -134,6 +134,15 @@ class Settings(BaseSettings):
     note_interval_s: float = 300.0
     note_min_new_events: int = 5
 
+    # Meaning-based memory search, used only when the player picks it in settings. Runs locally on
+    # the CPU. MiniLM rather than bge-small, which scored unrelated questions as high as related
+    # ones on our facts: see docs/DECISIONS.md.
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_cache_dir: Path = Path("data/models")
+    # Cosine similarity below this isn't recalled. Tuned for MiniLM, where unrelated questions
+    # scored at most 0.20 and related ones mostly 0.28 or more.
+    recall_min_similarity: float = 0.25
+
     # Recording a session for replay. Only runs with --record, because it stores screen and mic.
     record_fps: int = 5
     record_max_gb: float = 10.0

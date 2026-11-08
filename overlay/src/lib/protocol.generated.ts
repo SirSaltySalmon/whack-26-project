@@ -54,6 +54,7 @@ export type QuestionId = string;
 export type Text2 = string;
 export type Type8 = "question.ask";
 export type Personalities = string[];
+export type MemorySearch = "keyword" | "hybrid" | "semantic";
 export type MicEnabled = boolean;
 export type Personality = string;
 export type Proactive = boolean;
@@ -246,6 +247,7 @@ export interface SettingsState {
   voices?: Voices;
 }
 export interface Settings {
+  memory_search?: MemorySearch;
   mic_enabled?: MicEnabled;
   personality?: Personality;
   proactive?: Proactive;
