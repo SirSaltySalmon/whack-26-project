@@ -1032,6 +1032,16 @@
     },
     "Settings": {
       "properties": {
+        "memory_search": {
+          "default": "keyword",
+          "enum": [
+            "keyword",
+            "hybrid",
+            "semantic"
+          ],
+          "title": "Memory Search",
+          "type": "string"
+        },
         "mic_enabled": {
           "default": true,
           "title": "Mic Enabled",

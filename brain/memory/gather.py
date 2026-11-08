@@ -6,16 +6,10 @@ import sqlite3
 from collections.abc import Mapping
 from typing import Any
 
-from brain.memory.context import (
-    DEFAULT_LIMITS,
-    ContextInputs,
-    ContextLimits,
-    fact_from_row,
-    format_fact,
-)
+from brain.memory.context import DEFAULT_LIMITS, ContextInputs, ContextLimits, fact_from_row
 from brain.memory.fact_records import to_question
-from brain.memory.fts import to_match_query
 from brain.memory.models import Question, Speaker, Turn
+from brain.memory.recall import VectorQuery, recall
 
 log = logging.getLogger(__name__)
 
@@ -46,34 +40,6 @@ def _recent_turns(conn: sqlite3.Connection, session_id: int, limit: int) -> list
     return turns
 
 
-def _recall(
-    conn: sqlite3.Connection, game: str, query: str, facts: list[int], notes: list[int], limit: int
-) -> list[str]:
-    match = to_match_query(query)
-    if match is None:
-        return []
-    fact_marks = ", ".join("?" * len(facts))
-    fact_rows = conn.execute(
-        "SELECT f.* FROM facts_fts JOIN facts f ON f.id = facts_fts.rowid"
-        " WHERE facts_fts MATCH ? AND f.valid_to IS NULL AND (f.game = ? OR f.game IS NULL)"
-        f" AND f.id NOT IN ({fact_marks}) ORDER BY rank LIMIT ?",
-        (match, game, *facts, limit),
-    ).fetchall()
-    note_marks = ", ".join("?" * len(notes))
-    # A snippet, because a whole note would use up the section on one match.
-    note_rows = conn.execute(
-        "SELECT snippet(session_notes_fts, 0, '', '', '…', 24) AS excerpt"
-        " FROM session_notes_fts JOIN session_notes n ON n.id = session_notes_fts.rowid"
-        " JOIN sessions s ON s.id = n.session_id"
-        " WHERE session_notes_fts MATCH ? AND s.game = ?"
-        f" AND n.id NOT IN ({note_marks}) ORDER BY rank LIMIT ?",
-        (match, game, *notes, limit),
-    ).fetchall()
-    found = [format_fact(fact_from_row(row)) for row in fact_rows]
-    found.extend(row["excerpt"] for row in note_rows)
-    return list(dict.fromkeys(found))[:limit]
-
-
 def gather_context(
     conn: sqlite3.Connection,
     game: str,
@@ -82,9 +48,11 @@ def gather_context(
     query: str | None = None,
     limits: ContextLimits = DEFAULT_LIMITS,
     asked_id: int | None = None,
+    vector: VectorQuery | None = None,
 ) -> ContextInputs:
     """`conn` must use `sqlite3.Row`, as `brain.memory.db.connect` sets up. `asked_id` is the
-    question just asked and still waiting for an answer."""
+    question just asked and still waiting for an answer. `vector` is the query embedded for
+    meaning-based recall; without it, recall matches keywords."""
     profile = conn.execute("SELECT brief FROM profile WHERE game = ?", (game,)).fetchone()
     note = conn.execute(
         "SELECT id, body FROM session_notes WHERE session_id = ?"
@@ -111,7 +79,8 @@ def gather_context(
     if query:
         notes = [row["id"] for row in (note, last) if row is not None]
         try:
-            recalled = _recall(conn, game, query, [f.id for f in facts], notes, limits.max_recalled)
+            skip = [f.id for f in facts]
+            recalled = recall(conn, game, query, skip, notes, limits.max_recalled, vector)
         except sqlite3.Error:
             # Recall is a bonus: losing it must not cost the player a reply.
             log.exception("Recall failed for session %s", session_id)

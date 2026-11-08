@@ -32,6 +32,9 @@ class Settings(BaseModel):
     # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
     # kept so the two can be compared by ear.
     voice_style: Literal["expressive", "classic"] = "expressive"
+    # How memory finds what the player's words are about. "keyword" matches words, "semantic"
+    # matches meaning with a local embedding model, and "hybrid" merges the two.
+    memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
 
 
 # --- Brain to overlay ---

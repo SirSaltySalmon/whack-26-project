@@ -369,3 +369,20 @@ The original comparison of memory stores assumed a single game. Its ranking stil
 **How:** `LLMFactory` picks the vendor from the model name: `claude-*` runs on Anthropic, anything else on Gemini, so going back is a change to `talker_model` or `vision_model`. All Haiku roles share one rate limiter, raised to 240 a minute.
 
 **Unproven:** whether Haiku's `box_2d` boxes (0-1000, `[ymin, xmin, ymax, xmax]`) are as accurate as Gemini's. Check with `scripts/check_pointing.py`.
+
+## 2026-11-08: Meaning-based memory search, switchable in settings
+**Change:** recall can match by meaning as well as by keywords. Settings has a new "Memory search" choice, `memory_search` in the protocol: Keywords (`keyword`, the default and the old behavior), Both (`hybrid`) and Meaning (`semantic`).
+
+**Why:** FTS5 matches words, and speech paraphrases. "Where's my house?" never found `base / location` by keywords.
+
+**How:**
+- `brain/memory/semantic.py` loads the model in the background only when the player picks Both or Meaning, embeds new facts and note lines, and embeds each question on its own thread. Every failure falls back to keywords.
+- `brain/memory/vectors.py` keeps sqlite-vec tables next to the facts and notes. They're derived data: created at runtime, so there's no schema bump and no need to delete databases, and rebuilt if the model changes. Search is an exact scan rather than vec0's nearest-neighbour query, because that query picks neighbours before filtering out closed facts and other games.
+- Both merges keyword and meaning results by reciprocal rank fusion, so the two scores never need to be on one scale.
+- Replays stay on keywords, so a stage fallback never waits on a model download.
+
+**Model:** `sentence-transformers/all-MiniLM-L6-v2`, not the `BAAI/bge-small-en-v1.5` the architecture first named. On 12 questions against our facts, bge-small scored unrelated questions as high as related ones (0.62 for "tell me a joke"), so no cutoff could separate them. MiniLM scored unrelated questions at most 0.22 and related ones mostly 0.28 or more, so `recall_min_similarity` is 0.25. snowflake-arctic-embed-xs was worse than both.
+
+**Measured on the main dev machine:** model load about 0.2-0.4 s once cached, a question about 4-20 ms, `context()` about 4.5 ms in Both against 1 ms in Keywords. The first use downloads about 90 MB into `data/models`, so run it once before the demo.
+
+**Limit:** the talker already gets the newest 8 facts, and recall skips those, so this only adds anything once memory holds more than that, or for older session notes.

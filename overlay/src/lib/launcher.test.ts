@@ -41,6 +41,7 @@ test("keys, game and voice choices reach the environment", () => {
         voice_id: "v2",
         mic_enabled: true,
         voice_style: "classic",
+        memory_search: "hybrid",
       },
     }),
     { GEMINI_API_KEY: "g-key", ANTHROPIC_API_KEY: "a-key" },
@@ -97,6 +98,7 @@ test("saved files are repaired field by field", () => {
       voice_id: 5,
       mic_enabled: "no",
       voice_style: "loud",
+      memory_search: "telepathy",
     },
   });
   assert.equal(repaired.mode, "live");
@@ -115,8 +117,18 @@ test("saved files are repaired field by field", () => {
     voice_id: null,
     mic_enabled: true,
     voice_style: "expressive",
+    memory_search: "keyword",
   });
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
+});
+
+test("the memory search choice survives a save and a restart", () => {
+  const saved = partnerSettings({ memory_search: "semantic" });
+  assert.equal(
+    sanitizeConfig({ settings: saved }).settings.memory_search,
+    "semantic",
+  );
+  assert.equal(partnerSettings({}).memory_search, "keyword");
 });
 
 test("typing instead of talking survives a save and a restart", () => {
