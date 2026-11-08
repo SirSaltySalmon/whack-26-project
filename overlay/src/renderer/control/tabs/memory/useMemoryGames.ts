@@ -10,7 +10,7 @@ export interface MemoryGamesState {
 }
 
 /** Which games memory holds, asked again when the partner starts or stops and on new memories. */
-export function useMemoryGames(): MemoryGamesState {
+export function useMemoryGames(revision = 0): MemoryGamesState {
   const { request, onPush, connected } = useControl();
   const [list, setList] = useState<MemoryGames | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function useMemoryGames(): MemoryGamesState {
   // `connected` decides who answers, and a running partner names the current game.
   useEffect(() => {
     refresh();
-  }, [refresh, connected]);
+  }, [refresh, connected, revision]);
 
   useEffect(
     () =>

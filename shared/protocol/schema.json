@@ -77,6 +77,48 @@
       "title": "AdminFact",
       "type": "object"
     },
+    "AdminNote": {
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "number"
+        },
+        "game": {
+          "title": "Game",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "rolling",
+            "recap"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "body",
+        "created_at",
+        "session_id",
+        "game"
+      ],
+      "title": "AdminNote",
+      "type": "object"
+    },
     "AvatarState": {
       "properties": {
         "state": {
@@ -778,10 +820,29 @@
           "title": "Attribute",
           "type": "string"
         },
+        "body": {
+          "default": "",
+          "maxLength": 20000,
+          "title": "Body",
+          "type": "string"
+        },
         "confirmation": {
           "default": "",
           "title": "Confirmation",
           "type": "string"
+        },
+        "expected_body": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Body"
         },
         "fact_id": {
           "anyOf": [
@@ -809,13 +870,29 @@
           "default": null,
           "title": "Game"
         },
+        "note_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note Id"
+        },
         "operation": {
           "default": "list",
           "enum": [
             "list",
             "remember",
             "forget",
-            "clear"
+            "clear",
+            "edit_note",
+            "delete_note",
+            "seed"
           ],
           "title": "Operation",
           "type": "string"
@@ -863,6 +940,13 @@
             "$ref": "#/$defs/AdminFact"
           },
           "title": "Facts",
+          "type": "array"
+        },
+        "note_items": {
+          "items": {
+            "$ref": "#/$defs/AdminNote"
+          },
+          "title": "Note Items",
           "type": "array"
         },
         "notes": {

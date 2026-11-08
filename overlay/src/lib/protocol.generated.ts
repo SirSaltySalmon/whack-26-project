@@ -168,10 +168,13 @@ export type Personalities1 = string[];
 export type ProtocolVersion1 = number;
 export type Voices1 = VoiceOption[];
 export type Attribute1 = string;
+export type Body3 = string;
 export type Confirmation = string;
+export type ExpectedBody = string | null;
 export type FactId = number | null;
 export type Game2 = string | null;
-export type Operation = "list" | "remember" | "forget" | "clear";
+export type NoteId = number | null;
+export type Operation = "list" | "remember" | "forget" | "clear" | "edit_note" | "delete_note" | "seed";
 export type Subject1 = string;
 export type Value1 = string;
 export type Backup = string | null;
@@ -188,6 +191,13 @@ export type ValidFrom1 = number;
 export type ValidTo1 = number | null;
 export type Value2 = string;
 export type Facts2 = AdminFact[];
+export type Body4 = string;
+export type CreatedAt1 = number;
+export type Game4 = string;
+export type Id5 = number;
+export type Kind2 = "rolling" | "recap";
+export type SessionId1 = number;
+export type NoteItems = AdminNote[];
 export type Notes1 = number;
 export type Questions2 = number;
 export type TotalFacts = number;
@@ -524,9 +534,12 @@ export interface KeysSet {
 }
 export interface MemoryAdminRequest {
   attribute?: Attribute1;
+  body?: Body3;
   confirmation?: Confirmation;
+  expected_body?: ExpectedBody;
   fact_id?: FactId;
   game?: Game2;
+  note_id?: NoteId;
   operation?: Operation;
   subject?: Subject1;
   value?: Value1;
@@ -536,6 +549,7 @@ export interface MemoryAdminResult {
   database: Database;
   events: Events;
   facts: Facts2;
+  note_items?: NoteItems;
   notes: Notes1;
   questions: Questions2;
   total_facts: TotalFacts;
@@ -551,6 +565,14 @@ export interface AdminFact {
   valid_from: ValidFrom1;
   valid_to?: ValidTo1;
   value: Value2;
+}
+export interface AdminNote {
+  body: Body4;
+  created_at: CreatedAt1;
+  game: Game4;
+  id: Id5;
+  kind: Kind2;
+  session_id: SessionId1;
 }
 export interface OverlayReady {
   display_scale: DisplayScale;

@@ -81,7 +81,9 @@ Open the dashboard with `npm.cmd --prefix overlay run dev` in PowerShell. Leave 
 
 In **Memory**, you can review saved facts, history, questions, session notes and the recall preview without starting the partner. Pick a game from the dropdown; the read-only helper uses no model, microphone or capture.
 
-Open **Add, edit or clear saved memory**, with the brain stopped, to add player facts, edit their values, or forget them. Corrections preserve the old fact's validity window; forgetting closes the fact and rejects the same guess in future. The list shows the newest 200 current facts across all games.
+With the brain stopped, use the **three-dot menu** next to each fact to **Edit** or **Forget** it. Each session note has the same inline menu with **Edit** and **Delete note**; edits keep its session and timestamp, and both operations update search and recall. Deleting a note keeps separately stored facts and conversation records. Use **Add fact** above the list to create a fact. Corrections preserve the old fact's validity window; forgetting closes the fact and rejects the same guess in future. The list shows the newest 200 current facts across all games.
+
+**Add sample data** creates two fictional facts and two notes under **Memory test (sample)** once, so you can test inline editing, forgetting and deletion without mixing them into your real game.
 
 **Clear all memory** requires typing `CLEAR`. It saves a database backup first, then clears all games' facts and history, questions, session notes, conversations/events, rejection records and derived vector indexes. Learned game profiles, dashboard settings and custom instructions are kept. Existing exported files, replay recordings and the backup still contain their original data; they are not used as live memory.
 

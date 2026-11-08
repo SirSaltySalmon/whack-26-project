@@ -295,16 +295,3 @@
 .mem-note pre {
   margin-top: 6px;
 }
-
-.mem-admin-fields {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
-}
-.mem-admin-fields form {
-  margin-block: 16px;
-}
-.mem-admin-fields > .cc-section {
-  margin-top: 24px;
-}

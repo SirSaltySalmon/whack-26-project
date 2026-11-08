@@ -76,3 +76,42 @@ test("a failed forget cannot be reported as success, and can be retried", async 
     empty,
   );
 });
+
+test("note edits and deletions verify the saved result before reporting success", async () => {
+  const actions = new MemoryActions();
+  const note = {
+    id: 4,
+    session_id: 1,
+    game: "Sample",
+    kind: "recap" as const,
+    body: "Original",
+    created_at: 1,
+  };
+  const original = { ...empty, notes: 1, note_items: [note] };
+  await assert.rejects(
+    actions.run({ operation: "delete_note", note_id: 4 }, async () => original),
+    /not saved/,
+  );
+  await assert.rejects(
+    actions.run(
+      { operation: "edit_note", note_id: 4, body: "Edited" },
+      async () => original,
+    ),
+    /not returned/,
+  );
+  const edited = { ...original, note_items: [{ ...note, body: "Edited" }] };
+  assert.deepEqual(
+    await actions.run(
+      { operation: "edit_note", note_id: 4, body: "Edited" },
+      async () => edited,
+    ),
+    edited,
+  );
+  assert.deepEqual(
+    await actions.run(
+      { operation: "delete_note", note_id: 4 },
+      async () => empty,
+    ),
+    empty,
+  );
+});

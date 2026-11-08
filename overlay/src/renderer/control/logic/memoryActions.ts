@@ -25,6 +25,24 @@ export class MemoryActions {
           "The fact is still current. Forget was not saved; please refresh and retry.",
         );
       }
+      if (
+        request.operation === "delete_note" &&
+        result.note_items?.some((note) => note.id === request.note_id)
+      ) {
+        throw new Error(
+          "The note is still present. Deletion was not saved; please refresh and retry.",
+        );
+      }
+      if (
+        request.operation === "edit_note" &&
+        !result.note_items?.some(
+          (note) => note.id === request.note_id && note.body === request.body,
+        )
+      ) {
+        throw new Error(
+          "The edited note was not returned. Please refresh to verify the saved text.",
+        );
+      }
       return result;
     } finally {
       this.busy = false;

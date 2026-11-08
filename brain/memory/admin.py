@@ -13,9 +13,11 @@ import time
 from pathlib import Path
 
 from brain.config import WS_HOST, Settings
+from brain.memory.admin_notes import change_note, list_notes
 from brain.memory.browse import _fact
 from brain.memory.db import connect
 from brain.memory.facts import FactStore
+from brain.memory.sample_data import seed_samples
 from shared.protocol.admin import AdminFact, MemoryAdminRequest, MemoryAdminResult
 
 
@@ -24,7 +26,11 @@ def administer(
 ) -> MemoryAdminResult:
     backup = None
     store = FactStore(conn)
-    if request.operation == "clear":
+    if request.operation in {"edit_note", "delete_note"}:
+        change_note(conn, request)
+    elif request.operation == "seed":
+        seed_samples(conn)
+    elif request.operation == "clear":
         if request.confirmation != "CLEAR":
             raise ValueError("Type CLEAR to erase all saved conversations and facts")
         backup = str(path.with_name(f"{path.name}.backup-{time.time_ns()}").resolve())
@@ -64,6 +70,7 @@ def administer(
 
     return MemoryAdminResult(
         facts=[AdminFact(**_fact(row).model_dump(), game=row["game"]) for row in rows],
+        note_items=list_notes(conn),
         total_facts=conn.execute("SELECT count(*) FROM facts WHERE valid_to IS NULL").fetchone()[0],
         notes=count("session_notes"),
         events=count("events"),
