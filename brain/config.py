@@ -156,6 +156,8 @@ class Settings(BaseSettings):
     progress_retry_gap_s: float = 120.0
     progress_recheck_s: float = 900.0  # How long a sure guess stands before looking again
     profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
+    # Draws each learned HUD region over the game with what its reader reads. Also --debug-regions.
+    debug_regions: bool = False
 
     # Pre-generated barks.
     barks_dir: Path = Path("data/barks")

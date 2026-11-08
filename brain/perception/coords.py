@@ -6,6 +6,7 @@ scale means downscaling the image before sending doesn't change the result.
 
 from dataclasses import dataclass
 
+from brain.perception.profile_schema import Box
 from shared.protocol.messages import Rect
 
 
@@ -65,3 +66,17 @@ def dip_to_physical(rect: Rect, display_scale: float) -> Rect:
 def box_to_dip_rect(box: NormalizedBox, crop: CropRegion, display_scale: float) -> Rect:
     """Model box to overlay coordinates. Use this for all pointing."""
     return physical_to_dip(box_to_physical_rect(box, crop), display_scale)
+
+
+def fraction_box_to_dip_rect(
+    box: Box, width: int, height: int, region: CropRegion | None, display_scale: float
+) -> Rect:
+    """A learned box (fractions of the frame) to overlay coordinates, for drawing it in-game."""
+    offset_x, offset_y = (region.x, region.y) if region else (0, 0)
+    physical = Rect(
+        x=offset_x + box.x * width,
+        y=offset_y + box.y * height,
+        width=box.w * width,
+        height=box.h * height,
+    )
+    return physical_to_dip(physical, display_scale)

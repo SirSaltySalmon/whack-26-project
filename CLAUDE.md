@@ -101,12 +101,14 @@ python -m brain --live                     # run against the live game; finds it
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
+python -m brain --live --debug-regions     # also draw the learned HUD regions over the game
 python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
 python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
+python scripts/export_profile.py          # save the learned HUD as a fixture for PROFILE_FIXTURE
 python scripts/save_screenshots.py        # save test screenshots of the game
 ruff check --fix brain; ruff format brain
 npm --prefix overlay install
@@ -161,7 +163,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now (2026-11-08 01:15, freeze about 04:30): commit, merge, measure, then run it live.** The spoken-questions work is still uncommitted. Then push and merge `perf/voice-path-stalls` (local only), merge `origin/wp4-wp5-readers`, build WP9 so latency is measured from the frame, then run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers and learned regions are merged. `perf/voice-path-stalls` is still local only. Then build WP9 so latency is measured from the frame, and run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
 - [ ] WP9: log latency from the frame that showed the event, not from when it was published
@@ -186,11 +188,12 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [x] Shared fakes and the test plan's automated tests (WP1), including WP8's
 - [x] Typed turns and the extended overlay demo (WP2)
 - [x] Stage 0, apart from what needs a mouse or a visible window
-- [x] Recorder and replay (WP3). Not yet run on a real recording. The check that a reader's event comes from the frames waits on the WP4 merge
+- [x] Recorder and replay (WP3). Not yet run on a real recording
 - [x] Game brief (`brain/learner/brief.py`): at startup the deep model names the game and writes a 60-word brief into the profile, once per game. Check it on a few real games
+- [x] Readers and learned regions (WP4 and WP5), tested on synthetic frames. Scene matching was cut
 
-**Not on `main`**
-- [ ] Readers and learned regions (WP4 and WP5). Built on `origin/wp4-wp5-readers`, not merged. On `main` those files are still stubs, so live state comes from the Haiku observer. Scene matching was cut
+**Not yet run live**
+- [ ] The learner and readers over a real game. Until a profile is learned, live state still comes from the Haiku observer
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 
 **Still unproven from hour 0-1**

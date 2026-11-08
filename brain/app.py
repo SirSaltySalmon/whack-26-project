@@ -19,6 +19,7 @@ from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
 from brain.game_setup import ensure_brief, name_game
+from brain.hud import build_hud, live_state, send_debug_regions
 from brain.learner.questions import plan_and_queue_questions
 from brain.llm.factory import LLMFactory
 from brain.memory.db import Database, connect
@@ -125,10 +126,24 @@ async def run(
     # spends TTS characters. Subtitles also keep two runs' messages comparable.
     voice = SubtitleOnlyVoice(link) if replay_dir else create_voice(settings, bus, link)
 
+    # Set below, once the agent tools that find the wiki exist.
+    tools: AgentTools | None = None
+    hud = build_hud(
+        settings,
+        factory,
+        database,
+        buffer,
+        link,
+        bus,
+        observer,
+        lambda: tools.research if tools else None,
+        live=not replay_dir,
+    )
+
     async def talker_context(query: str) -> str:
-        # What the partner hears and sees now, on top of what memory knows. Mood goes first
-        # because it's short and memory cuts this to a fixed length.
-        live = {**voice.live_state(), **(observer.live_state() if observer else {})}
+        # What the partner hears and sees now, on top of what memory knows.
+        observed = observer.live_state() if observer else {}
+        live = live_state(voice.live_state(), hud.readers.live_state(), observed)
         return await memory.context(live, query)
 
     async def on_spoken(text: str) -> None:
@@ -142,7 +157,6 @@ async def run(
     else:
         talker = live_talker
     # Replays never spend money on vision, so they get plain replies with no tools.
-    tools = None
     open_page = None
     if live_talker is not None:
         tools = AgentTools(
@@ -226,6 +240,11 @@ async def run(
                 tasks.create_task(survive("Observer", observer.run()))
             if scout:
                 tasks.create_task(survive("Progress", scout.run()))
+            tasks.create_task(survive("Readers", hud.readers.run()))
+            if hud.learner:
+                tasks.create_task(survive("Learner", hud.learner.run()))
+            if settings.debug_regions:
+                tasks.create_task(survive("Debug view", send_debug_regions(hud.readers, link.send)))
             tasks.create_task(memory.run())
             if barks and startup_voice:
                 # In the background: until a bark is ready, its event goes to the talker instead.
@@ -265,6 +284,7 @@ async def run(
     except* ShutdownRequested:
         log.info("Stopped from the Control Center")
     finally:
+        hud.close()
         if tools and tools.research:
             await tools.research.aclose()
         database.close()

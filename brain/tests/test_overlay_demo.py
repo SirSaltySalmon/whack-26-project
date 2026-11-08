@@ -14,6 +14,7 @@ from brain.server import OverlayLink, create_app
 from brain.tests.fakes import FakeOverlay
 from scripts.overlay_demo import (
     ANSWER_POLL_S,
+    DEBUG_REGIONS_STALE_S,
     DEMO_VOICES,
     QUESTIONS,
     SPOKEN_WORDS,
@@ -27,6 +28,7 @@ from shared.protocol import PROTOCOL_VERSION, BrainMessage, BrainMessageAdapter
 from shared.protocol.messages import (
     AvatarState,
     CardShow,
+    DebugRegions,
     MemoryToast,
     PointerFly,
     SettingsState,
@@ -102,12 +104,24 @@ async def test_every_message_in_a_pass_survives_the_protocol_round_trip() -> Non
 async def test_a_pass_shows_every_part_of_the_overlay() -> None:
     overlay = await run_one_pass()
     kinds = {type(message) for message in overlay.sent}
-    assert kinds == {AvatarState, PointerFly, SubtitleChunk, MemoryToast}
+    assert kinds == {AvatarState, PointerFly, DebugRegions, SubtitleChunk, MemoryToast}
 
 
 def spoken(overlay: FakeOverlay) -> list[SubtitleChunk]:
     """Subtitles apart from the spoken questions."""
     return [chunk for chunk in subtitles(overlay) if chunk.text not in QUESTIONS]
+
+
+async def test_debug_regions_keep_coming_until_an_empty_list_clears_them() -> None:
+    overlay = await run_one_pass()
+    sent = [message for message in overlay.sent if isinstance(message, DebugRegions)]
+    assert len(sent[0].regions) == 2
+    assert sent[-1].regions == [] and all(message.regions for message in sent[:-1])
+    times = [overlay.when(message) for message in sent]
+    assert all(
+        later - earlier < DEBUG_REGIONS_STALE_S
+        for earlier, later in zip(times, times[1:], strict=False)
+    )
 
 
 async def test_word_chunks_then_an_empty_final_share_one_utterance() -> None:

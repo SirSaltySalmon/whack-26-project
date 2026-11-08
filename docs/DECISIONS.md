@@ -80,6 +80,20 @@ Replay is the test harness, so the same recording has to give the same result ev
 **Known limit:** lines come out in order, so if director rules change which events get a reply, later lines can answer the wrong thing. `compare_replay.py` shows where.
 
 
+
+## 2026-11-07: How the HUD readers and learner judge what they read
+
+**Status:** accepted by the project owner (empty bars, building WP5 with WP4, skipping scene matching); the rest are our defaults. Applies to WP4 (`brain/perception/readers.py`, `reader_rules.py`, `reader_engine.py`, `ocr.py`) and WP5 (`brain/learner/`).
+
+- **An empty colour bar reads `unreadable`, never 0.** A bar that changes colour (hearts turning gold, say) looks the same as an empty one, and reading it as 0 would fire false low-health reactions. The observer keeps covering health while a reader can't.
+- **Failing counts only during gameplay.** A reader counts as failing, and asks the learner to relearn, only after `reader_failing_after_s` unreadable while the observer confirms gameplay. Menus, death screens and our own masks don't count. Readers whose rules are all `above` (things that come and go, like a boss bar) never count as failing, and re-arm once they've been gone for 3 reads. This decides by rule type, not by name, so it stays game-agnostic.
+- **Bars are measured by how far the colour reaches,** not by an unbroken run, so segmented bars, rows of icons and text over a bar still read. A column counts when 30% of it matches.
+- **OCR skips text detection for numbers.** RapidOCR's recognition alone read `72/100` in about 15 ms; with detection it took about 850 ms. Regions are already cropped to the text. Only multi-line `ocr_text` uses detection. OCR has its own thread and is skipped while busy, so it never delays colour readers.
+- **A changed game size pauses readers** and asks for a relearn, because many games pin their HUD in pixels, so fractions of the frame move when the window does.
+- **Reader values go straight after mood in the talker's context,** ahead of the observer's text, which memory would otherwise cut first. A reader replaces the observer's value for the same key, and the observer stops publishing events working readers cover, though its focus boosts still see them.
+- **The learner waits for gameplay.** It doesn't start a pass, or spend a vision call, until a fresh gameplay frame exists.
+- **The debug view hides its labels from vision but not its outlines.** Outlines sit outside each box, so they can't mask a reader or change what it reads. Labels carry values, so they're masked like any overlay text.
+
 ## 2026-11-07: Look less often by default, and faster for a few seconds when it matters
 
 **Status:** accepted by the project owner, who asked for the levels; the details below are ours. Changes the 0.8 s rate in the Haiku entry below. Applies to `brain/perception/focus.py`, `brain/perception/observer.py`, `brain/agent/focus_tool.py` and `brain/config.py`.

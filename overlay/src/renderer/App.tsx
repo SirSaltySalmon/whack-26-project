@@ -5,6 +5,7 @@ import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
 import { ChatBox } from "./components/ChatBox.tsx";
+import { DebugRegions } from "./components/DebugRegions.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
 import { Subtitles } from "./components/Subtitles.tsx";
@@ -175,6 +176,7 @@ export function App() {
 
   return (
     <>
+      <DebugRegions regions={feed.debugRegions} viewport={viewport} />
       <Avatar
         frame={avatarFrame}
         state={avatarState}

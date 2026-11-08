@@ -6,7 +6,7 @@ The timer runs at the rate Focus sets. Danger boosts it here, by rule, with no e
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Protocol
 
 import cv2
@@ -58,6 +58,8 @@ class Observer:
         max_edge_px: int,
         mask_padding_px: int,
         on_observation: Callable[[Observation, float], None] | None = None,
+        *,
+        suppressed_events: Callable[[], Collection[str]] = frozenset,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
@@ -68,6 +70,9 @@ class Observer:
         self._max_edge_px = max_edge_px
         self._padding_px = mask_padding_px
         self._on_observation = on_observation
+        # Events the faster local readers already cover, so the observer doesn't repeat them.
+        # Set after construction, because the readers are built later.
+        self.suppressed_events = suppressed_events
         self._tasks: set[asyncio.Task[None]] = set()
         self._last_sent_ts: float | None = None
         self._last_applied_ts: float | None = None
@@ -158,7 +163,11 @@ class Observer:
         if self._on_observation:
             self._on_observation(observation, frame_ts)
         changes = self._tracker.update(observation, frame_ts)
+        suppressed = self.suppressed_events()
         for change in changes:
+            if change.name in suppressed:
+                log.debug("Left %s to the readers", change.name)
+                continue
             log.info("Confirmed %s: %s", change.name, change.data)
             self._bus.publish(GameEvent(change.name, change.data))
         self._refocus(observation, [change.name for change in changes])

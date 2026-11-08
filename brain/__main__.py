@@ -64,6 +64,11 @@ def _parser() -> argparse.ArgumentParser:
         help="replay only: save every message sent to the overlay, for scripts/compare_replay.py",
     )
     parser.add_argument(
+        "--debug-regions",
+        action="store_true",
+        help="draw the learned HUD regions over the game, with what each reader reads",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="show debug and library log lines"
     )
     return parser
@@ -94,6 +99,8 @@ def main() -> None:
 
             # Before the event loop, because it can wait on the terminal.
             settings, game_hint = pick_game(settings)
+        if args.debug_regions:
+            settings = settings.model_copy(update={"debug_regions": True})
         asyncio.run(
             run(
                 settings,
