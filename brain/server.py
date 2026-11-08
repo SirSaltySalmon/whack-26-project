@@ -124,10 +124,15 @@ class OverlayLink:
                 log.info("Overlay went away; dropped %s", message.type)
                 self.detach(socket)
 
-    def attach(self, socket: WebSocket) -> WebSocket | None:
-        """Makes this the overlay messages go to. Returns the one it replaces, for closing."""
-        previous, self._socket = self._socket, socket
-        return previous if previous is not socket else None
+    def attach(self, socket: WebSocket) -> None:
+        """Makes this the overlay messages go to. Done on its ready message, not on connecting.
+
+        In dev, React starts the overlay twice and abandons the first socket, which can still
+        reach us last. Attaching on connect sent every message to it, so the overlay said it was
+        waiting for the brain and showed no subtitles. An abandoned socket never says it's ready.
+        Closing the older connection instead set two live overlays kicking each other off.
+        """
+        self._socket = socket
 
     def detach(self, socket: WebSocket) -> None:
         if self._socket is socket:
@@ -144,7 +149,8 @@ class OverlayLink:
                 pinned,
             )
 
-    async def handle_text(self, text: str) -> None:
+    async def handle_text(self, text: str, socket: WebSocket | None = None) -> None:
+        """`socket` is the connection it came on, so a ready message can attach it."""
         try:
             message = OverlayMessageAdapter.validate_json(text)
         except ValidationError:
@@ -159,10 +165,14 @@ class OverlayLink:
                         message.protocol_version,
                         PROTOCOL_VERSION,
                     )
+                if socket is not None:
+                    self.attach(socket)
                 self._apply_display_scale(message.display_scale)
                 await self.send(self.settings_state())
                 self._bus.publish(OverlayConnected(display_scale=message.display_scale))
             case OverlayRects():
+                if socket is not None and self._socket not in (None, socket):
+                    return  # Another overlay is the one drawing, so its rects are the ones masked
                 self.rects = tuple(item.rect for item in message.rects)
             case CardClosed():
                 self._bus.publish(CardClosedByPlayer(card_id=message.card_id))
@@ -227,18 +237,6 @@ async def _refuse_websites(socket: WebSocket) -> bool:
     return False
 
 
-async def _close_replaced(socket: WebSocket, what: str) -> None:
-    """Only one overlay gets messages, the newest. In dev, React starts the overlay twice and
-    closes the first socket, which can still reach us last and take the messages to nowhere: the
-    overlay then said it was waiting for the brain and showed no subtitles. Closing the replaced
-    socket makes a live overlay reconnect and take over, and an abandoned one stays gone."""
-    log.info("Closing the %s connection a newer one replaced", what)
-    try:
-        await socket.close()
-    except (RuntimeError, WebSocketDisconnect) as exc:
-        log.debug("The replaced %s connection was already closed: %s", what, exc)
-
-
 def create_app(link: OverlayLink, control: "ControlLink | None" = None) -> FastAPI:
     app = FastAPI(title="AI Gamer Partner brain")
 
@@ -248,13 +246,10 @@ def create_app(link: OverlayLink, control: "ControlLink | None" = None) -> FastA
             return
 
         await socket.accept()
-        replaced = link.attach(socket)
         log.info("Overlay connected")
-        if replaced is not None:
-            await _close_replaced(replaced, "overlay")
         try:
             while True:
-                await link.handle_text(await socket.receive_text())
+                await link.handle_text(await socket.receive_text(), socket)
         except WebSocketDisconnect:
             log.info("Overlay disconnected")
         finally:
@@ -268,10 +263,8 @@ def create_app(link: OverlayLink, control: "ControlLink | None" = None) -> FastA
                 return
 
             await socket.accept()
-            replaced = control.attach(socket)
+            control.attach(socket)
             log.info("Control Center connected")
-            if replaced is not None:
-                await _close_replaced(replaced, "Control Center")
             try:
                 while True:
                     await control.handle_text(await socket.receive_text())

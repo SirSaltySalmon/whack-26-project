@@ -78,10 +78,9 @@ class ControlLink:
     def connected(self) -> bool:
         return self._socket is not None
 
-    def attach(self, socket: WebSocket) -> WebSocket | None:
-        """One Control Center at a time; a newer window takes over. Returns the one replaced."""
-        previous, self._socket = self._socket, socket
-        return previous if previous is not socket else None
+    def attach(self, socket: WebSocket) -> None:
+        # One Control Center at a time; a newer window takes over.
+        self._socket = socket
 
     def detach(self, socket: WebSocket) -> None:
         if self._socket is socket:
