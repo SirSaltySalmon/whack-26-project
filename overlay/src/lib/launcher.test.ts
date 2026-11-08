@@ -19,7 +19,6 @@ test("empty values are left out so .env still applies", () => {
   assert.deepEqual(env, {
     PYTHONUNBUFFERED: "1",
     PYTHONIOENCODING: "utf-8",
-    VOICE_HALF_DUPLEX: "false",
   });
 });
 

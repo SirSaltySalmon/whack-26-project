@@ -180,8 +180,10 @@ export function toEnv(
     // mangle names or transcripts.
     PYTHONUNBUFFERED: "1",
     PYTHONIOENCODING: "utf-8",
-    VOICE_HALF_DUPLEX: config.tuning.halfDuplex ? "true" : "false",
   };
+  // Only when on: passing "false" would override VOICE_HALF_DUPLEX=true in .env, and the
+  // partner would hear and interrupt itself.
+  if (config.tuning.halfDuplex) env.VOICE_HALF_DUPLEX = "true";
   for (const name of KEY_NAMES) {
     const value = keys[name]?.trim();
     if (value) env[name] = value;
