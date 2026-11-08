@@ -117,9 +117,13 @@ class NoteFlow:
         )
         self._last_note_ts = to_ts
         await self._apply(draft, {question.id for question in questions})
-        if self._vault_dir is not None:
-            await export_quietly(self._database, self._vault_dir, self._game)
+        await self.export(session.id)
         return True
+
+    async def export(self, live_session: int) -> None:
+        """Refreshes the vault. Only the live session's page is rebuilt, so it stays fast."""
+        if self._vault_dir is not None:
+            await export_quietly(self._database, self._vault_dir, self._game, live_session)
 
     async def _apply(self, draft: NoteDraft, shown_ids: set[int]) -> None:
         # Answers go first so a matching drafted fact confirms the answer rather than disputing it.

@@ -216,3 +216,14 @@ async def test_settings_survive_a_restart(harness: Harness) -> None:
     harness.bus.publish(SettingsChanged(settings=FakeSettings(proactive=False)))
     await harness.drain()
     assert (await harness.memory.load_settings(FakeSettings)).proactive is False
+
+
+async def test_a_finished_sessions_page_shows_its_end(tmp_path: Path) -> None:
+    h = Harness(vault_dir=tmp_path / "vault")
+    session = await h.memory.start()
+    # Enough for a recap, whose export runs before the session is marked ended.
+    h.bus.publish(PlayerSpeech(transcript="Heading home for tonight"))
+    await h.memory.finish()
+    page = next((tmp_path / "vault").rglob(f"* Session {session.id}.md"))
+    assert "ended: null" not in page.read_text(encoding="utf-8")
+    h.database.close()

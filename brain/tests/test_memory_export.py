@@ -258,3 +258,27 @@ def test_never_deletes_files_it_did_not_write(conn: sqlite3.Connection, tmp_path
     add_session(conn)
     export_vault(conn, tmp_path, "Game")
     assert mine.read_text(encoding="utf-8") == "keep me"
+
+
+def test_live_export_rebuilds_only_the_live_page(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    past, live = add_session(conn), add_session(conn)
+    export_vault(conn, tmp_path, "Game")
+    add_note(conn, past, "rolling", "added to the past")
+    add_note(conn, live, "rolling", "added to the live one")
+    written = export_vault(conn, tmp_path, "Game", live_session=live)
+    assert [path.name for path in written] == [f"{session_file(live)}.md"]
+    past_page = tmp_path / "Game" / "Sessions" / f"{session_file(past)}.md"
+    assert "added to the past" not in past_page.read_text(encoding="utf-8")
+
+
+def test_live_export_writes_missing_past_pages(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    past, live = add_session(conn), add_session(conn)
+    sessions = tmp_path / "Game" / "Sessions"
+    export_vault(conn, tmp_path, "Game", live_session=live)
+    assert {path.name for path in sessions.iterdir()} == {
+        f"{session_file(past)}.md",
+        f"{session_file(live)}.md",
+    }
+    page = sessions / f"{session_file(past)}.md"
+    page.unlink()
+    assert export_vault(conn, tmp_path, "Game", live_session=live) == [page]

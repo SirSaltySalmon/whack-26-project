@@ -294,4 +294,6 @@ class MemoryService:
         except Exception:
             log.exception("Failed to write the session recap")
         await self._database.run(lambda _: self._sessions.end(session_id))
+        # A past session's page is never rebuilt, so it has to show the end time now.
+        await self._notes.export(session_id)
         log.info("Memory session %s ended", session_id)
