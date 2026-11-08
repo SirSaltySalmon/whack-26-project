@@ -1,3 +1,4 @@
+import { DEFAULT_VOICE_STYLE } from "../../lib/launcher.ts";
 import type { Settings, VoiceOption } from "../../lib/protocol.generated.ts";
 
 export interface SettingsChoices {
@@ -46,6 +47,7 @@ export function SettingsFields({
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
+  const style = settings.voice_style ?? DEFAULT_VOICE_STYLE;
   return (
     <>
       <h3 className="settings-heading">Hints</h3>
@@ -108,6 +110,23 @@ export function SettingsFields({
           </div>
         </>
       )}
+      <h3 className="settings-heading">Voice tone</h3>
+      <div className="settings-row">
+        <Choice
+          label="Expressive"
+          on={style === "expressive"}
+          onClick={() => onChange({ ...settings, voice_style: "expressive" })}
+        />
+        <Choice
+          label="Classic"
+          on={style === "classic"}
+          onClick={() => onChange({ ...settings, voice_style: "classic" })}
+        />
+      </div>
+      <p className="settings-hint">
+        Expressive varies pitch and pace with what's said. Classic is the
+        original steadier voice. Applies from the next line.
+      </p>
     </>
   );
 }

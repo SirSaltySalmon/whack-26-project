@@ -62,7 +62,12 @@ def test_normalize_drops_ids_and_geometry_at_any_depth_but_keeps_content() -> No
     )
     assert normalize(state.model_dump(mode="json")) == {
         "type": "settings.state",
-        "settings": {"proactive": True, "personality": "protective", "mic_enabled": True},
+        "settings": {
+            "proactive": True,
+            "personality": "protective",
+            "mic_enabled": True,
+            "voice_style": "expressive",
+        },
         "personalities": ["supportive", "protective"],
         "voices": [{"name": "Ava"}],
     }

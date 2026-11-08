@@ -206,7 +206,7 @@ test("the chat sizes used for placement match the CSS", () => {
 });
 
 test("settings open tall enough for every row, but never past the screen", () => {
-  assert.equal(defaultSettingsFrame(screen).height, 346);
+  assert.equal(defaultSettingsFrame(screen).height, 402);
   const short = { width: 800, height: 200 };
   const frame = defaultSettingsFrame(short);
   assert.ok(frame.y + frame.height <= short.height);

@@ -57,6 +57,7 @@ export type MicEnabled = boolean;
 export type Personality = string;
 export type Proactive = boolean;
 export type VoiceId = string | null;
+export type VoiceStyle = "expressive" | "classic";
 export type Type9 = "settings.state";
 export type Id = string;
 export type Name = string;
@@ -243,6 +244,7 @@ export interface Settings {
   personality?: Personality;
   proactive?: Proactive;
   voice_id?: VoiceId;
+  voice_style?: VoiceStyle;
 }
 export interface VoiceOption {
   id: Id;

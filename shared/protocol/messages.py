@@ -29,6 +29,9 @@ class Settings(BaseModel):
     voice_id: str | None = None
     # Off, the partner stops listening but keeps watching and talking; the player types instead.
     mic_enabled: bool = True
+    # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
+    # kept so the two can be compared by ear.
+    voice_style: Literal["expressive", "classic"] = "expressive"
 
 
 # --- Brain to overlay ---

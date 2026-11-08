@@ -109,7 +109,7 @@ export function defaultTextFrame(viewport: Size, stackIndex: number): Frame {
 /** Tall enough that opening settings shows every choice, including the voices at the bottom. */
 export function defaultSettingsFrame(viewport: Size): Frame {
   return clampFrame(
-    { ...defaultTextFrame(viewport, 0), height: 346 },
+    { ...defaultTextFrame(viewport, 0), height: 402 },
     viewport,
   );
 }
