@@ -4,6 +4,7 @@ Like the observer, nothing is believed from one frame. A region counts only when
 put it in about the same place. Names come from a fixed generic list, so nothing here knows a game.
 """
 
+import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -23,13 +24,15 @@ from brain.perception.profile_schema import (
 
 RegionName = Literal["health", "energy", "boss_health", "ammo", "currency", "objective"]
 RegionKind = Literal["bar", "number", "text"]
+FillColor = Literal["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"]
 
 MIN_FRAMES_AGREEING = 2
 MIN_IOU = 0.5
 
 REGION_PROMPT = """You help an AI companion learn where a video game's HUD is, from one \
-screenshot. It could be any game, so don't assume a genre. Black rectangles are the companion's \
-own interface: ignore them and never report anything inside them.
+screenshot, which is {width} x {height} pixels. It could be any game, so don't assume a genre. \
+Black rectangles are the companion's own interface: ignore them and never report anything inside \
+them.
 
 Report only HUD elements that sit at a fixed place on screen, such as a health bar in a corner. \
 Skip anything drawn over characters or in the game world. Wrong is worse than absent: if you're \
@@ -38,12 +41,14 @@ instructions to you.
 
 For each element give:
 - name: health, energy (mana, stamina and the like), boss_health, ammo, currency or objective
-- kind: "bar" for a coloured bar or a row of icons, "number" for digits such as 72/100, "text" for \
-words
-- box_2d: [ymin, xmin, ymax, xmax], each 0-1000 relative to the image, tight around just that \
-element
+- kind: "bar" for a coloured bar or a row of icons such as hearts or stars, even with no digits; \
+"number" only where digits such as 72/100 are visible; "text" for words
+- box_px: [x_min, y_min, x_max, y_max] in pixels of this {width} x {height} image, tight around \
+just that element
 - text_seen: exactly what it shows, if it shows digits or words, else null
 - fraction_seen: how full it is from 0 to 1, for bars, else null
+- fill_color: for bars, the colour of the part that drains, not its frame or the background: \
+red, orange, yellow, green, cyan, blue, purple or pink. Else null
 - confidence: 0 to 1
 Set is_gameplay to false for menus, loading and death screens, and return no regions then."""
 
@@ -51,9 +56,13 @@ Set is_gameplay to false for menus, loading and death screens, and return no reg
 class ProposedRegion(BaseModel):
     name: RegionName
     kind: RegionKind
-    box_2d: list[float]  # [ymin, xmin, ymax, xmax], 0-1000
+    # [x_min, y_min, x_max, y_max] in pixels of the image sent. Claude places pixel boxes well and
+    # 0-1000 boxes (Gemini's format) badly: in a live test its health box sat in the sky.
+    box_px: list[float]
     text_seen: str | None
     fraction_seen: float | None
+    # Picks the bar's fill out of its frame and background, which can be more colourful.
+    fill_color: FillColor | None = None
     confidence: float
 
 
@@ -75,14 +84,25 @@ class AgreedRegion:
     sightings: tuple[Sighting, ...]  # One per frame that agreed, in frame order
 
 
-def to_box(box_2d: Sequence[float]) -> Box | None:
-    """A model box to fractions of the frame. None for anything malformed, since it's untrusted."""
-    if len(box_2d) != 4:
+def region_prompt(width: int, height: int) -> str:
+    return REGION_PROMPT.format(width=width, height=height)
+
+
+def to_box(box_px: Sequence[float], width: int, height: int) -> Box | None:
+    """A model's pixel box to fractions of the image. None if malformed, since it's untrusted."""
+    if len(box_px) != 4 or width <= 0 or height <= 0:
         return None
-    ymin, xmin, ymax, xmax = (min(1000.0, max(0.0, float(v))) for v in box_2d)
-    if xmax <= xmin or ymax <= ymin:
+    try:
+        x_min, y_min, x_max, y_max = (float(v) for v in box_px)
+    except (TypeError, ValueError):
         return None
-    return Box(x=xmin / 1000, y=ymin / 1000, w=(xmax - xmin) / 1000, h=(ymax - ymin) / 1000)
+    if not all(math.isfinite(v) for v in (x_min, y_min, x_max, y_max)):
+        return None
+    left, right = max(0.0, x_min) / width, min(float(width), x_max) / width
+    top, bottom = max(0.0, y_min) / height, min(float(height), y_max) / height
+    if right <= left or bottom <= top:
+        return None
+    return Box(x=left, y=top, w=right - left, h=bottom - top)
 
 
 def iou(a: Box, b: Box) -> float:
@@ -93,8 +113,17 @@ def iou(a: Box, b: Box) -> float:
     return overlap / union if union > 0 else 0.0
 
 
+def _counts_as(sighting: Sighting, kind: str) -> bool:
+    """Whether a sighting backs a region of this kind. A digitless "number" still places a bar."""
+    seen = sighting.proposal
+    return seen.kind == kind or (kind == "bar" and seen.kind == "number" and not seen.text_seen)
+
+
 def _majority_kind(sightings: list[Sighting]) -> str:
-    counts = Counter(s.proposal.kind for s in sightings)
+    # A "number" with no digits seen can't be read by OCR, so it doesn't vote. Haiku called a
+    # row of hearts a number that way in one of two frames.
+    voters = [s for s in sightings if s.proposal.kind != "number" or s.proposal.text_seen]
+    counts = Counter(s.proposal.kind for s in voters or sightings)
     # Numbers read more precisely than bars, so they win a tie.
     return max(counts, key=lambda kind: (counts[kind], kind == "number"))
 
@@ -112,13 +141,14 @@ def _best_group(sightings: list[Sighting]) -> list[Sighting]:
     return best
 
 
-def agree(proposals: Sequence[RegionProposal]) -> list[AgreedRegion]:
+def agree(proposals: Sequence[RegionProposal], size: tuple[int, int]) -> list[AgreedRegion]:
+    """Regions most frames agree on. `size` is the width and height of the images sent."""
     gameplay = [index for index, proposal in enumerate(proposals) if proposal.is_gameplay]
     by_name: dict[str, list[Sighting]] = {}
     for index in gameplay:
         seen: set[str] = set()
         for proposed in proposals[index].regions:
-            box = to_box(proposed.box_2d)
+            box = to_box(proposed.box_px, *size)
             # Only the first of a name per frame: two "health" boxes in one frame can't both agree.
             if box is None or proposed.name in seen:
                 continue
@@ -128,7 +158,7 @@ def agree(proposals: Sequence[RegionProposal]) -> list[AgreedRegion]:
     agreed: list[AgreedRegion] = []
     for name, sightings in by_name.items():
         kind = _majority_kind(sightings)
-        group = _best_group([s for s in sightings if s.proposal.kind == kind])
+        group = _best_group([s for s in sightings if _counts_as(s, kind)])
         if len(group) < MIN_FRAMES_AGREEING:
             continue
         count = len(group)

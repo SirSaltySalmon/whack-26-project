@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,11 +19,11 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
 from brain.learner.debug_samples import save_samples
 from brain.learner.regions import (
-    REGION_PROMPT,
     AgreedRegion,
     RegionProposal,
     agree,
     build_spec,
+    region_prompt,
 )
 from brain.learner.validate import Sample, calibrate, propose_color, validate
 from brain.llm.base import LLMUnavailableError, VisionLLM
@@ -87,6 +88,8 @@ class GameLearner:
         self._in_gameplay = in_gameplay
         self._clock = clock
         self.vision_calls = 0
+        # The width and height of the images sent in the latest pass: boxes come back in them.
+        self._image_size = (0, 0)
         self._last_pass_at: float | None = None
         self._readers_failing = False
 
@@ -163,7 +166,7 @@ class GameLearner:
             log.info("Not enough gameplay frames to learn from")
             return False
         kept: list[tuple[Region, ReaderSpec]] = []
-        for agreed in agree([proposal for _, proposal in samples]):
+        for agreed in agree([proposal for _, proposal in samples], self._image_size):
             built = await self._build_and_check(agreed, [frame for frame, _ in samples])
             if built:
                 kept.append(built)
@@ -194,8 +197,10 @@ class GameLearner:
                 self._config.closeup_max_edge_px,
             )
             self.vision_calls += 1
+            # Every frame in a pass has the same size, so the last one's size stands for all.
+            self._image_size = (closeup.width, closeup.height)
             proposal = await self._vision().vision_json(
-                REGION_PROMPT,
+                region_prompt(closeup.width, closeup.height),
                 closeup.image,
                 "image/jpeg",
                 RegionProposal,
@@ -234,7 +239,9 @@ class GameLearner:
         if region.kind == "bar" and samples:
             # The fullest sample shows the most of the bar's colour.
             fullest = max(samples, key=lambda s: s.expected if isinstance(s.expected, float) else 0)
-            color = propose_color(fullest.crop)
+            names = [s.proposal.fill_color for s in agreed.sightings if s.proposal.fill_color]
+            fill = Counter(names).most_common(1)[0][0] if names else None
+            color = propose_color(fullest.crop, fill)
             if color is not None:
                 color = calibrate(color, samples)
                 if color.full_at < 1.0:

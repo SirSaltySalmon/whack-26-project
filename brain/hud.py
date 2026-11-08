@@ -86,7 +86,8 @@ def build_hud(
             frame_gap_s=settings.learner_frame_gap_s,
             max_vision_calls=settings.learner_max_vision_calls,
             relearn_gap_s=settings.learner_relearn_gap_s,
-            closeup_max_edge_px=settings.closeup_max_edge_px,
+            # Under Claude's ~1.15 MP limit, so its pixel boxes refer to the image as sent.
+            closeup_max_edge_px=settings.ai_image_max_edge_px,
             mask_padding_px=settings.mask_padding_px,
             profile_fixture=settings.profile_fixture,
             debug_dir=(

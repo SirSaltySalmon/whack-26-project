@@ -22,6 +22,19 @@ MIN_SATURATION = 90
 MIN_VALUE = 70
 MIN_COLOURED_SHARE = 0.05
 HUE_TOLERANCE = 10
+# OpenCV hue ranges (0-179) for the colour names vision gives a bar's fill. Names are loose, so
+# neighbours overlap: Haiku called Terraria's light blue mana star "cyan". Red stays tight,
+# because gold frames sit just past it.
+FILL_HUES: dict[str, tuple[int, int]] = {
+    "red": (165, 9),
+    "orange": (8, 24),
+    "yellow": (18, 36),
+    "green": (35, 84),
+    "cyan": (80, 130),
+    "blue": (80, 135),
+    "purple": (125, 158),
+    "pink": (140, 172),
+}
 # Calibration only uses samples at least this full: near empty, one column either way would
 # swing where "full" lands.
 CALIBRATE_FROM = 0.2
@@ -37,8 +50,12 @@ class Sample:
     expected: float | str | None  # What vision said: fraction_seen or text_seen
 
 
-def propose_color(crop: np.ndarray) -> ColorFillParams | None:
-    """The dominant saturated hue in a bar crop. None if nothing stands out."""
+def propose_color(crop: np.ndarray, fill: str | None = None) -> ColorFillParams | None:
+    """The bar's hue: the strongest saturated hue within `fill`'s range if named, else overall.
+
+    Without a name the frame or background often wins: Terraria's gold heart frames and a green
+    background behind its blue mana star both outnumbered the fill in a live test.
+    """
     if crop.size == 0:
         return None
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
@@ -47,6 +64,15 @@ def propose_color(crop: np.ndarray) -> ColorFillParams | None:
         return None
     hues = hsv[..., 0][coloured]
     histogram = np.bincount(hues, minlength=180).astype(float)
+    if fill in FILL_HUES:
+        low, high = FILL_HUES[fill]
+        hue = np.arange(180)
+        # Red's range wraps past 0, so it's the two ends rather than a middle stretch.
+        allowed = (hue >= low) & (hue <= high) if low <= high else (hue >= low) | (hue <= high)
+        if histogram[allowed].sum() == 0:
+            # Vision named a colour the crop doesn't have, so the box or the name is wrong.
+            return None
+        histogram = np.where(allowed, histogram, 0.0)
     # Smoothed around the circle, because red sits on both sides of 0.
     window = np.ones(2 * 3 + 1)
     padded = np.concatenate([histogram[-3:], histogram, histogram[:3]])

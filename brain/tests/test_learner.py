@@ -23,14 +23,16 @@ from brain.perception.readers import compile_reader
 from brain.tests.fakes import FakeOverlay, FakeVision, VisionCall, drain
 from brain.tests.reader_fixtures import bar, health_frame_image
 
-# The synthetic bar sits at x 20-220, y 20-40 of a 400x200 frame: in 0-1000 model units, this.
-BAR_BOX = [100, 50, 200, 550]
+# The synthetic bar sits at x 20-220, y 20-40 of a 400x200 frame. The learner sends it doubled,
+# 800x400, so a model would answer in those pixels: [x_min, y_min, x_max, y_max].
+IMAGE = (800, 400)
+BAR_BOX = [40, 40, 440, 80]
 
 
 def proposal(
     fraction: float, box: list[float] | None = None, gameplay: bool = True
 ) -> dict[str, Any]:
-    region = {"name": "health", "kind": "bar", "box_2d": box or BAR_BOX, "text_seen": None,
+    region = {"name": "health", "kind": "bar", "box_px": box or BAR_BOX, "text_seen": None,
               "fraction_seen": fraction, "confidence": 0.9}  # fmt: skip
     return {"is_gameplay": gameplay, "regions": [region] if gameplay else []}
 
@@ -40,24 +42,30 @@ def proposals(*items: dict[str, Any]) -> list[RegionProposal]:
 
 
 def test_model_boxes_become_fractions_and_nonsense_is_dropped() -> None:
-    box = to_box(BAR_BOX)
+    box = to_box(BAR_BOX, *IMAGE)
     assert box is not None and (box.x, box.y, box.w, box.h) == (0.05, 0.1, 0.5, 0.1)
-    assert to_box([500, 500, 400, 600]) is None
-    assert to_box([1, 2, 3]) is None
+    assert to_box([500, 500, 400, 600], *IMAGE) is None
+    assert to_box([1, 2, 3], *IMAGE) is None
+    assert to_box([float("nan"), 0, 10, 10], *IMAGE) is None
+    # Boxes past the edge are clipped to the image.
+    clipped = to_box([-50, -50, 900, 500], *IMAGE)
+    assert clipped is not None and (clipped.x, clipped.y, clipped.w, clipped.h) == (0, 0, 1, 1)
 
 
 def test_regions_count_only_when_frames_agree() -> None:
-    (agreed,) = agree(proposals(proposal(0.9), proposal(0.9, [102, 52, 198, 548]), proposal(0.9)))
+    (agreed,) = agree(
+        proposals(proposal(0.9), proposal(0.9, [42, 41, 438, 79]), proposal(0.9)), IMAGE
+    )
     assert agreed.region.name == "health" and len(agreed.sightings) == 3
-    assert agree(proposals(proposal(0.9), proposal(0.9, [700, 700, 800, 900]))) == []
-    assert agree(proposals(proposal(0.9), proposal(0.9, gameplay=False))) == []
+    assert agree(proposals(proposal(0.9), proposal(0.9, [560, 280, 720, 320])), IMAGE) == []
+    assert agree(proposals(proposal(0.9), proposal(0.9, gameplay=False)), IMAGE) == []
 
 
 def test_a_health_number_showing_a_fraction_gets_a_fraction_reader_with_the_low_rule() -> None:
-    number = {"name": "health", "kind": "number", "box_2d": BAR_BOX, "text_seen": "72/100",
+    number = {"name": "health", "kind": "number", "box_px": BAR_BOX, "text_seen": "72/100",
               "fraction_seen": None, "confidence": 0.9}  # fmt: skip
     item = {"is_gameplay": True, "regions": [number]}
-    (agreed,) = agree(proposals(item, item))
+    (agreed,) = agree(proposals(item, item), IMAGE)
     spec = build_spec(agreed, None)
     assert spec is not None and spec.type == "ocr_fraction"
     assert [rule.event for rule in spec.rules] == ["health_low"]
@@ -73,7 +81,7 @@ def test_the_bar_colour_is_found_even_for_red_which_wraps_around() -> None:
 
 
 async def test_validation_accepts_a_reader_that_agrees_and_rejects_one_that_does_not() -> None:
-    (agreed,) = agree(proposals(proposal(0.6), proposal(0.6)))
+    (agreed,) = agree(proposals(proposal(0.6), proposal(0.6)), IMAGE)
     spec = build_spec(agreed, propose_color(bar(0.6)))
     assert spec is not None
     reader = compile_reader(spec)
@@ -198,3 +206,10 @@ async def test_nothing_is_learned_or_spent_before_the_game_is_on_screen(tmp_path
     rig.learner._buffer = rig.buffer
     assert await rig.learner.why_learn(rig.events) is None
     assert rig.vision.calls == []
+
+
+def test_a_number_with_no_digits_doesnt_outvote_a_bar() -> None:
+    bar_item = proposal(1.0)
+    digitless = {"is_gameplay": True, "regions": [{**bar_item["regions"][0], "kind": "number"}]}
+    (agreed,) = agree(proposals(bar_item, digitless), IMAGE)
+    assert agreed.region.kind == "bar"

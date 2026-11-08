@@ -160,3 +160,29 @@ def test_debug_samples_are_saved_with_what_vision_said(tmp_path: Path) -> None:
         '"expected": [\n    1.0,\n    1.0\n  ]'
         in (tmp_path / "learner" / "health.json").read_text()
     )
+
+
+def test_a_named_fill_beats_a_more_colourful_frame_and_background() -> None:
+    # Like Terraria's hearts: a red fill inside a wider gold frame, on a green background.
+    crop = np.full((30, 100, 3), (40, 140, 40), dtype=np.uint8)  # Green background
+    crop[2:28, 2:98] = (30, 180, 220)  # Gold frame, the most common colour
+    crop[10:20, 10:40] = (0, 0, 255)  # The red fill
+    assert propose_color(crop) is not None
+    assert propose_color(crop).hsv_low[0] not in range(170, 180)  # Unnamed, the frame wins
+    named = propose_color(crop, "red")
+    assert named is not None and named.hsv_low[0] >= 160  # A range around red, wrapping past 0
+    built = reader(calibrate(named, [Sample(crop, 1.0)]))
+    half = crop.copy()
+    half[10:20, 25:40] = (30, 180, 220)  # Half the red gone, frame showing instead
+    assert built.read(half).value == pytest.approx(0.5, abs=0.05)
+
+
+def test_a_named_fill_the_crop_lacks_proposes_nothing() -> None:
+    assert propose_color(bar(1.0), "blue") is None
+
+
+def test_a_light_blue_fill_called_cyan_still_matches() -> None:
+    crop = np.full((30, 30, 3), (40, 140, 40), dtype=np.uint8)  # Green background
+    crop[8:22, 8:22] = (255, 120, 90)  # Light blue, OpenCV hue about 107
+    color = propose_color(crop, "cyan")
+    assert color is not None and color.hsv_low[0] <= 107 <= color.hsv_high[0]
