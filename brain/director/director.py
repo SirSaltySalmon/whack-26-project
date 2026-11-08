@@ -226,7 +226,8 @@ class Director:
     def _persona(self) -> Persona:
         name, instructions = self._personality(), self._custom_instructions()
         tone = self._personalities.tone(name)
-        return Persona.of(name, tone, instructions, self._max_words, self._proactive())
+        danger = self._state.in_danger
+        return Persona.of(name, tone, instructions, self._max_words, self._proactive(), danger)
 
     async def _play_bark(self, action: PlayBark) -> None:
         bark = self._lines.bark(action.kind)

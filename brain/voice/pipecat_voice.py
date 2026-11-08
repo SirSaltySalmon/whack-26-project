@@ -10,16 +10,11 @@ module only turns speech into bus events and text into speech:
 Flux does its own turn detection, so there is no Silero VAD and no user aggregator. The aggregator
 would normally own barge-in, so TurnBridge does it instead when Flux reports a start of turn.
 
-Without headphones the mic hears the speakers and the partner interrupts itself. Half-duplex mode
-(VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
-barge-in.
-
-With the mic off in settings, EchoGate feeds Flux silence all the time, and any turn Flux still
-reports is dropped, so speech starts no turn and no barge-in. The partner still talks and reacts,
-and typed turns reach the bus from the overlay without passing through here.
-
-Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
-subtitles only.
+EchoGate feeds Flux silence when the mic shouldn't be heard (mic_gate.py): with the mic off, in
+push to talk while the key is up, and without headphones while the partner talks and just after,
+since the mic would hear the speakers. A turn Flux still reports from before the mute is dropped
+or, without headphones, starts no barge-in. Typed turns reach the bus without passing through here.
+Without ElevenLabs keys it still listens, and replies go to subtitles only.
 """
 
 import asyncio
@@ -47,6 +42,7 @@ from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.voice.barks import Bark
 from brain.voice.follow import follow_settings
+from brain.voice.mic_gate import ModeLog, PushToTalk, echo_window
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
@@ -83,6 +79,8 @@ class PipecatVoice:
         self._bot_stopped_at: float | None = None
         # What check_mic last saw, so a change is acted on and logged once.
         self._mic_was_on = True
+        self._modes = ModeLog(self._half_duplex)
+        self._push_to_talk = PushToTalk(settings.push_to_talk_key)
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
@@ -91,7 +89,7 @@ class PipecatVoice:
         voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
         speaks = settings.elevenlabs_api_key is not None and bool(voice_id)
         self._speaks = speaks
-        self._style: str = link.settings.voice_style
+        self._style: tuple[str, bool] = (link.settings.voice_style, False)  # Style, urgent
         # Subscribed now, so a style the Control Center sends on connect isn't missed.
         self._settings_events = bus.subscribe()
         transport = local_audio(settings, speaks)
@@ -153,14 +151,14 @@ class PipecatVoice:
             delta = ElevenLabsTTSService.Settings(voice=voice_id)
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
-    async def set_style(self, style: str) -> None:
+    async def set_style(self, style: str, urgent: bool = False) -> None:
         """Applies from the next line spoken: Pipecat opens a new audio context with them."""
-        if style == self._style:
+        if (style, urgent) == self._style:
             return
-        self._style = style
-        log.info("Voice style: %s", style)
+        self._style = (style, urgent)
+        log.info("Voice style: %s%s", style, ", faster for danger" if urgent else "")
         if self._speaks:
-            delta = ElevenLabsTTSService.Settings(**style_values(style))
+            delta = ElevenLabsTTSService.Settings(**style_values(style, urgent))
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
     async def interrupt(self) -> None:
@@ -173,7 +171,7 @@ class PipecatVoice:
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C
         await runner.add_workers(self._worker)
-        follow = follow_settings(self._settings_events, self)
+        follow = follow_settings(self._settings_events, self, self._style[0])
         settings = asyncio.create_task(follow, name="Voice settings")
         try:
             await runner.run()
@@ -226,6 +224,8 @@ class PipecatVoice:
 
     async def check_mic(self) -> None:
         """Acts on the player turning the mic on or off. EchoGate calls this for every frame."""
+        ptt = self._link.settings.push_to_talk
+        self._modes.note(self.half_duplex(), ptt, self._push_to_talk.key)
         on = self.mic_on()
         if on == self._mic_was_on:
             return
@@ -236,39 +236,48 @@ class PipecatVoice:
             self.user_speaking = False
             await self.send(AvatarState(state="idle"))
 
+    def half_duplex(self) -> bool:
+        """VOICE_HALF_DUPLEX at startup, or the player's live "no headphones" setting."""
+        return self._half_duplex or self._link.settings.no_headphones
+
     def mic_muted(self) -> bool:
         if not self.mic_on():
             return True
-        if not self._half_duplex:
-            return False
-        if self.bot_speaking:
+        if self._link.settings.push_to_talk and not self._push_to_talk.held():
             return True
-        # The speakers and the room still ring for a moment after the last audio frame.
-        stopped = self._bot_stopped_at
-        return stopped is not None and time.monotonic() - stopped < self._echo_tail_s
+        return self.half_duplex() and self._in_echo_window()
+
+    def _in_echo_window(self) -> bool:
+        return echo_window(self.bot_speaking, self._bot_stopped_at, self._echo_tail_s)
 
     def _register_turn_events(self, stt: DeepgramFluxSTTService) -> None:
         @stt.event_handler("on_start_of_turn")
         async def _on_start(_service: DeepgramFluxSTTService, _transcript: str) -> None:
-            if not self.mic_on():
-                # Audio Flux had before the mic went off: no barge-in, and no "listening".
-                log.debug("Mic off; ignored a start of turn")
-                return
-            self.user_speaking = True
-            self._first_audio.turn_started()
-            self._last_partial = ""
-            self._mood.start_turn()
-            if self.bot_speaking:
-                log.info("Barge-in: player started speaking")
-            # Also clears speech that's queued but not yet playing.
-            await self._bridge.broadcast_interruption()
-            self.speech.interrupted()
-            self._bus.publish(PlayerStartedSpeaking())
-            await self.send(AvatarState(state="listening"))
+            await self.on_start_of_turn()
 
         @stt.event_handler("on_end_of_turn")
         async def _on_end(_service: DeepgramFluxSTTService, transcript: str) -> None:
             await self.on_end_of_turn(transcript)
+
+    async def on_start_of_turn(self) -> None:
+        if not self.mic_on():
+            # Audio Flux had before the mic went off: no barge-in, and no "listening".
+            log.debug("Mic off; ignored a start of turn")
+            return
+        if self.half_duplex() and self._in_echo_window():
+            # Flux reports it ~0.5 s late, from sound before the mute. No headphones: no barge-in.
+            log.info("No headphones: ignored a start of turn while the partner talks")
+            return
+        self.user_speaking = True
+        self._first_audio.turn_started()
+        self._last_partial = ""
+        self._mood.start_turn()
+        if self.bot_speaking:
+            log.info("Barge-in: player started speaking")
+        await self._bridge.broadcast_interruption()  # Also clears speech queued but not playing
+        self.speech.interrupted()
+        self._bus.publish(PlayerStartedSpeaking())
+        await self.send(AvatarState(state="listening"))
 
     async def on_end_of_turn(self, transcript: str) -> None:
         self.user_speaking = False

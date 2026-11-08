@@ -41,6 +41,8 @@ test("keys, game and voice choices reach the environment", () => {
         personality: "supportive",
         voice_id: "v2",
         mic_enabled: true,
+        no_headphones: false,
+        push_to_talk: false,
         voice_style: "classic",
         memory_search: "hybrid",
         custom_instructions: "Avoid spoilers",
@@ -120,6 +122,8 @@ test("saved files are repaired field by field", () => {
     personality: "protective",
     voice_id: null,
     mic_enabled: true,
+    no_headphones: false,
+    push_to_talk: false,
     voice_style: "expressive",
     memory_search: "keyword",
     custom_instructions: "",
@@ -178,4 +182,19 @@ test("custom instructions survive settings conversion and saved configuration", 
     "Avoid spoilers",
   );
   assert.equal(sanitizeConfig({}).settings.custom_instructions, "");
+});
+
+test("no headphones is a live setting, kept across restarts", () => {
+  const saved = partnerSettings({ no_headphones: true });
+  assert.equal(saved.no_headphones, true);
+  assert.equal(
+    sanitizeConfig({ settings: saved }).settings.no_headphones,
+    true,
+  );
+  assert.equal(partnerSettings({}).no_headphones, false);
+});
+
+test("the old launch option for no headphones carries over to the setting", () => {
+  const config = sanitizeConfig({ tuning: { halfDuplex: true }, settings: {} });
+  assert.equal(config.settings.no_headphones, true);
 });

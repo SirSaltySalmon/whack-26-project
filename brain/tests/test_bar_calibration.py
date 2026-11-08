@@ -206,3 +206,23 @@ def test_a_red_range_never_spills_into_an_orange_border() -> None:
     built = reader(calibrate(color, [Sample(crop(30), 1.0), Sample(crop(24), 0.8)]))
     # 3 of 30 columns left is 10%, low enough for the health_low alert at 25%.
     assert built.read(crop(3)).value == pytest.approx(0.1, abs=0.02)
+
+
+def test_dark_empty_icons_of_the_same_hue_dont_count_as_full() -> None:
+    # Like Terraria's hearts: lost ones turn dark red, not grey. A live reader read a player near
+    # death as 98% when the brightness floor sat at the fill's darkest shading.
+    def hearts(lit: int) -> np.ndarray:
+        hsv = np.zeros((20, 100, 3), dtype=np.uint8)
+        hsv[..., :] = (25, 150, 200)  # Gold frame
+        for i in range(5):
+            x = 20 * i + 2
+            bright = i < lit
+            hsv[2:18, x : x + 16] = (178, 210, 90 if bright else 75)  # Outline, dark either way
+            hsv[4:16, x + 2 : x + 14] = (178, 210, 230 if bright else 75)  # The fill
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+    color = propose_color(hearts(5), "red")
+    assert color is not None
+    built = reader(calibrate(color, [Sample(hearts(5), 1.0), Sample(hearts(5), 1.0)]))
+    assert built.read(hearts(5)).value == pytest.approx(1.0, abs=0.02)
+    assert built.read(hearts(1)).value == pytest.approx(0.2, abs=0.05)

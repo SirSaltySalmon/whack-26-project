@@ -15,6 +15,8 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
         "voice_id": "v2",
         "voice_style": "classic",
         "mic_enabled": True,
+        "no_headphones": False,
+        "push_to_talk": False,
         "memory_search": "semantic",
         "pacing": Pacing(advice_gap_s=0.0).model_dump(),
         "paused": False,

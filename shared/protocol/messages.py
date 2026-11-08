@@ -43,6 +43,11 @@ class Settings(BaseModel):
     voice_id: str | None = None
     # Off, the partner stops listening but keeps watching and talking; the player types instead.
     mic_enabled: bool = True
+    # Playing on speakers: the mic is muted while the partner talks, and briefly after, so it can't
+    # hear itself and answer or interrupt itself. The cost is barge-in. Applies at once.
+    no_headphones: bool = False
+    # Only heard while the push-to-talk key (PUSH_TO_TALK_KEY) is held. Applies at once.
+    push_to_talk: bool = False
     # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
     # kept so the two can be compared by ear.
     voice_style: Literal["expressive", "classic"] = "expressive"

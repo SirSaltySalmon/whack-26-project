@@ -22,6 +22,8 @@ FRACTION_TOLERANCE = 0.15
 MIN_SATURATION = 90
 MIN_VALUE = 70
 MIN_COLOURED_SHARE = 0.05
+# A bar's brightness floor sits near this percentile of its full fill: only the bright core counts.
+FILL_CORE_PERCENTILE = 25
 HUE_TOLERANCE = 10
 # OpenCV hue ranges (0-179) for the colour names vision gives a bar's fill. Names are loose, so
 # neighbours overlap: Haiku called Terraria's light blue mana star "cyan". Red stays tight,
@@ -83,7 +85,11 @@ def propose_color(crop: np.ndarray, fill: str | None = None) -> ColorFillParams 
     keep = window_hues[hues]
     matching = hsv[coloured][keep]
     low_s = max(40, int(np.percentile(matching[:, 1], 5)) - 20)
-    low_v = max(40, int(np.percentile(matching[:, 2], 5)) - 20)
+    # Drained parts are often a dimmed copy of the fill, such as dark empty hearts. A floor at the
+    # fill's darkest pixels counted those as full: a Terraria player near death read 98%. Shading
+    # and outlines below the floor drop out of both the sample and live reads, so full_at absorbs
+    # them.
+    low_v = max(MIN_VALUE, int(np.percentile(matching[:, 2], FILL_CORE_PERCENTILE)) - 10)
     height, width = crop.shape[:2]
     return ColorFillParams(
         hsv_low=(low_h, low_s, low_v),

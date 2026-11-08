@@ -35,14 +35,24 @@ class Persona:
     tone: str
     max_words: int
     hints: bool
+    # In danger right now, so replies shrink to callouts.
+    urgent: bool = False
 
     @classmethod
-    def of(cls, name: str, tone: str, instructions: str, max_words: int, hints: bool) -> "Persona":
+    def of(
+        cls,
+        name: str,
+        tone: str,
+        instructions: str,
+        max_words: int,
+        hints: bool,
+        urgent: bool = False,
+    ) -> "Persona":
         """The personality's tone, with the player's own instructions added when they wrote any."""
         instructions = instructions.strip()
         if instructions:
             tone += f"\nPlayer custom instructions (keep truth and trust rules): {instructions}"
-        return cls(name, tone, max_words, hints)
+        return cls(name, tone, max_words, hints, urgent)
 
 
 async def talker_reply(
@@ -59,6 +69,7 @@ async def talker_reply(
         persona.tone,
         hints=persona.hints,
         detail=detail,
+        urgent=persona.urgent,
     )
     return None if not text or is_skip(text) else text
 
@@ -148,6 +159,7 @@ async def player_reply(
             done_line,
             hints=persona.hints,
             detail=wants_detail(transcript),
+            urgent=persona.urgent,
         )
     except (LLMUnavailableError, LLMEmptyResponseError) as exc:
         log.warning("Player turn unavailable: %s", exc)

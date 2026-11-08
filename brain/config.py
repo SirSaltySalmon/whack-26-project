@@ -91,7 +91,9 @@ class Settings(BaseSettings):
     # For playing without headphones: mute the mic while the partner talks so it can't hear and
     # interrupt itself. Costs barge-in. The tail covers speaker latency and room echo.
     voice_half_duplex: bool = False
-    voice_echo_tail_ms: int = 400
+    voice_echo_tail_ms: int = 800
+    # Held to talk when the player picks push to talk. See brain/voice/mic_gate.py for names.
+    push_to_talk_key: str = "`"
     # PyAudio device indices; None uses the system default.
     mic_device_index: int | None = None
     speaker_device_index: int | None = None

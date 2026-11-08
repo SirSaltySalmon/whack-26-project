@@ -76,6 +76,7 @@ async def run_turn(
     hints: bool = True,
     max_rounds: int = MAX_TOOL_ROUNDS,
     detail: bool = False,
+    urgent: bool = False,
 ) -> str | None:
     """Returns what to say, or None for nothing. Raises if the very first model call fails.
     `transcript` is their words, or for a tip, why the partner is speaking.
@@ -86,7 +87,9 @@ async def run_turn(
     """
     # The guidance goes in the cached part, before MEMORY, so only the latest message is new.
     memory = context.memory_block()
-    system = build_system(personality, tone, max_words, memory, hints, detail, _TOOL_GUIDANCE)
+    system = build_system(
+        personality, tone, max_words, memory, hints, detail, _TOOL_GUIDANCE, urgent=urgent
+    )
     chat = llm.tool_chat(system, registry.declarations(), MAX_TOKENS, context.history)
     step = await chat.send(context.message(transcript))
     announced = False
@@ -108,7 +111,7 @@ async def run_turn(
         except (LLMUnavailableError, LLMEmptyResponseError) as exc:
             log.warning("Couldn't get a reply after running tools: %s", exc)
             return after_tools_line
-    text = cap_words(drop_narration(step.text), word_limit(max_words, detail))
+    text = cap_words(drop_narration(step.text), word_limit(max_words, detail, urgent))
     if text:
         return text
     if ran_tools:

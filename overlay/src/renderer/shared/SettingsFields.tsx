@@ -17,9 +17,18 @@ const HINT_CHOICES: readonly DropdownOption<OnOff>[] = [
   { value: "off", label: "Just chat" },
 ];
 
-const MIC_CHOICES: readonly DropdownOption<OnOff>[] = [
+type MicMode = "on" | "push" | "off";
+
+const MIC_CHOICES: readonly DropdownOption<MicMode>[] = [
   { value: "on", label: "Listen" },
+  { value: "push", label: "Push to talk" },
   { value: "off", label: "Type instead" },
+];
+
+// "On" means headphones. Off, the mic is muted while the partner talks so it can't hear itself.
+const HEADPHONE_CHOICES: readonly DropdownOption<OnOff>[] = [
+  { value: "on", label: "Headphones" },
+  { value: "off", label: "Speakers" },
 ];
 
 const VOICE_STYLE_CHOICES: readonly DropdownOption<VoiceStyle>[] = [
@@ -73,6 +82,9 @@ export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
+  // Hold the key set in .env as PUSH_TO_TALK_KEY, backtick by default.
+  const pushToTalk = settings.push_to_talk ?? false;
+  const headphones = !(settings.no_headphones ?? false);
   const style = settings.voice_style ?? DEFAULT_VOICE_STYLE;
   const memorySearch = settings.memory_search ?? DEFAULT_MEMORY_SEARCH;
   return (
@@ -93,10 +105,25 @@ export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
       <div className="settings-row">
         <Dropdown
           label="Microphone"
-          value={micEnabled ? "on" : "off"}
+          value={!micEnabled ? "off" : pushToTalk ? "push" : "on"}
           options={MIC_CHOICES}
           onChange={(mic) =>
-            onChange({ ...settings, mic_enabled: mic === "on" })
+            onChange({
+              ...settings,
+              mic_enabled: mic !== "off",
+              push_to_talk: mic === "push",
+            })
+          }
+        />
+      </div>
+      <h3 className="settings-heading">Listening on</h3>
+      <div className="settings-row">
+        <Dropdown
+          label="Listening on"
+          value={headphones ? "on" : "off"}
+          options={HEADPHONE_CHOICES}
+          onChange={(choice) =>
+            onChange({ ...settings, no_headphones: choice === "off" })
           }
         />
       </div>

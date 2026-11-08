@@ -49,6 +49,15 @@ HINTS_OFF = (
     " Only give game knowledge they directly ask for, and no more than they asked."
 )
 
+# Added while the screen shows danger. Time spent listening is time not dodging, so lines shrink to
+# callouts; the director's danger state decides it, never the model.
+URGENT = (
+    "The player is in a fight or in danger right now. Talk like a teammate mid-fight: a quick"
+    " callout of about {urgent_words} words, such as a warning, a target, or heal now. Sentence"
+    " fragments are fine. No greetings, filler, jokes or explanations unless they ask, and even"
+    " then stay under {max_words} words."
+)
+
 # The event's details can quote the screen, so they're passed as data, never as instructions.
 EVENT_PROMPT = """(A game event, not something they said.) Your eyes on the game just noticed: \
 {name}.
@@ -79,6 +88,9 @@ USUAL_WORDS = 12
 # The cap in code when they didn't ask for detail: two short sentences. The prompt alone didn't
 # hold replies short: live ones ran a median of 22 words and up to 61, against 12 asked for.
 BRIEF_WORDS = 30
+# In danger: the usual length, and a lower hard cap even when the player asks for detail.
+URGENT_WORDS = 6
+URGENT_MAX_WORDS = 25
 # Room for a reply at the 100-word cap; the word cap does the real limiting.
 MAX_TOKENS = 200
 
@@ -96,8 +108,9 @@ def wants_detail(transcript: str) -> bool:
     return bool(_DETAIL.search(transcript))
 
 
-def word_limit(max_words: int, detail: bool) -> int:
-    return max_words if detail else min(BRIEF_WORDS, max_words)
+def word_limit(max_words: int, detail: bool, urgent: bool = False) -> int:
+    """The cap in code: brief unless they asked for detail, and lower again in danger."""
+    return word_cap(max_words if detail else min(BRIEF_WORDS, max_words), urgent)
 
 
 # A safety net for reasoning that reaches the reply. A live tip began "The player's on the
@@ -117,6 +130,8 @@ _META = re.compile(
     rf"\b(?i:under|in|from)\s+(?:{_SECTIONS})\b"
     rf"|\b(?:{_SECTIONS})\s+(?:says|said|shows|showed|lists|mentions)\b"
     r"|\b(?i:under)\s+YOU\b"
+    # A copied conversation note, "(note, 12:40 into the session) ...", is never said aloud.
+    r"|\((?i:note),"
     r"|\b[a-z]+(?:_[a-z]+)+\b"
     r"|(?i:\bthe user\b)"
 )
@@ -171,6 +186,11 @@ def event_prompt(name: str, data: dict[str, Any]) -> str:
     return EVENT_PROMPT.format(name=name.replace("_", " "), data=json.dumps(data))
 
 
+def word_cap(max_words: int, urgent: bool) -> int:
+    """The hard cap on a reply. Lower in danger, but never above what the settings allow."""
+    return min(max_words, URGENT_MAX_WORDS) if urgent else max_words
+
+
 def build_system(
     personality: str,
     tone: str,
@@ -179,18 +199,24 @@ def build_system(
     hints: bool = True,
     detail: bool = False,
     guidance: str = "",
+    urgent: bool = False,
 ) -> tuple[SystemPart, ...]:
     """The rules, any tool guidance and the preamble, then MEMORY, each cached: memory changes a
     few times a session, and what changes every call goes in the latest message instead.
     max_words is the hard cap, which the prompt only mentions when they asked for detail, so a
-    detail turn misses the cache; those are rare."""
+    detail turn misses the cache; those are rare. Danger changes the rules too, so a fight's first
+    reply misses it, and the rest of the fight reads it."""
+    max_words = word_cap(max_words, urgent)
+    usual = min(URGENT_WORDS if urgent else USUAL_WORDS, max_words)
     length = DETAIL_LENGTH if detail else BRIEF_LENGTH
     rules = SYSTEM_PROMPT.format(
         personality=personality,
         tone=tone,
-        length=length.format(usual_words=min(USUAL_WORDS, max_words), max_words=max_words),
+        length=length.format(usual_words=usual, max_words=max_words),
     )
     rules = f"{rules}\n{HINTS_ON if hints else HINTS_OFF}"
+    if urgent:
+        rules = f"{rules}\n{URGENT.format(urgent_words=usual, max_words=max_words)}"
     if guidance:
         rules = f"{rules}\n\n{guidance}"
     # The preamble is in the cached part even with no memory, so the cached text stays the same.
@@ -207,12 +233,14 @@ async def reply(
     tone: str = "",
     hints: bool = True,
     detail: bool = False,
+    urgent: bool = False,
 ) -> str | None:
     """Returns None when there's nothing to say, so the caller can stay quiet. `prompt` is their
     words, or why the partner is speaking, which goes after LIVE in the latest message."""
     context = context or TalkerContext()
-    system = build_system(personality, tone, max_words, context.memory_block(), hints, detail)
-    limit = word_limit(max_words, detail)
+    memory = context.memory_block()
+    system = build_system(personality, tone, max_words, memory, hints, detail, urgent=urgent)
+    limit = word_limit(max_words, detail, urgent)
     parts: list[str] = []
     stopped = False
     message = context.message(prompt)

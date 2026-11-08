@@ -12,6 +12,7 @@ import pytest
 from brain.events import EventBus, PlayerSpeech, PlayerSpeechPartial, PlayerStartedSpeaking
 from brain.latency import FirstAudio
 from brain.tests.fakes import FakeOverlay, drain
+from brain.voice.mic_gate import ModeLog, PushToTalk
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.sentiment import MoodTracker
 from brain.voice.speech_fallback import SpeechFallback
@@ -74,6 +75,8 @@ class Harness:
         voice._echo_tail_s = 0.4
         voice._bot_stopped_at = None
         voice._mic_was_on = True
+        voice._modes = ModeLog()
+        voice._push_to_talk = PushToTalk("`", lambda _code: False)
         voice._bridge = self.bridge  # type: ignore[assignment]
         voice._register_turn_events(self.flux)  # type: ignore[arg-type]
         self.voice = voice

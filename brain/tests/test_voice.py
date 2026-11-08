@@ -9,6 +9,7 @@ from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.tests.fakes import FakeOverlay
 from brain.voice.barks import Bark
+from brain.voice.mic_gate import ModeLog, PushToTalk
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.sentiment import MoodTracker
 from brain.voice.speech_fallback import SpeechFallback
@@ -52,6 +53,22 @@ def test_half_duplex_mutes_while_talking_and_through_the_echo_tail() -> None:
     voice.on_bot_stopped()
     assert voice.mic_muted()
     voice._bot_stopped_at = time.monotonic() - 1.0
+    assert not voice.mic_muted()
+
+
+async def test_no_headphones_can_be_turned_on_mid_game_and_off_again() -> None:
+    # Turned on in settings while playing: it was a launch option, so it did nothing until restart.
+    voice = _voice(half_duplex=False)
+    voice._mic_was_on = True
+    voice._modes = ModeLog()
+    voice._push_to_talk = PushToTalk("`", lambda _code: False)
+    voice.bot_speaking = True
+    assert not voice.mic_muted()
+    voice._link.settings = voice._link.settings.model_copy(update={"no_headphones": True})
+    await voice.check_mic()
+    assert voice.half_duplex() and voice.mic_muted()
+    voice._link.settings = voice._link.settings.model_copy(update={"no_headphones": False})
+    await voice.check_mic()
     assert not voice.mic_muted()
 
 
