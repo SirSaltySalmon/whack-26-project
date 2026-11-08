@@ -55,6 +55,7 @@ export type QuestionId = string;
 export type Text2 = string;
 export type Type8 = "question.ask";
 export type Personalities = string[];
+export type CustomInstructions = string;
 export type MemorySearch = "keyword" | "hybrid" | "semantic";
 export type MicEnabled = boolean;
 export type Personality = string;
@@ -136,6 +137,30 @@ export type GameTitle1 = string;
 export type Personalities1 = string[];
 export type ProtocolVersion1 = number;
 export type Voices1 = VoiceOption[];
+export type Attribute1 = string;
+export type Confirmation = string;
+export type FactId = number | null;
+export type Game = string | null;
+export type Operation = "list" | "remember" | "forget" | "clear";
+export type Subject1 = string;
+export type Value1 = string;
+export type Backup = string | null;
+export type Database = string;
+export type Events = number;
+export type Attribute2 = string;
+export type Confidence1 = number;
+export type Game1 = string | null;
+export type Id4 = number;
+export type Source2 = "player" | "observed" | "wiki";
+export type Subject2 = string;
+export type Tentative1 = boolean;
+export type ValidFrom1 = number;
+export type ValidTo1 = number | null;
+export type Value2 = string;
+export type Facts1 = AdminFact[];
+export type Notes1 = number;
+export type Questions1 = number;
+export type TotalFacts = number;
 export type Overlay =
   OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent | PlayerText;
 export type DisplayScale = number;
@@ -174,6 +199,8 @@ export interface Protocol {
   control: Control;
   control_reply: ControlReply;
   description: BrainDescription;
+  memory_admin_request: MemoryAdminRequest;
+  memory_admin_result: MemoryAdminResult;
   overlay: Overlay;
 }
 export interface SubtitleChunk {
@@ -250,6 +277,7 @@ export interface SettingsState {
   voices?: Voices;
 }
 export interface Settings {
+  custom_instructions?: CustomInstructions;
   memory_search?: MemorySearch;
   mic_enabled?: MicEnabled;
   personality?: Personality;
@@ -402,6 +430,36 @@ export interface BrainDescription {
 }
 export interface KeysSet {
   [k: string]: boolean;
+}
+export interface MemoryAdminRequest {
+  attribute?: Attribute1;
+  confirmation?: Confirmation;
+  fact_id?: FactId;
+  game?: Game;
+  operation?: Operation;
+  subject?: Subject1;
+  value?: Value1;
+}
+export interface MemoryAdminResult {
+  backup?: Backup;
+  database: Database;
+  events: Events;
+  facts: Facts1;
+  notes: Notes1;
+  questions: Questions1;
+  total_facts: TotalFacts;
+}
+export interface AdminFact {
+  attribute: Attribute2;
+  confidence: Confidence1;
+  game: Game1;
+  id: Id4;
+  source: Source2;
+  subject: Subject2;
+  tentative: Tentative1;
+  valid_from: ValidFrom1;
+  valid_to?: ValidTo1;
+  value: Value2;
 }
 export interface OverlayReady {
   display_scale: DisplayScale;

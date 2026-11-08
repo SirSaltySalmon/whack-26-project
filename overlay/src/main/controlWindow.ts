@@ -9,6 +9,7 @@ import { CONTROL_IPC } from "../lib/controlBridge.ts";
 import { isKeyName } from "../lib/launcher.ts";
 import { logger } from "../lib/logger.ts";
 import { BrainProcess, describeBrain } from "./brainProcess.ts";
+import { manageMemory } from "./memoryAdmin.ts";
 import { ConfigStore } from "./configStore.ts";
 import { KeyStore } from "./secrets.ts";
 
@@ -71,6 +72,17 @@ function wireIpc(win: BrowserWindow, brain: BrainProcess): void {
     });
   };
 
+  let maintaining = false;
+  handle(CONTROL_IPC.manageMemory, async (raw) => {
+    if (brain.alive) throw new Error("Stop the brain before managing memory");
+    if (maintaining) throw new Error("Memory maintenance is already running");
+    maintaining = true;
+    try {
+      return await manageMemory(config.get(), raw);
+    } finally {
+      maintaining = false;
+    }
+  });
   handle(CONTROL_IPC.getConfig, () => config.get());
   handle(CONTROL_IPC.setConfig, (raw) => config.set(raw));
   handle(CONTROL_IPC.listKeys, () => keys.list());
@@ -84,6 +96,7 @@ function wireIpc(win: BrowserWindow, brain: BrainProcess): void {
   );
   handle(CONTROL_IPC.describe, () => describeBrain(config.get()));
   handle(CONTROL_IPC.start, async () => {
+    if (maintaining) throw new Error("Wait for memory maintenance to finish");
     const current = config.get();
     // Voices from .env are kept when the player adds their own, so ask what .env offers.
     const described = current.customVoices.length

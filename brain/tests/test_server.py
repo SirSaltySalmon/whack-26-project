@@ -104,6 +104,7 @@ def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
         "mic_enabled": True,
         "voice_style": "expressive",
         "memory_search": "keyword",
+        "custom_instructions": "",
     }
 
 
@@ -117,6 +118,7 @@ def test_settings_state_after_an_update_still_offers_them_and_shows_the_change()
         "mic_enabled": True,
         "voice_style": "classic",
         "memory_search": "hybrid",
+        "custom_instructions": "Focus on building",
     }
     with client.websocket_connect("/ws") as socket:
         socket.send_text(ready())

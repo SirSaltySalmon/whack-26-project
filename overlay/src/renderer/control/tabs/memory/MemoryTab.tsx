@@ -4,10 +4,45 @@ import { ago, groupFacts, SOURCE_LABEL } from "../../logic/memory.ts";
 import { FactGroupCard } from "./FactGroupCard.tsx";
 import { useMemoryQuery } from "./useMemoryQuery.ts";
 
+import { useControl } from "../../ControlContext.tsx";
+import { MemoryManager } from "./MemoryManager.tsx";
+import { InstructionsEditor } from "./InstructionsEditor.tsx";
+
+export function MemoryTab() {
+  const { connected, process, stop, external } = useControl();
+  const stopped = !connected && ["stopped", "crashed"].includes(process.state);
+  return (
+    <div className="cc-page mem-page">
+      <InstructionsEditor />
+      {stopped ? (
+        <MemoryManager />
+      ) : (
+        <>
+          <Section
+            title="Edit or clear memory"
+            hint="Stop the brain before editing so a running turn cannot restore old memories. Managing saved memory uses no API tokens."
+          >
+            {external ? (
+              <Notice>
+                Stop the brain in its terminal to manage saved memory here.
+              </Notice>
+            ) : (
+              <button className="cc-button" type="button" onClick={stop}>
+                Stop brain to manage memory
+              </button>
+            )}
+          </Section>
+          <LiveMemory />
+        </>
+      )}
+    </div>
+  );
+}
+
 const count = (n: number, noun: string): string =>
   `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-export function MemoryTab() {
+function LiveMemory() {
   const [text, setText] = useState("");
   const [history, setHistory] = useState(false);
   const memory = useMemoryQuery(text, history);

@@ -31,6 +31,7 @@ export interface PartnerSettings {
   mic_enabled: boolean;
   voice_style: VoiceStyle;
   memory_search: MemorySearch;
+  custom_instructions: string;
 }
 
 export function partnerSettings(settings: Settings): PartnerSettings {
@@ -41,6 +42,7 @@ export function partnerSettings(settings: Settings): PartnerSettings {
     mic_enabled: settings.mic_enabled ?? true,
     voice_style: settings.voice_style ?? DEFAULT_VOICE_STYLE,
     memory_search: settings.memory_search ?? DEFAULT_MEMORY_SEARCH,
+    custom_instructions: settings.custom_instructions ?? "",
   };
 }
 
@@ -103,6 +105,7 @@ export const DEFAULT_CONFIG: LauncherConfig = {
     mic_enabled: true,
     voice_style: DEFAULT_VOICE_STYLE,
     memory_search: DEFAULT_MEMORY_SEARCH,
+    custom_instructions: "",
   },
 };
 
@@ -157,6 +160,10 @@ export function sanitizeConfig(raw: unknown): LauncherConfig {
       speakerIndex: index(tuning.speakerIndex),
     },
     settings: {
+      custom_instructions: text(settings.custom_instructions, "").slice(
+        0,
+        4000,
+      ),
       proactive: flag(settings.proactive, true),
       personality: text(settings.personality, defaults.settings.personality),
       voice_id:

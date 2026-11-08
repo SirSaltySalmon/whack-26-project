@@ -35,6 +35,7 @@ class Settings(BaseModel):
     # How memory finds what the player's words are about. "keyword" matches words, "semantic"
     # matches meaning with a local embedding model, and "hybrid" merges the two.
     memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
+    custom_instructions: str = Field(default="", max_length=4000)
 
 
 # --- Brain to overlay ---

@@ -188,6 +188,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       if (set) available.add(name as KeyName);
     }
     return {
+      manageMemory: (request) => bridge.manageMemory(request),
       process: proc,
       connected,
       external: connected && !started,

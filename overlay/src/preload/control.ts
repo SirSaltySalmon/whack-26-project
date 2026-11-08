@@ -12,6 +12,8 @@ function listen<T>(channel: string, listener: (value: T) => void): () => void {
 }
 
 const bridge: ControlBridge = {
+  manageMemory: (request) =>
+    ipcRenderer.invoke(CONTROL_IPC.manageMemory, request),
   getConfig: () => ipcRenderer.invoke(CONTROL_IPC.getConfig),
   setConfig: (config) => ipcRenderer.invoke(CONTROL_IPC.setConfig, config),
   listKeys: () => ipcRenderer.invoke(CONTROL_IPC.listKeys),
