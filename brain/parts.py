@@ -27,6 +27,7 @@ from brain.perception.tracker import ObservationTracker
 from brain.research import ExaSearch, WikiResearch
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink
+from brain.switches import is_off
 from brain.voice.barks import BarkBank, ElevenLabsSynth
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ def make_observer(
     bus: EventBus,
     on_observation: Callable[[Observation, float], None] | None = None,
 ) -> Observer | None:
+    if is_off(settings, "observer"):
+        log.warning("Not watching the screen: turned off for this run")
+        return None
     try:
         vision = factory.observer()
     except LLMUnavailableError as exc:
@@ -81,6 +85,9 @@ def make_progress_scout(
     memory: MemoryService,
     database: Database,
 ) -> ProgressScout | None:
+    if is_off(settings, "scout"):
+        log.warning("Not guessing the player's progress: turned off for this run")
+        return None
     try:
         vision = factory.vision()
     except LLMUnavailableError as exc:
@@ -113,6 +120,9 @@ async def find_wiki(
     settings: Settings, database: Database, tools: AgentTools, control: ControlLink
 ) -> None:
     """In the background, so a slow or dead wiki can't hold up the brain's start."""
+    if is_off(settings, "wiki"):
+        log.warning("No wiki lookups: turned off for this run")
+        return
     title = settings.game_title.strip()
     if not title or title == Settings.model_fields["game_title"].default:
         log.warning("No wiki lookups: set GAME_TITLE to the game being played")

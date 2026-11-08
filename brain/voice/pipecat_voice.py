@@ -50,6 +50,7 @@ from brain.server import OverlayLink
 from brain.voice.barks import Bark
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
+from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
@@ -69,6 +70,7 @@ class PipecatVoice:
         self._link = link
         self._subtitles = SubtitleOnlyVoice(link)
         self._mood = MoodTracker()
+        self._echo = SelfEcho()
         self._last_partial = ""
         self._last_partial_logged = 0.0
         self.bot_speaking = False
@@ -143,6 +145,7 @@ class PipecatVoice:
         if not self._speaks:
             return await self._subtitles.say(text)
         log.info("Say: %s", text)
+        self._echo.said(text)
         self._first_audio.queued(origin, self.bot_speaking)
         await self._worker.queue_frame(TTSSpeakFrame(text))
         return True
@@ -154,6 +157,7 @@ class PipecatVoice:
         if not self._speaks:
             return await self._subtitles.say(bark.text)
         log.info("Bark: %s", bark.text)
+        self._echo.said(bark.text)
         # One chunk, because SpokenOutputTap only sees TTS text and a line this short needs no
         # word timing. It goes out as the audio is queued, which is within a chunk of it playing.
         await self.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=bark.text, final=True))
@@ -280,18 +284,24 @@ class PipecatVoice:
 
         @stt.event_handler("on_end_of_turn")
         async def _on_end(_service: DeepgramFluxSTTService, transcript: str) -> None:
-            self.user_speaking = False
-            if not self.mic_on():
-                # They turned the mic off mid-sentence, so the half they said isn't a turn. No
-                # avatar change either: check_mic already reset it, and it may be talking now.
-                log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
-                return
-            await self.send(AvatarState(state="idle"))
-            transcript = transcript.strip()
-            if not transcript:
-                return
-            self._first_audio.turn_ended()
-            mood = self._mood.add_text(transcript, final=True)
-            log.info("Player (%s): %s", mood.label if mood else "unknown", transcript)
-            self._publish_mood(mood)
-            self._bus.publish(PlayerSpeech(transcript=transcript))
+            await self.on_end_of_turn(transcript)
+
+    async def on_end_of_turn(self, transcript: str) -> None:
+        self.user_speaking = False
+        if not self.mic_on():
+            # They turned the mic off mid-sentence, so the half they said isn't a turn. No
+            # avatar change either: check_mic already reset it, and it may be talking now.
+            log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
+            return
+        await self.send(AvatarState(state="idle"))
+        transcript = transcript.strip()
+        if not transcript:
+            return
+        if self._echo.is_echo(transcript):
+            log.warning("Ignoring the partner's own voice, heard by the mic: %s", transcript)
+            return
+        self._first_audio.turn_ended()
+        mood = self._mood.add_text(transcript, final=True)
+        log.info("Player (%s): %s", mood.label if mood else "unknown", transcript)
+        self._publish_mood(mood)
+        self._bus.publish(PlayerSpeech(transcript=transcript))

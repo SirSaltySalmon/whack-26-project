@@ -10,22 +10,24 @@ import asyncio
 import json
 import logging
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
-from brain.learner.brief import write_brief
+from brain.learner.debug_samples import save_samples
 from brain.learner.regions import (
-    REGION_PROMPT,
     AgreedRegion,
     RegionProposal,
     agree,
     build_spec,
+    region_prompt,
 )
-from brain.learner.validate import Sample, propose_color, validate
-from brain.llm.base import LLMUnavailableError, TextLLM, VisionLLM
+from brain.learner.validate import Sample, calibrate, propose_color, validate
+from brain.learner.zoom import Zoom, zoom_around, zoom_pass
+from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.memory.db import Database
 from brain.memory.models import GameProfile
 from brain.memory.profile import ProfileStore
@@ -33,9 +35,8 @@ from brain.perception.closeup import make_closeup
 from brain.perception.masking import box_is_masked
 from brain.perception.observer import OverlayScale
 from brain.perception.ocr import OcrWorker
-from brain.perception.profile_schema import LearnedFor, ReaderSpec, Region
+from brain.perception.profile_schema import Box, LearnedFor, ReaderSpec, Region
 from brain.perception.readers import compile_reader, crop_box, learned_size
-from brain.research import WikiResearch
 from shared.protocol import BrainMessage
 from shared.protocol.messages import MemoryToast
 
@@ -45,7 +46,6 @@ CHECK_EVERY_S = 5.0
 PROPOSAL_MAX_TOKENS = 2000
 FRAME_WAIT_S = 60.0
 MAX_FRAME_AGE_S = 2.0
-BRIEF_WAIT_FOR_WIKI_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,8 @@ class LearnerConfig:
     closeup_max_edge_px: int
     mask_padding_px: int
     profile_fixture: Path | None = None
+    # Where to save each region's samples for a look later, with --debug-regions only.
+    debug_dir: Path | None = None
 
 
 class GameLearner:
@@ -65,8 +67,6 @@ class GameLearner:
         database: Database,
         game: str,
         vision: Callable[[], VisionLLM],
-        deep: Callable[[], TextLLM],
-        research: Callable[[], WikiResearch | None],
         buffer: RingBuffer,
         overlay: OverlayScale,
         bus: EventBus,
@@ -80,8 +80,6 @@ class GameLearner:
         self._database = database
         self._game = game
         self._vision = vision
-        self._deep = deep
-        self._research = research
         self._buffer = buffer
         self._overlay = overlay
         self._bus = bus
@@ -91,21 +89,19 @@ class GameLearner:
         self._in_gameplay = in_gameplay
         self._clock = clock
         self.vision_calls = 0
+        # The width and height of the images sent in the latest pass: boxes come back in them.
+        self._image_size = (0, 0)
         self._last_pass_at: float | None = None
         self._readers_failing = False
 
     async def run(self) -> None:
         events = self._bus.subscribe()
         await self.seed_if_empty()
-        brief = asyncio.create_task(self._brief_when_ready())
-        try:
-            while True:
-                reason = await self.why_learn(events)
-                if reason:
-                    await self.learn(reason)
-                await asyncio.sleep(CHECK_EVERY_S)
-        finally:
-            brief.cancel()
+        while True:
+            reason = await self.why_learn(events)
+            if reason:
+                await self.learn(reason)
+            await asyncio.sleep(CHECK_EVERY_S)
 
     async def _profile(self) -> GameProfile:
         return await self._database.run(lambda conn: ProfileStore(conn).get(self._game))
@@ -170,9 +166,12 @@ class GameLearner:
         if len(samples) < 2:
             log.info("Not enough gameplay frames to learn from")
             return False
+        frames = [frame for frame, _ in samples]
+        found = agree([proposal for _, proposal in samples], self._image_size)
+        found += await self._zoom_pass(frames, found)
         kept: list[tuple[Region, ReaderSpec]] = []
-        for agreed in agree([proposal for _, proposal in samples]):
-            built = await self._build_and_check(agreed, [frame for frame, _ in samples])
+        for agreed in found:
+            built = await self._build_and_check(agreed, frames)
             if built:
                 kept.append(built)
         if not kept:
@@ -185,9 +184,6 @@ class GameLearner:
         samples: list[tuple[Frame, RegionProposal]] = []
         previous: Frame | None = None
         for index in range(self._config.frames):
-            if self.vision_calls >= self._config.max_vision_calls:
-                log.info("Learner vision budget used up for this session")
-                break
             if index:
                 await asyncio.sleep(self._config.frame_gap_s)
             frame = await self._gameplay_frame(previous)
@@ -201,17 +197,42 @@ class GameLearner:
                 self._config.mask_padding_px,
                 self._config.closeup_max_edge_px,
             )
-            self.vision_calls += 1
-            proposal = await self._vision().vision_json(
-                REGION_PROMPT,
-                closeup.image,
-                "image/jpeg",
-                RegionProposal,
-                PROPOSAL_MAX_TOKENS,
-                detail="high",
-            )
+            # Every frame in a pass has the same size, so the last one's size stands for all.
+            self._image_size = (closeup.width, closeup.height)
+            proposal = await self._ask(closeup.image, closeup.width, closeup.height)
+            if proposal is None:
+                break
             samples.append((frame, proposal))
         return samples
+
+    async def _ask(self, image: bytes, width: int, height: int) -> RegionProposal | None:
+        """One vision call where the HUD is, or None once this session's budget is spent."""
+        if self.vision_calls >= self._config.max_vision_calls:
+            log.info("Learner vision budget used up for this session")
+            return None
+        self.vision_calls += 1
+        prompt, tokens, call = region_prompt(width, height), PROPOSAL_MAX_TOKENS, self._vision()
+        return await call.vision_json(prompt, image, "image/jpeg", RegionProposal, tokens, "high")
+
+    async def _zoom_pass(
+        self, frames: list[Frame], found: list[AgreedRegion]
+    ) -> list[AgreedRegion]:
+        """A closer look around what was found, within the same call budget. Never fails a pass."""
+
+        async def zoom(frame: Frame, box: Box) -> Zoom | None:
+            config, scale = self._config, self._overlay.display_scale
+            edge, padding = config.closeup_max_edge_px, config.mask_padding_px
+            return await asyncio.to_thread(zoom_around, frame, box, scale, padding, edge)
+
+        try:
+            extra = await zoom_pass(frames, found, self._image_size, self._ask, zoom)
+        except Exception:
+            # Includes running out of quota: what the full view found still stands.
+            log.exception("The closer look around the HUD failed; keeping what was found")
+            return []
+        if extra:
+            log.info("A closer look also found: %s", ", ".join(a.region.name for a in extra))
+        return extra
 
     async def _gameplay_frame(self, previous: Frame | None) -> Frame | None:
         deadline = self._clock() + FRAME_WAIT_S
@@ -242,12 +263,22 @@ class GameLearner:
         if region.kind == "bar" and samples:
             # The fullest sample shows the most of the bar's colour.
             fullest = max(samples, key=lambda s: s.expected if isinstance(s.expected, float) else 0)
-            color = propose_color(fullest.crop)
+            names = [s.proposal.fill_color for s in agreed.sightings if s.proposal.fill_color]
+            fill = Counter(names).most_common(1)[0][0] if names else None
+            color = propose_color(fullest.crop, fill)
+            if color is not None:
+                color = calibrate(color, samples)
+                if color.full_at < 1.0:
+                    full = color.full_at * 100
+                    log.info("A full %s bar colours %.0f%% of its box", region.name, full)
         spec = build_spec(agreed, color)
         if spec is None:
             log.info("No local reader for %s: nothing to read it by", region.name)
             return None
         accepted, why = await validate(compile_reader(spec), samples, self._ocr)
+        if self._config.debug_dir is not None:
+            folder = self._config.debug_dir
+            await asyncio.to_thread(save_samples, folder, region.name, samples, accepted, why)
         log.info(
             "Reader %s (%s) %s: %s", spec.name, spec.type, "kept" if accepted else "rejected", why
         )
@@ -266,27 +297,3 @@ class GameLearner:
         listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
         verb = "is" if len(names) == 1 else "are"
         await self._send(MemoryToast(text=f"Learned where your {listed} {verb}", source="observed"))
-
-    async def _brief_when_ready(self) -> None:
-        try:
-            if (await self._profile()).brief:
-                return
-            waited = 0.0
-            while self._research() is None and waited < BRIEF_WAIT_FOR_WIKI_S:
-                await asyncio.sleep(1.0)
-                waited += 1.0
-            research = self._research()
-            card = await research.lookup(self._game) if research else None
-            if card is None:
-                log.info("No game brief: no wiki page for %s", self._game)
-                return
-            brief = await write_brief(self._deep(), self._game, card.context_text())
-            # Startup may have written one from the model's own knowledge while this waited.
-            if brief and not (await self._profile()).brief:
-                await self._database.run(
-                    lambda conn: ProfileStore(conn).set_brief(self._game, brief)
-                )
-                log.info("Wrote the game brief")
-        except Exception:
-            # The brief is a nicety; the partner works without it.
-            log.exception("Couldn't write the game brief")

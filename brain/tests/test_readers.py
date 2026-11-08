@@ -36,8 +36,11 @@ def test_a_bar_reads_how_full_it_is(axis: str, reverse: bool) -> None:
     assert reading.display == "72%"
 
 
-def test_a_row_of_icons_with_gaps_reads_by_how_far_it_reaches() -> None:
-    reading = colour_reader().read(hearts(full=7))
+def test_a_row_of_icons_with_gaps_reads_against_a_full_row() -> None:
+    # Ten 16-pixel hearts with 4-pixel gaps colour 80% of the row's columns when full.
+    reader = colour_reader()
+    reader._params = reader._params.model_copy(update={"full_at": 0.8})
+    reading = reader.read(hearts(full=7))
     assert reading.status == "ok"
     assert reading.value == pytest.approx(0.7, abs=0.05)
 

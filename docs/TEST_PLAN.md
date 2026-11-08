@@ -159,7 +159,7 @@ The numbers for the pitch, measured with [WP11](REMAINING_WORK.md#wp11-proof-ben
 
 ## Known gaps these tests won't close
 
-- **Must-have 3:** learned regions and compiled readers are on `origin/wp4-wp5-readers`, not on `main`. Until that merges, confirmed events stay about 2.4 s old.
+- **Must-have 3:** learned regions and compiled readers are on `main`, from an early snapshot; the live-tested version is on `claude/night`. Until a profile is learned, confirmed events stay about 2.4 s old.
 - **Barks** are pre-generated, and the 300 ms budget is not measured yet. [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) now logs it from the frame, so a live run can.
 - **Frame to first audio isn't logged in subtitles-only mode,** including replays, because there's no audio to time. `frame to bark` is still logged there, when it's queued.
 - **The game brief** is written on `main`. It still needs a check on a few real games.

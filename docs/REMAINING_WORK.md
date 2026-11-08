@@ -18,7 +18,7 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP1](#wp1-test-fakes-and-tests) | Fakes and the tests in the test plan | `CLAUDE.md` testing rule | **Done**, including WP8's tests | All | WP0 |
 | [WP2](#wp2-test-tooling) | Typed turns, overlay demo | Testing with no mic | **Done** | Shared, 1 | WP0 |
 | [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | **Done.** The reader-event replay check can run now that readers are merged | 2 | WP0 |
-| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | **Merged.** Code and synthetic tests are on `main`. Not run live. Scene matching skipped | 2 | WP0 |
+| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | **Merged** from an early snapshot (`bfabbf5`). The live-tested version, with pixel boxes, fill colours and calibration, is on `claude/night`. Health learned live there. Scene matching skipped | 2 | WP0 |
 | [WP5](#wp5-learner) | Regions and reader specs. The brief is separate | Must-have 3 | **Regions merged.** Brief stays the deep-model one. Not run live | 4 | WP0, works with WP4 |
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | **Done** in code and unit tests. The live 300 ms and barge-in checks are not run | 3 | WP0 |
 | [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | **Not done** | All | Keys, a game |
@@ -610,7 +610,7 @@ Cut this first if behind. Whole-frame hashes won't work, because the world scrol
 
 **Purpose:** work out where a game's HUD is, by vision, and store that as data. The brief below is the old shape. It is kept so the merge can see what the branch was aiming at.
 
-**Files:** rewrite `brain/learner/learner.py`. New `brain/learner/brief.py`, `brain/learner/regions.py` and `brain/learner/validate.py`.
+**Files:** rewrite `brain/learner/learner.py`. New `brain/learner/regions.py` and `brain/learner/validate.py`.
 
 ### Overview
 
@@ -630,18 +630,10 @@ class GameLearner:
 
 - **Stores:** builds its own `ProfileStore` and calls it through `database.run`. It doesn't add to `MemoryService`.
 - **Providers:** `vision` and `deep` are callables, because a missing key raises when called. Catch `LLMUnavailableError`, log once and pause.
-- `research`**:** `lambda: tools.research`, because the wiki is found in the background.
 
 ### Game brief
 
-| | |
-|---|---|
-| **When** | Once the wiki is available or after 30 s, if `profile.brief` is empty. Never overwrites a brief |
-| **Input** | `settings.game_title`, and `WikiCard.context_text()` from `research.lookup(game_title)` if there is one |
-| **Call** | `deep().stream_text(system, prompt, max_tokens=300)`. Fence the wiki text as data, the way `notes.py` does with `<<<DATA` and `DATA>>>` |
-| **Output** | `ProfileStore.set_brief(game, text)`, at most 300 characters, because the context limit `game_chars` is 300. What the game is, its goals, and its main vocabulary |
-| **Without a wiki** | Writes nothing rather than guessing. The title alone isn't enough |
-| **Effect** | `gather_context` and `flush_note` already read it, so nothing else needs wiring |
+Moved out of the learner when main was merged: `ensure_brief` in `brain/game_setup.py` names the game and writes the brief once at startup, from the deep model's general knowledge. The learner no longer writes one from the wiki, so there's one writer.
 
 ### Regions and reader specs
 
@@ -729,7 +721,6 @@ tasks.create_task(_survive("Learner", learner.run()))   # Live only, never on re
 
 **Done when**, using `FakeVision`, `FakeTextLLM` and synthetic frames:
 
-- The brief is stored once, fenced, under 300 characters and never overwritten.
 - Boxes that agree become a `Region`. Boxes that don't agree are dropped.
 - Conversion from `box_2d` to `Box` is correct.
 - A good bar reader is accepted and a wrong one rejected.
