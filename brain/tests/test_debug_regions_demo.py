@@ -1,6 +1,14 @@
 """The overlay debug-view demo: what it draws, and that the launcher can run it."""
 
-from scripts.debug_regions_demo import BOXES, STATUS_EVERY_TICKS, STATUSES, regions_at
+from scripts.debug_regions_demo import (
+    BOXES,
+    STATUS_EVERY_TICKS,
+    STATUSES,
+    TOOL_EVERY_TICKS,
+    TOOLS,
+    regions_at,
+    sightings_at,
+)
 from scripts.run_all import brain_command
 
 
@@ -24,6 +32,22 @@ def test_statuses_take_turns() -> None:
 def test_every_box_fits_a_1280_by_720_screen() -> None:
     for _, rect in BOXES:
         assert rect.x + rect.width <= 1280 and rect.y + rect.height <= 720
+
+
+def test_every_sighting_kind_shows_within_one_round_of_tools() -> None:
+    ticks = range(TOOL_EVERY_TICKS * len(TOOLS))
+    kinds = {s.kind for tick in ticks for s in sightings_at(tick).sightings}
+    assert kinds == {"noticed", "look", "point", "look_back"}
+
+
+def test_noticed_boxes_move_and_stay_on_a_1280_by_720_screen() -> None:
+    first, later = sightings_at(1).sightings, sightings_at(2).sightings
+    assert first[0].rect != later[0].rect
+    for tick in range(100):
+        for sighting in sightings_at(tick).sightings:
+            rect = sighting.rect
+            assert rect.x >= 0 and rect.y >= 0
+            assert rect.x + rect.width <= 1280 and rect.y + rect.height <= 720
 
 
 def test_the_launcher_runs_a_script_in_the_brains_place() -> None:

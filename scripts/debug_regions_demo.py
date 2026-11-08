@@ -5,12 +5,15 @@ Usage: .\\run.cmd scripts\\debug_regions_demo.py   or, with the overlay already 
 
 No game, mic, learner or API keys. It stands in for the brain on the same socket and sends what
 --debug-regions sends: five labelled boxes, twice a second, each showing a reading that ticks and a
-status that cycles ok, masked, unreadable every few seconds. If they appear and change, the overlay
-side works, and a missing box in a real run is the learner's doing. Ctrl+C stops it.
+status that cycles ok, masked, unreadable every few seconds. It also sends what the observer and
+tools would: two moving "noticed" boxes, and a look, a point and a look back in turn, each fading
+on its own. If they appear and change, the overlay side works, and a missing box in a real run is
+the learner's or the observer's doing. Ctrl+C stops it.
 """
 
 import asyncio
 import logging
+import math
 import sys
 from pathlib import Path
 
@@ -23,7 +26,13 @@ from brain.config import WS_HOST, Settings  # noqa: E402
 from brain.events import EventBus  # noqa: E402
 from brain.server import OverlayLink, create_app  # noqa: E402
 from scripts.overlay_demo import offer_settings  # noqa: E402
-from shared.protocol.messages import DebugRegion, DebugRegions, Rect  # noqa: E402
+from shared.protocol.messages import (  # noqa: E402
+    DebugRegion,
+    DebugRegions,
+    DebugSighting,
+    DebugSightings,
+    Rect,
+)
 
 log = logging.getLogger("debug_regions_demo")
 
@@ -40,6 +49,48 @@ BOXES = (
     ("tall bar", Rect(x=1200, y=200, width=30, height=300)),
 )
 
+# Two things the observer "noticed", circling the middle of the screen at different speeds.
+MOVERS = (("green slime", 0.25, 260, 160), ("demon eye", -0.4, 360, 220))
+NOTICED_TTL_MS = 900  # A little past the send interval, so each box hands over to the next
+TOOL_EVERY_TICKS = 8  # A tool's box every 4 s, taking turns
+TOOL_TTL_MS = 3000
+TOOLS = (
+    DebugSighting(
+        label="what's that up there?",
+        rect=Rect(x=640, y=0, width=640, height=360),
+        kind="look",
+        ttl_ms=TOOL_TTL_MS,
+    ),
+    DebugSighting(
+        label="the workbench",
+        rect=Rect(x=300, y=520, width=70, height=40),
+        kind="point",
+        ttl_ms=TOOL_TTL_MS,
+    ),
+    DebugSighting(
+        label="what hit me?",
+        rect=Rect(x=0, y=0, width=1280, height=720),
+        kind="look_back",
+        ttl_ms=TOOL_TTL_MS,
+    ),
+)
+
+
+def sightings_at(tick: int) -> DebugSightings:
+    """The movers' boxes on every tick, plus the next tool's box every TOOL_EVERY_TICKS."""
+    sightings = []
+    for label, speed, radius_x, radius_y in MOVERS:
+        angle = tick * speed
+        x = 640 + radius_x * math.cos(angle) - 30
+        y = 360 + radius_y * math.sin(angle) - 20
+        rect = Rect(x=x, y=y, width=60, height=40)
+        sightings.append(
+            DebugSighting(label=label, rect=rect, kind="noticed", ttl_ms=NOTICED_TTL_MS)
+        )
+    if tick % TOOL_EVERY_TICKS == 0:
+        sightings.append(TOOLS[tick // TOOL_EVERY_TICKS % len(TOOLS)])
+    return DebugSightings(sightings=sightings)
+
 
 def regions_at(tick: int) -> DebugRegions:
     """What to draw on this tick: readings count up, statuses take turns across the boxes."""
@@ -55,6 +106,7 @@ async def draw(link: OverlayLink) -> None:
     tick = 0
     while True:
         await link.send(regions_at(tick))
+        await link.send(sightings_at(tick))
         if tick % STATUS_EVERY_TICKS == 0:
             log.info(
                 "Drawing %d boxes (tick %d); connect the overlay to see them", len(BOXES), tick
