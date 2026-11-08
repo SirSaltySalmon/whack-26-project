@@ -7,10 +7,11 @@ from pydantic import BaseModel
 from brain.agent.tools import Tool, TurnContext
 from brain.director.talker import ADVICE_PROMPT
 from brain.director.turns import TIP_QUERY
-from brain.events import OverlayConnected, Tick
+from brain.events import OverlayConnected, SettingsChanged, Tick
 from brain.llm.base import LLMUnavailableError, ToolCall, ToolStep
 from brain.tests.director_rig import LOOKING, Rig
 from brain.tests.fakes import FakeTextLLM, ScriptedToolLLM
+from shared.protocol.messages import Settings
 
 FIRST_S = 90.0
 GREETING = "Brain connected."
@@ -141,6 +142,19 @@ async def test_with_no_pointer_to_offer_a_tip_comes_from_the_plain_talker() -> N
     async with rig.running():
         await due_tip(rig)
     assert agent.model_calls == 0
+    assert rig.voice.said == [GREETING, TIP]
+
+
+async def test_a_blinded_partner_tips_without_offering_the_pointer() -> None:
+    talker = FakeTextLLM([TIP])
+    agent = ScriptedToolLLM([points_at("workbench"), ToolStep(TIP)])
+    tools = Tools()
+    rig = tip_rig(talker=talker, agent=agent, tools=tools.all())
+    async with rig.running():
+        await rig.publish(SettingsChanged(settings=Settings(vision_enabled=False), ts=0.0))
+        await due_tip(rig)
+    assert agent.model_calls == 0 and tools.pointed == []
+    assert talker.prompts == [ADVICE_PROMPT]
     assert rig.voice.said == [GREETING, TIP]
 
 

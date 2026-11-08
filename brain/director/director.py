@@ -270,7 +270,8 @@ class Director:
             self.checking = False
 
     async def _advise(self) -> None:
-        tools = tip_tools(self._tools)
+        # Blinded, it can't point, so the model isn't offered the pointer at all.
+        tools = None if self._state.blind else tip_tools(self._tools)
         if self._agent is None or tools is None:
             # Replays have no agent, and a tip that can't point is still worth saying.
             return await self._talk(ADVICE_PROMPT, query=TIP_QUERY)

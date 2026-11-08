@@ -149,6 +149,8 @@ class DirectorState:
     # GameEvent name -> LineKind. Events not listed here go to the talker.
     bark_events: Mapping[str, str] = field(default_factory=dict)
     paused: bool = False
+    # The player turned the partner's vision off, so a tip can't point.
+    blind: bool = False
     # Set by unpausing, and cleared once a question is asked.
     ask_on_resume: bool = False
 
@@ -255,7 +257,8 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             elif state.paused and not paused:
                 state.ask_on_resume = True
             state.paused = paused
-            if not getattr(event.settings, "vision_enabled", True):
+            state.blind = not getattr(event.settings, "vision_enabled", True)
+            if state.blind:
                 # Blind, it can't know a fight is still on, so it stops holding back for one.
                 state.in_danger = False
             return actions

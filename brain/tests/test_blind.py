@@ -1,6 +1,7 @@
-"""Blinding the partner: readers stop, the look tools refuse, and it stops worrying about danger.
+"""Blinding the partner: readers stop, the vision tools refuse, and it stops worrying about danger.
 
-The observer's side is in test_observer.py, and the tracker forgetting a fight in test_tracker.py.
+The observer's side is in test_observer.py, the tracker forgetting a fight in test_tracker.py, the
+learner in test_learner.py, and tips that don't offer the pointer in test_director_advice.py.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from brain.director.rules import AskQuestion, DirectorState, decide
 from brain.events import EventBus, GameEvent, OverlayConnected, SettingsChanged, Tick
 from brain.memory.models import GameProfile
 from brain.perception.reader_engine import ReaderEngine
-from brain.tests.agent_rig import LOOK, rig
+from brain.tests.agent_rig import LOOK, POINT, rig
 from brain.tests.fakes import FakeOverlay, drain, make_frame
 from brain.tests.reader_fixtures import health_frame_image, health_profile
 from shared.protocol.messages import BrainMessage, DangerState, Settings
@@ -28,9 +29,13 @@ SEEING = Settings()
 
 @pytest.mark.parametrize(
     ("tool", "arguments"),
-    [("look_closer", LOOK), ("look_back", {"question": "what hit me?"})],
+    [
+        ("look_closer", LOOK),
+        ("look_back", {"question": "what hit me?"}),
+        ("point_at", POINT),
+    ],
 )
-async def test_the_look_tools_refuse_without_calling_vision(
+async def test_the_vision_tools_refuse_without_calling_vision(
     tool: str, arguments: dict[str, str]
 ) -> None:
     now = time.monotonic()
@@ -38,6 +43,7 @@ async def test_the_look_tools_refuse_without_calling_vision(
     r.overlay.settings = BLIND
     assert await r.run(tool, TurnContext(started_at=now), **arguments) == BLINDED
     assert r.vision.calls == []
+    assert r.overlay.sent == []  # No pointer either
 
 
 async def test_blinded_readers_read_nothing_and_resume_when_vision_comes_back() -> None:

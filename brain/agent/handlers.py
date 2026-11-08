@@ -173,7 +173,7 @@ class AgentTools:
         )
 
     def _watching(self) -> bool:
-        """Off when the player blinds the partner. point_at still looks, so it can point."""
+        """Off when the player blinds the partner: then no tool sends a frame to vision."""
         return self._overlay.settings.vision_enabled
 
     def _fresh(self, frame: Frame | None) -> Frame | None:
@@ -219,6 +219,8 @@ class AgentTools:
         return reply.as_result()
 
     async def _point_at(self, arguments: PointInput, _turn: TurnContext) -> str:
+        if not self._watching():
+            return BLINDED
         # The newest frame, not the one from when they spoke: the pointer lands on the screen now.
         frame = self._fresh(self._buffer.latest())
         if frame is None:
