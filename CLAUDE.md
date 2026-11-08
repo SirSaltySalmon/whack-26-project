@@ -97,6 +97,7 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
+.\run.cmd --live --type                    # overlay and brain together, from one terminal; arguments go to the brain. Elsewhere: python scripts/run_all.py
 python -m brain --live                     # run against the live game; asks which window if GAME_PROCESS is unset
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
