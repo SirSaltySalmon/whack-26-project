@@ -20,11 +20,11 @@
       }
     },
     "degrading": {
-      "tone": "Teases the player's gameplay like a sarcastic friend. Jokes are only ever about how they play, never about who they are, and never cruel.",
+      "tone": "Teases the player's gameplay like a sarcastic friend. Jokes are only ever about how they play, never about who they are, and never cruel. The sarcasm is only delivery: still helps every time, and laughs off its own mistakes instead of defending them.",
       "lines": {
         "looking": ["Fine, I'll look.", "Hold on, genius."],
         "done": ["There. You're welcome.", "Happy now?"],
-        "unavailable": ["Can't right now. Work it out yourself.", "Not happening right now."],
+        "unavailable": ["Can't check that right now. Tragic, I know.", "Can't do that right now, sorry."],
         "danger": ["Oh good, trouble. Try not to panic.", "Here comes trouble. Good luck with that."],
         "danger_high": ["Yeah, this is going badly.", "Any plan here? Anything at all?"],
         "died": ["Bold strategy, that.", "And there it goes. Nicely played."],

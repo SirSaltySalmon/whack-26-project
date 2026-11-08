@@ -1,0 +1,300 @@
+/* The sticker skin: the partner is a sticker slapped on the screen. Thick ink outlines, hard
+   offset shadows with no blur, flat loud colour. */
+
+:root[data-skin="sticker"] {
+  --stk-ink: #111;
+  --stk-paper: #fff;
+  --stk-yellow: #ffc900;
+  --stk-pink: #ff90e8;
+  --stk-blue: #90a8ed;
+  --stk-mint: #39d6a6;
+  --stk-font: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --stk-line: 3px solid var(--stk-ink);
+  --stk-hatch: repeating-linear-gradient(-45deg, #111 0 2px, #0000 2px 4px);
+  /* Base rules and the avatar gallery read these. --text stays for the debug view's dark labels. */
+  --surface: var(--stk-paper);
+  --surface-raised: var(--stk-paper);
+  --border: var(--stk-ink);
+  --text-muted: #4a4a4a;
+  --accent: var(--stk-mint);
+  --danger-font: var(--stk-font);
+}
+:root[data-skin="sticker"] body {
+  font-family: var(--stk-font);
+}
+
+/* Every flat sticker part. :where keeps this weak so the base's own states (an active card button)
+   still win. Each part sets --stk-off itself, so a card's shadow isn't inherited by its buttons. */
+:root[data-skin="sticker"] :where(.toast, .card, .option, .chat-box),
+:root[data-skin="sticker"] :where(.chat-pill, .avatar-button, .avatar-wiki),
+:root[data-skin="sticker"] :where(.avatar-grip, .minimized-tab, .pointer-label),
+:root[data-skin="sticker"] :where(.card-buttons button) {
+  --stk-off: 3px;
+  border: 2px solid var(--stk-ink);
+  background: var(--stk-paper);
+  color: var(--stk-ink);
+  font-weight: 700;
+  box-shadow: var(--stk-off) var(--stk-off) 0 var(--stk-ink);
+}
+:root[data-skin="sticker"]
+  button:not(.option, .avatar-tile):hover:not(:disabled) {
+  border-color: var(--stk-ink);
+  background: var(--stk-yellow);
+  color: var(--stk-ink);
+}
+/* Pressing pushes the sticker into its shadow. */
+:root[data-skin="sticker"] button:active:not(:disabled) {
+  translate: 2px 2px;
+  box-shadow: none;
+}
+
+/* Shrunk so the tilt, die-cut edge and shadow stay inside the frame's mask padding even when the
+   picture fills the frame. Chained offsets dilate the outline: white cut, ink edge, hard shadow. */
+:root[data-skin="sticker"] .avatar-image {
+  --stk-cut: var(--stk-paper);
+  transform-origin: 50% 50%;
+  scale: 0.9;
+  rotate: -2.5deg;
+  filter: drop-shadow(3px 0 0 var(--stk-cut))
+    drop-shadow(-3px 0 0 var(--stk-cut)) drop-shadow(0 3px 0 var(--stk-cut))
+    drop-shadow(0 -3px 0 var(--stk-cut)) drop-shadow(1.5px 0 0 var(--stk-ink))
+    drop-shadow(-1.5px 0 0 var(--stk-ink)) drop-shadow(0 1.5px 0 var(--stk-ink))
+    drop-shadow(0 -1.5px 0 var(--stk-ink)) drop-shadow(3px 3px 0 var(--stk-ink));
+}
+:root[data-skin="sticker"] [data-state="listening"] {
+  --stk-cut: var(--stk-blue);
+}
+:root[data-skin="sticker"] [data-state="reacting"] {
+  --stk-cut: var(--stk-yellow);
+  --stk-wob: 0.12s;
+}
+:root[data-skin="sticker"]
+  .avatar-image:is([data-state="talking"], [data-state="reacting"]) {
+  animation: sticker-wobble var(--stk-wob, 0.3s) infinite alternate;
+}
+/* Slanted ink eyes, since rotating the circle would also swing its centring translate. */
+:root[data-skin="sticker"] .avatar-art {
+  border: var(--stk-line);
+  outline: none;
+  background:
+    radial-gradient(circle at 37% 46%, var(--stk-ink) 0 8%, transparent 8.5%),
+    radial-gradient(circle at 63% 42%, var(--stk-ink) 0 8%, transparent 8.5%),
+    var(--stk-cut, var(--stk-mint));
+  box-shadow:
+    0 0 0 4px var(--stk-paper),
+    0 0 0 6px var(--stk-ink),
+    5px 5px 0 6px var(--stk-ink);
+}
+/* A "cut here" line: white dashes edged in ink read over bright and dark scenes alike. */
+:root[data-skin="sticker"] .avatar-controls {
+  border: 2px dashed var(--stk-paper);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--stk-ink);
+}
+:root[data-skin="sticker"] .avatar-grip {
+  background: var(--stk-hatch), var(--stk-yellow);
+}
+:root[data-skin="sticker"] .avatar-wiki {
+  background: var(--stk-pink);
+}
+:root[data-skin="sticker"] .resize-corner {
+  border: 0;
+}
+/* On a pseudo-element, so the triangle clip leaves the whole square as the hit target. */
+:root[data-skin="sticker"] .resize-corner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--stk-hatch);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+:root[data-skin="sticker"] .avatar .resize-corner::before {
+  background: var(--stk-hatch), var(--stk-yellow);
+}
+/* The bubble is the inner box. The outer padding keeps its tail, tag and shadow in the mask. */
+:root[data-skin="sticker"] .subtitles {
+  padding: 16px 6px 14px 0;
+  background: none;
+}
+:root[data-skin="sticker"] .subtitles-box {
+  --stk-in-scale: 0;
+  position: relative;
+  padding: 10px 22px 12px;
+  border: var(--stk-line);
+  border-radius: 20px;
+  background: var(--stk-paper);
+  color: var(--stk-ink);
+  font: 700 22px/1.3 var(--stk-font);
+  text-align: left;
+  /* Not box-shadow, so the tail casts the same shadow as the bubble. */
+  filter: drop-shadow(5px 5px 0 var(--stk-ink));
+  transform-origin: var(--stk-tail-x, 38px) 100%;
+  animation: sticker-in 0.6s var(--spring) backwards;
+}
+/* The tail and the pop both start from the side the avatar is on. */
+:root[data-skin="sticker"] .subtitles[data-side="right"] {
+  --stk-tail-x: calc(100% - 38px);
+  --stk-tail: auto 30px -9px auto;
+}
+/* A square on its point, its white top half covering the bubble's border. */
+:root[data-skin="sticker"] .subtitles-box::after {
+  content: "";
+  position: absolute;
+  inset: var(--stk-tail, auto auto -9px 30px);
+  width: 14px;
+  height: 14px;
+  border: solid var(--stk-ink);
+  border-width: 0 3px 3px 0;
+  background: var(--stk-paper);
+  rotate: 45deg;
+}
+:root[data-skin="sticker"] .subtitles-name {
+  position: absolute;
+  inset: -14px auto auto 18px;
+  display: block;
+  padding: 1px 8px;
+  border: 2px solid var(--stk-ink);
+  border-radius: 6px;
+  background: var(--stk-pink);
+  font: 800 11px/1.4 var(--stk-font);
+  text-transform: uppercase;
+  rotate: -4deg;
+}
+:root[data-skin="sticker"] .subtitles-word {
+  --stk-in-y: 10px;
+  --stk-in-scale: 0.5;
+  --stk-in-turn: 0deg;
+  animation: sticker-in 0.5s var(--spring) var(--word-delay) backwards;
+}
+
+/* The memory toast is a yellow badge, slapped on at a tilt from oversized. */
+:root[data-skin="sticker"] .toast {
+  --stk-off: 4px;
+  --stk-in-scale: 1.8;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  border-width: 3px;
+  background: var(--stk-yellow);
+  font-size: 14px;
+  rotate: 3deg;
+  animation: sticker-in 0.6s var(--spring) backwards;
+}
+:root[data-skin="sticker"] .toast-heading {
+  color: var(--stk-ink);
+  font: 800 12px var(--stk-font);
+  text-transform: uppercase;
+}
+:root[data-skin="sticker"] .toast-source {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--stk-ink);
+  color: var(--stk-paper);
+}
+
+:root[data-skin="sticker"] .card {
+  --stk-off: 6px;
+  --stk-in-y: -28px;
+  --stk-in-turn: -4deg;
+  border-width: 3px;
+  font-weight: 500;
+  animation: sticker-in 0.7s var(--spring) backwards;
+}
+:root[data-skin="sticker"] .card-bar {
+  gap: 8px;
+  padding: 0 6px 0 12px;
+  border-bottom: var(--stk-line);
+  background: var(--stk-pink);
+}
+:root[data-skin="sticker"] .card-title {
+  font: 800 15px var(--stk-font);
+}
+:root[data-skin="sticker"] .card-text {
+  padding: 12px 16px 20px;
+  font: 500 14px/1.5 var(--stk-font);
+}
+:root[data-skin="sticker"] .minimized-tab {
+  --stk-off: 4px;
+  background: var(--stk-pink);
+}
+:root[data-skin="sticker"] .settings-heading {
+  margin: 14px 0 7px;
+  color: var(--stk-ink);
+  font: 800 11px var(--stk-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+:root[data-skin="sticker"] .option {
+  margin: 0 2px 3px 0;
+  padding: 4px 12px;
+}
+:root[data-skin="sticker"] .option:hover {
+  translate: -1px -1px;
+}
+:root[data-skin="sticker"] :is(.option-on, .avatar-tile-on) {
+  --accent: var(--stk-ink);
+  background: var(--stk-yellow);
+}
+:root[data-skin="sticker"] .chat-input {
+  color: var(--stk-ink);
+}
+:root[data-skin="sticker"] .chat-box:focus-within {
+  background: #fff6cc;
+}
+:root[data-skin="sticker"] .chat-pill {
+  background: var(--stk-blue);
+}
+
+/* Flips mirror the arrow with transform, and its shadow with it, so the flip signs turn the shadow
+   back round and aim the nudge at the tip. */
+:root[data-skin="sticker"] .pointer-arrow {
+  --nx: -1;
+  --ny: -1;
+  overflow: visible;
+  fill: var(--stk-mint);
+  stroke: var(--stk-ink);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  filter: drop-shadow(calc(var(--nx) * -3px) calc(var(--ny) * -3px) 0 #111);
+}
+:root[data-skin="sticker"] .flip-x .pointer-arrow {
+  --nx: 1;
+}
+:root[data-skin="sticker"] .flip-y .pointer-arrow {
+  --ny: 1;
+}
+:root[data-skin="sticker"] .pointer-on .pointer-arrow {
+  animation: sticker-nudge 0.5s ease-in-out infinite alternate;
+}
+:root[data-skin="sticker"] .pointer-label {
+  padding: 3px 10px;
+  font: 800 14px/1.3 var(--stk-font);
+  rotate: -3deg;
+}
+
+@keyframes sticker-wobble {
+  to {
+    rotate: 1.5deg;
+  }
+}
+/* One entrance for everything, shaped per part by the --stk-in-* values set on it. */
+@keyframes sticker-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--stk-in-y, 0);
+    scale: var(--stk-in-scale, 1);
+    rotate: var(--stk-in-turn, -12deg);
+  }
+}
+@keyframes sticker-nudge {
+  to {
+    translate: calc(var(--nx) * 4px) calc(var(--ny) * 4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="sticker"] :is(.avatar-image, .subtitles-box, .toast, .card),
+  :root[data-skin="sticker"] .pointer-arrow {
+    animation: none !important;
+  }
+}

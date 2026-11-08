@@ -2,8 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ControlApp } from "./ControlApp.tsx";
 import { ControlProvider } from "./ControlContext.tsx";
+import "../skins/fonts.css";
 import "./control.css";
+import "./sidebar.css";
 import "./form.css";
+import "./choices.css";
 import "./memory.css";
 import "./tabs.css";
 

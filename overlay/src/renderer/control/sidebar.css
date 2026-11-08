@@ -1,0 +1,268 @@
+/* The sidebar: brand and what the partner can do on top, the tabs, then the brain's run
+   controls at the foot. Under 760 px it folds into a bar above the tab. */
+.cc-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 10px 14px;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+
+.cc-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cc-brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.cc-brand > div {
+  min-width: 0;
+}
+
+/* The partner's 3:4 portrait frame, in miniature. */
+.cc-logo {
+  flex: none;
+  width: 14px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(110, 231, 183, 0.45);
+}
+
+.cc-brand h1 {
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+
+.cc-subtitle {
+  display: block;
+  overflow: hidden;
+  color: var(--text-muted);
+  font: 11.5px/1.4 var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Capabilities and the run state read as status lights, not buttons: a dot, then the words. The
+   pill's tone colour (form.css) only lights the dot. */
+.cc-capabilities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 8px;
+  padding: 0 6px;
+}
+
+.cc-capabilities .cc-pill,
+.cc-run .cc-pill {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: normal;
+}
+
+.cc-capabilities .cc-pill::before,
+.cc-run .cc-pill::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.cc-capabilities .cc-pill-on,
+.cc-run .cc-pill:not(.cc-pill-off) {
+  color: var(--text);
+}
+
+.cc-capabilities .cc-pill-on::before,
+.cc-run .cc-pill::before {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+.cc-capabilities .cc-pill-off::before,
+.cc-run .cc-pill-off::before {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+.cc-run .cc-pill {
+  align-items: baseline;
+  font: 12px/1.45 var(--mono);
+}
+
+.cc-run .cc-pill::before {
+  width: 7px;
+  height: 7px;
+}
+
+.cc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cc-tab {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 6px 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    color var(--ease);
+}
+
+.cc-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.cc-tab-on,
+.cc-tab-on:hover {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.cc-tab-icon {
+  flex: none;
+  width: 16px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+  transition: color var(--ease);
+}
+
+.cc-tab:hover .cc-tab-icon {
+  color: var(--text-muted);
+}
+
+.cc-tab-on .cc-tab-icon {
+  color: var(--accent);
+}
+
+.cc-tab-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.cc-tab kbd {
+  margin-left: auto;
+  opacity: 0.6;
+  transition: opacity var(--ease);
+}
+
+.cc-tab:hover kbd,
+.cc-tab-on kbd {
+  opacity: 1;
+}
+
+.cc-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: auto -10px 0;
+  padding: 14px 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cc-run .cc-button {
+  width: 100%;
+}
+
+/* The window's minimum width is above this, but zoom or a small screen can still get here. */
+@media (max-width: 760px) {
+  .cc-app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .cc-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    align-items: center;
+    overflow: visible;
+    padding: 10px 16px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cc-header {
+    display: contents;
+  }
+
+  .cc-brand {
+    grid-area: 1 / 1;
+    padding: 0;
+  }
+
+  .cc-capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    grid-area: 2 / 1 / 3 / -1;
+    gap: 4px 16px;
+    padding: 0;
+  }
+
+  .cc-nav {
+    grid-area: 3 / 1 / 4 / -1;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .cc-tab {
+    flex: none;
+    width: auto;
+    padding-right: 10px;
+  }
+
+  .cc-tab kbd {
+    display: none;
+  }
+
+  .cc-run {
+    grid-area: 1 / 2;
+    flex-direction: row;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .cc-run .cc-button {
+    width: auto;
+  }
+
+  .cc-main-head {
+    display: none;
+  }
+
+  .cc-body {
+    padding: 16px;
+  }
+}

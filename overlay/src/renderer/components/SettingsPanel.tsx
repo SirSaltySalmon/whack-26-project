@@ -1,14 +1,17 @@
 import type { Settings, SettingsState } from "../../lib/protocol.generated.ts";
 import type { Avatars } from "../hooks/useAvatars.ts";
+import type { Skin } from "../hooks/useSkin.ts";
 import type { Frame } from "../logic/layout.ts";
 import { TEXT_CARD_LIMITS } from "../logic/layout.ts";
 import { SettingsFields } from "../shared/SettingsFields.tsx";
+import { SkinPicker } from "../shared/SkinPicker.tsx";
 import { AvatarSettings } from "./AvatarSettings.tsx";
 import { CardWindow } from "./CardWindow.tsx";
 
 interface SettingsPanelProps {
   state: SettingsState | null;
   avatars: Avatars;
+  skin: Skin;
   frame: Frame;
   onFrame(frame: Frame): void;
   onChange(settings: Settings): void;
@@ -18,6 +21,7 @@ interface SettingsPanelProps {
 export function SettingsPanel({
   state,
   avatars,
+  skin,
   frame,
   onFrame,
   onChange,
@@ -47,7 +51,9 @@ export function SettingsPanel({
             onChange={onChange}
           />
         )}
-        {/* Visual only, so it works before the brain connects. */}
+        {/* Visual only, so these work before the brain connects. */}
+        <h3 className="settings-heading">Look</h3>
+        <SkinPicker skin={skin} />
         <AvatarSettings avatars={avatars} />
       </div>
     </CardWindow>

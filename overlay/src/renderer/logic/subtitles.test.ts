@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { SubtitleChunk } from "../../lib/protocol.generated.ts";
-import { applySubtitle, type SubtitleLine } from "./subtitles.ts";
+import {
+  applySubtitle,
+  endStaleSubtitle,
+  type SubtitleLine,
+} from "./subtitles.ts";
 
 const chunk = (
   utterance_id: string,
@@ -138,4 +142,21 @@ test("a line that arrives finished is still seen before it fades", () => {
   const rule = /\.subtitles-done\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
   assert.match(rule, /animation:/);
   assert.doesNotMatch(rule, /opacity:/);
+});
+
+test("a line that stopped growing without a final chunk is ended", () => {
+  const line: SubtitleLine = {
+    utteranceId: "a",
+    text: "Heads up",
+    done: false,
+  };
+  assert.deepEqual(endStaleSubtitle(line, "a"), { ...line, done: true });
+});
+
+test("ending a stale line leaves a newer or finished line alone", () => {
+  const newer: SubtitleLine = { utteranceId: "b", text: "Next", done: false };
+  assert.equal(endStaleSubtitle(newer, "a"), newer);
+  const finished: SubtitleLine = { utteranceId: "a", text: "Done", done: true };
+  assert.equal(endStaleSubtitle(finished, "a"), finished);
+  assert.equal(endStaleSubtitle(null, "a"), null);
 });

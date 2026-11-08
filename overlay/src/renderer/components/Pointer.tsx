@@ -66,7 +66,8 @@ export function Pointer({ command, home, viewport }: PointerProps) {
     >
       {/* Unreported once parked: it's invisible at home, and masking it would hide the character. */}
       <div
-        className={`pointer-body${flipX ? " flip-x" : ""}${flipY ? " flip-y" : ""}`}
+        // pointer-on lets skins run idle motion only while it's shown, not forever while parked.
+        className={`pointer-body${active ? " pointer-on" : ""}${flipX ? " flip-x" : ""}${flipY ? " flip-y" : ""}`}
         data-rect-id={parked ? undefined : "pointer"}
       >
         <svg className="pointer-arrow" viewBox="0 0 40 40" aria-hidden="true">

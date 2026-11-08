@@ -31,11 +31,10 @@ function processLabel(control: ReturnType<typeof useControl>): {
   }
 }
 
+/** The top of the sidebar: which game, and what the partner can do. */
 export function Header() {
   const control = useControl();
-  const { process, connected, external, status, config } = control;
-  const started = process.state !== "stopped" && process.state !== "crashed";
-  const label = processLabel(control);
+  const { connected, status, config } = control;
   const capabilities =
     connected && status
       ? liveCapabilities(status)
@@ -45,19 +44,18 @@ export function Header() {
           gameTitle: config.gameTitle || control.description?.game_title || "",
           replay: config.mode === "replay",
         });
-  const cantStart = config.mode === "replay" && !config.replayDir.trim();
+  const game = status?.game_title ?? (config.gameTitle || "No game set");
+  const replay = status?.mode === "replay" ? " · replay" : "";
 
   return (
     <header className="cc-header">
       <div className="cc-brand">
-        <span className="cc-logo" aria-hidden>
-          ◉
-        </span>
+        <span className="cc-logo" aria-hidden />
         <div>
           <h1>Control Center</h1>
-          <span className="cc-subtitle">
-            {status?.game_title ?? (config.gameTitle || "No game set")}
-            {status?.mode === "replay" && " · replay"}
+          <span className="cc-subtitle" title={game + replay}>
+            {game}
+            {replay}
           </span>
         </div>
       </div>
@@ -75,32 +73,43 @@ export function Header() {
           </Pill>
         ))}
       </div>
-
-      <div className="cc-run">
-        <Pill tone={label.tone}>{label.text}</Pill>
-        {started || external ? (
-          <button
-            className="cc-button cc-button-stop"
-            type="button"
-            disabled={process.state === "stopping"}
-            onClick={control.stop}
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            className="cc-button cc-button-primary"
-            type="button"
-            disabled={cantStart}
-            title={
-              cantStart ? "Pick a recorded session in Agent first" : undefined
-            }
-            onClick={control.start}
-          >
-            Start partner
-          </button>
-        )}
-      </div>
     </header>
+  );
+}
+
+/** The foot of the sidebar: whether the brain runs, and the one button that changes that. */
+export function RunControls() {
+  const control = useControl();
+  const { process, external, config } = control;
+  const started = process.state !== "stopped" && process.state !== "crashed";
+  const label = processLabel(control);
+  const cantStart = config.mode === "replay" && !config.replayDir.trim();
+
+  return (
+    <div className="cc-run">
+      <Pill tone={label.tone}>{label.text}</Pill>
+      {started || external ? (
+        <button
+          className="cc-button cc-button-stop"
+          type="button"
+          disabled={process.state === "stopping"}
+          onClick={control.stop}
+        >
+          Stop
+        </button>
+      ) : (
+        <button
+          className="cc-button cc-button-primary"
+          type="button"
+          disabled={cantStart}
+          title={
+            cantStart ? "Pick a recorded session in Agent first" : undefined
+          }
+          onClick={control.start}
+        >
+          Start partner
+        </button>
+      )}
+    </div>
   );
 }

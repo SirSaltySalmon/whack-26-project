@@ -27,5 +27,5 @@ def test_every_box_fits_a_1280_by_720_screen() -> None:
 
 
 def test_the_launcher_runs_a_script_in_the_brains_place() -> None:
-    assert brain_command(["scripts\debug_regions_demo.py"]) == ["scripts\debug_regions_demo.py"]
+    assert brain_command([r"scripts\debug_regions_demo.py"]) == [r"scripts\debug_regions_demo.py"]
     assert brain_command(["--live", "--type"]) == ["-m", "brain", "--live", "--type"]

@@ -32,6 +32,9 @@ class Settings(BaseModel):
     # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
     # kept so the two can be compared by ear.
     voice_style: Literal["expressive", "classic"] = "expressive"
+    # How memory finds what the player's words are about. "keyword" matches words, "semantic"
+    # matches meaning with a local embedding model, and "hybrid" merges the two.
+    memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
 
 
 # --- Brain to overlay ---
@@ -45,6 +48,14 @@ class SubtitleChunk(BaseModel):
 class AvatarState(BaseModel):
     type: Literal["avatar.state"] = "avatar.state"
     state: Literal["idle", "listening", "talking", "reacting"]
+
+
+class DangerState(BaseModel):
+    """How much trouble the player is in, so the overlay can show it without covering the game.
+    Sent when the level changes, and again when the overlay connects."""
+
+    type: Literal["danger.state"] = "danger.state"
+    level: Literal["none", "medium", "high"]
 
 
 class PointerFly(BaseModel):
@@ -220,7 +231,8 @@ BrainMessage = Annotated[
     | QuestionAsk
     | SettingsState
     | PageRead
-    | DebugRegions,
+    | DebugRegions
+    | DangerState,
     Field(discriminator="type"),
 ]
 OverlayMessage = Annotated[

@@ -23,7 +23,7 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | **Done** in code and unit tests. The live 300 ms and barge-in checks are not run | 3 | WP0 |
 | [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | **Not done** | All | Keys, a game |
 | [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | **Done** in code and unit tests. Stage 1's live page checks are not run | 1, 3, 4 | WP0 |
-| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Built**, not yet run live. Reader events still need `frame_ts`, a one-line change in `reader_engine.py` | 2, 3 | Nothing |
+| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Built**, not yet run live. Reader events still don't carry `frame_ts` | 2, 3 | Nothing |
 | [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Not started.** If time before freeze | Shared, 2 | Nothing |
 | [WP11](#wp11-proof-benchmarks-and-evals) | Latency report, loop-stall watch, accuracy evals | Numbers for the pitch, and regression checks | **Partly built:** latency report, loop-stall watch and the Control Center's Latency tab. The evals aren't started | All | WP9, a live run |
 | [Conditional](#conditional-work) | Only if a test or a decision calls for it | — | **Don't start** | Various | Varies |
@@ -1082,16 +1082,17 @@ Build these only if a test or decision calls for one. Each has the same no-keys 
 
 ### Vector recall
 
-**First on the cut list.**
+**Built, off by default.** Settings > Memory search: Keywords, Both or Meaning. Why and how: [DECISIONS.md](DECISIONS.md#2026-11-08-meaning-based-memory-search-switchable-in-settings).
 
 | | |
 |---|---|
-| **Files** | New `brain/memory/embeddings.py`, plus `db.py`, `schema.sql` and `gather.py` |
-| **Input** | Note bodies and fact text, using fastembed's `BAAI/bge-small-en-v1.5`, 384 dimensions |
-| **Output** | `vec0` tables `note_vectors` and `fact_vectors`, filled after writes in a worker. `_recall` merges vector hits with FTS5 hits |
-| **Schema** | Bump `SCHEMA_VERSION` to 3. Existing databases must be deleted or migrated, so warn the team |
-| **Budget** | `context()` warns over 50 ms, and it's on the voice path. Measure this first on the demo machine. If it's over budget, embed the query in advance from partial transcripts, or leave this out |
-| **Offline** | fastembed downloads its model on first use, so it needs caching before a demo. Recall must fall back to FTS5 on any failure |
+| **Files** | `brain/memory/embeddings.py`, `vectors.py`, `recall.py` and `semantic.py`, wired in `service.py` and `brain/app.py` |
+| **Model** | fastembed's `sentence-transformers/all-MiniLM-L6-v2`, 384 dimensions. Not bge-small, which couldn't separate related questions from unrelated ones |
+| **Output** | `vec0` tables `fact_vectors` and `note_vectors`, made at runtime and filled in the background. Recall merges vector hits with FTS5 hits by reciprocal rank fusion |
+| **Schema** | No bump. The tables are derived data, rebuilt when the model changes |
+| **Budget** | Measured on the main dev machine: `context()` about 4.5 ms in Both, against 1 ms with keywords. Check on the demo machine |
+| **Offline** | The first pick downloads the model into `data/models`. Pick Both once before the demo. Any failure falls back to FTS5 |
+| **Still to check** | That it finds something keywords miss in a real session. It only helps once memory holds more than the 8 facts the talker always gets |
 
 ### Wiki prefetch
 

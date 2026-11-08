@@ -24,8 +24,9 @@ Each personality is swappable data: a tone, and short lines of these kinds.
 
 `event_lines` at the top of the JSON says which game event uses which kind.
 
-## Rules for writing lines
+## Rules for writing tones and lines
 
+- **A personality is only a voice.** It never changes facts, whether the partner checks the screen, or whether it helps. The shared prompt in `brain/director/talker.py` says so for every personality. A tone or line must never refuse help or defend a mistake, because the partner copies its own earlier lines.
 - At most 12 words, and short enough to say over gameplay.
 - They must fit any game, so never name a game, enemy or item.
 - **Reactions never give advice.** A bark is fixed text, so it can't follow the hints setting the way the talker does. "Your health looks low" is fine, and "find cover" isn't.

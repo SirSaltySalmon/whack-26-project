@@ -16,7 +16,7 @@ Two processes joined by a localhost WebSocket:
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
 | LLMs | Claude Haiku 5.5 (paid, thinking off): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
-| Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
+| Memory | SQLite (WAL, JSON1, FTS5). Optional meaning-based recall: sqlite-vec with fastembed's all-MiniLM-L6-v2, chosen in settings |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
 Model IDs live only in `brain/config.py`. Never hardcode them elsewhere.
@@ -169,7 +169,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers and learned regions are merged. `perf/voice-path-stalls` is still local only. Then build WP9 so latency is measured from the frame, and run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers, learned regions, WP9 and memory search are merged. From `perf/voice-path-stalls`, only the vault-export fix was kept: every role runs on Claude now, so sharing SDK clients no longer matters. Next, run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
 - [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. After the WP4 merge, reader events need `frame_ts`
@@ -180,6 +180,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Player turns use tools: look closer, point, wiki, note a question, think hard
 - [ ] Director runs speech in its own slot, cancels on barge-in unless a slow tool is running, and has a question budget
 - [ ] Overlay shows subtitles, memory toasts and settings. Questions are spoken, not a popup
+- [ ] Memory search (Settings: Keywords, Both, Meaning). Both and Meaning load a local embedding model and add sqlite-vec recall. Check it finds what keywords miss in a real session, and pick it once before the demo so the model is downloaded
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
 - [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as a tentative observed `playthrough / progress` fact. It asks the game's planned progress question if there is one. Check the guesses on real Terraria hotbars
@@ -208,7 +209,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Capture works on the demo machine. dxcam fails on the main dev machine and falls back to mss
 - [ ] Overlay draws over Terraria, and OBS Display Capture records it
 - [ ] Measure voice latency end to end and compare Gemini and TTS model options
-- [ ] fastembed embeds on Windows. It imports and sqlite-vec loads, but no embedding has been run
+- [x] fastembed embeds on Windows: on the main dev machine MiniLM loads in about 0.3 s once cached, and a question takes 4-20 ms
 
 **Timeline**
 - **Hour 1-5:** walking skeleton: frame, event, director, bark, voice with subtitles, overlay

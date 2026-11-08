@@ -17,6 +17,20 @@ function joinWords(previous: string, next: string): string {
 }
 
 /**
+ * Ends a line that has stopped growing without its `final` chunk, as when speech fails and never
+ * plays. Only the line it was started for, and only if nothing has ended it already.
+ */
+export function endStaleSubtitle(
+  current: SubtitleLine | null,
+  utteranceId: string,
+): SubtitleLine | null {
+  if (current === null || current.done || current.utteranceId !== utteranceId) {
+    return current;
+  }
+  return { ...current, done: true };
+}
+
+/**
  * Real voice sends words as `final=false` chunks, then an empty `final=true` chunk. Subtitles-only
  * mode sends one chunk with the whole text and `final=true`. Both end with `done` set.
  */

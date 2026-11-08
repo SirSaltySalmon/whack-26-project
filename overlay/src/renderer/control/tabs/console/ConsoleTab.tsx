@@ -92,7 +92,7 @@ export function ConsoleTab() {
           type="submit"
           disabled={!canType}
         >
-          Send
+          Send <kbd aria-hidden>↵</kbd>
         </button>
       </form>
     </div>

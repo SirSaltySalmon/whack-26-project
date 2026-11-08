@@ -5,6 +5,7 @@ import "./styles.css";
 import "./cards.css";
 import "./companion.css";
 import "./debug.css";
+import "./skins/index.css";
 
 const root = document.getElementById("root");
 if (!root) {

@@ -15,6 +15,7 @@ from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
 from brain.control import ShutdownRequested, stop_when
 from brain.control_wiring import StatusParts, build_control
+from brain.danger_feed import forward_danger
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
@@ -24,7 +25,9 @@ from brain.learner.questions import plan_and_queue_questions
 from brain.llm.factory import LLMFactory
 from brain.loop_watch import watch_loop
 from brain.memory.db import Database, connect
+from brain.memory.embeddings import FastEmbedder
 from brain.memory.notes import NoteWriter
+from brain.memory.semantic import SemanticRecall
 from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
 from brain.parts import (
@@ -78,6 +81,17 @@ async def run(
     # Replays are test and fallback runs: they start from a fixed snapshot and leave no trace.
     conn = connect_replay(settings.replay_snapshot) if replay_dir else connect(settings.db_path)
     database = Database(conn)
+    # Replays recall by keywords only, so a stage fallback never waits on a model download.
+    semantic = (
+        None
+        if replay_dir
+        else SemanticRecall(
+            database,
+            bus,
+            lambda: FastEmbedder(settings.embedding_model, settings.embedding_cache_dir),
+            min_similarity=settings.recall_min_similarity,
+        )
+    )
     memory = MemoryService(
         database,
         bus,
@@ -90,9 +104,12 @@ async def run(
         question_answer_timeout_s=settings.question_answer_timeout_s,
         question_typed_timeout_s=settings.question_typed_timeout_s,
         question_max_turns=settings.question_max_turns,
+        semantic=semantic,
     )
     await memory.start()
     link.settings = await memory.load_settings(OverlaySettings)
+    if semantic:
+        semantic.follow(link.settings)
 
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
     replay = ReplayLoop(replay_dir, buffer, bus, link, speed=speed) if replay_dir else None
@@ -225,6 +242,7 @@ async def run(
             tasks.create_task(stop_when(stop))
             tasks.create_task(survive("Loop watch", watch_loop()))
             tasks.create_task(director.run())
+            tasks.create_task(survive("Danger feed", forward_danger(bus, link.send)))
             tasks.create_task(capture.run())
             tasks.create_task(survive("Voice", voice.run()))
             if observer:
@@ -238,6 +256,8 @@ async def run(
             if scout:
                 tasks.create_task(survive("Progress", scout.run()))
             tasks.create_task(memory.run())
+            if semantic:
+                tasks.create_task(survive("Memory search", semantic.run()))
             if barks and startup_voice:
                 # In the background: until a bark is ready, its event goes to the talker instead.
                 tasks.create_task(survive("Barks", barks.prepare(startup_voice)))

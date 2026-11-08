@@ -1,4 +1,6 @@
 import { useAvatars } from "../../../hooks/useAvatars.ts";
+import { useSkin } from "../../../hooks/useSkin.ts";
+import { SkinPicker } from "../../../shared/SkinPicker.tsx";
 import { AvatarGallery } from "../../../shared/AvatarGallery.tsx";
 import { BUILT_IN_AVATARS } from "../../../logic/avatars.ts";
 import { Notice, Section, Toggle } from "../../components/ui.tsx";
@@ -11,6 +13,7 @@ import "./avatar.css";
  */
 export function AvatarTab() {
   const avatars = useAvatars();
+  const skin = useSkin();
   const chosen =
     avatars.uploads?.find((avatar) => avatar.id === avatars.choice) ?? null;
   const builtIn = BUILT_IN_AVATARS.find(
@@ -19,6 +22,12 @@ export function AvatarTab() {
 
   return (
     <div className="cc-page">
+      <Section
+        title="Look"
+        hint="The overlay's style: subtitles, cards, toasts, the pointer and the frame around the avatar. The overlay changes as soon as you pick."
+      >
+        <SkinPicker skin={skin} />
+      </Section>
       <Section
         title="Avatar"
         hint="How the partner looks in the overlay. Picking one shows it there right away."
