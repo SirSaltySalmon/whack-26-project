@@ -1,5 +1,26 @@
 # Night plan: 2026-11-08, before the 07:30 deadline
 
+## Status for the morning (written by Claude, about 04:40)
+
+**`main` has an old snapshot of the readers.** The team merged `wp4-wp5-readers` at `bfabbf5`, from before tonight's fixes. That snapshot asks Haiku for 0-1000 boxes, which put the health box in the sky. To get the live-tested learner onto `main`, merge `claude/night`: it already has `main` merged in, with every conflict resolved and all tests passing.
+
+**On `claude/night`, beyond `main`:**
+- **The learner:** pixel boxes, with the fill colour named by vision and kept inside that colour's hue range. Full-bar calibration, and bars read by coloured pixel area. Health was learned live at 02:44, 3 of 3 samples, and is saved as `fixtures/profiles/terraria.json`.
+- **A closer look around health for small elements:** it finds the mana star in 3 of 3 saved frames, but Haiku labels a full single star as 0.0 in 2 of 3. Checking therefore rejects mana rather than save a wrong reader.
+- **Pointing with pixel boxes:** the 0-1000 boxes missed badly, putting the trash slot in the sky.
+- **`look_back`:** a rewind tool (WP10), not yet run live.
+- **Other fixes:**
+  - Reader events carry `frame_ts`, so `main`'s WP9 logs frame-to-bark for readers too.
+  - The talker no longer reads its reasoning aloud.
+  - The Claude schema fix for the progress scout.
+  - The echo guard, overlay reconnects, the `--off` switches, and `run.cmd`.
+  - All 7 + 8 + 4 review cases from Astra's three rounds.
+- **My WP9 was reverted:** `main`'s version (`3ae7cd1`) is fuller and replaces it.
+
+**Astra's branch overlaps `main`:** `brain/loop_watch.py` and `scripts/latency_report.py` were also added on `main` by the team in `3ae7cd1`. When merging `astra/night`, keep `main`'s and take only what's new: the pointer accuracy script and the review notes.
+
+**Needs the game:** see "For the morning" at the end.
+
 Two agents work in parallel tonight, each on its own branch and in its own folder, so neither one switches branches under the other. Both branches start from `wp4-wp5-readers`. That branch is pushed, and it holds `main` plus the readers, the learner and tonight's fixes.
 
 | Who | Branch | Folder |
