@@ -173,6 +173,7 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
         "personality": "snarky",
         "voice_id": "v2",
         "voice_style": "classic",
+        "mic_enabled": True,
     }
     session = RigSession(display_scale=1.5, settings=settings)
     _, _, link = await replay(write_session(tmp_path, session))

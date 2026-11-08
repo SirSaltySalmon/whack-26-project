@@ -806,6 +806,28 @@
       "title": "PageRead",
       "type": "object"
     },
+    "PlayerText": {
+      "description": "A turn the player typed in the overlay. The brain handles it exactly like speech.",
+      "properties": {
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "player.text",
+          "default": "player.text",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "PlayerText",
+      "type": "object"
+    },
     "PointerFly": {
       "properties": {
         "label": {
@@ -902,6 +924,7 @@
       "type": "object"
     },
     "QuestionAsk": {
+      "description": "No longer sent: questions are spoken, and the reply is heard or typed like any other turn.\nKept so an older overlay or recording still validates.",
       "properties": {
         "options": {
           "items": {
@@ -1009,6 +1032,11 @@
     },
     "Settings": {
       "properties": {
+        "mic_enabled": {
+          "default": true,
+          "title": "Mic Enabled",
+          "type": "boolean"
+        },
         "personality": {
           "default": "supportive",
           "title": "Personality",
@@ -1299,6 +1327,7 @@
           "overlay.ready": "#/$defs/OverlayReady",
           "overlay.rects": "#/$defs/OverlayRects",
           "page.content": "#/$defs/PageContent",
+          "player.text": "#/$defs/PlayerText",
           "question.answer": "#/$defs/QuestionAnswer",
           "settings.update": "#/$defs/SettingsUpdate"
         },
@@ -1325,6 +1354,9 @@
         },
         {
           "$ref": "#/$defs/PageContent"
+        },
+        {
+          "$ref": "#/$defs/PlayerText"
         }
       ],
       "title": "Overlay"

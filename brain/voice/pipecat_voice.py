@@ -14,6 +14,10 @@ Without headphones the mic hears the speakers and the partner interrupts itself.
 (VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
 barge-in.
 
+With the mic off in settings, EchoGate feeds Flux silence all the time, and any turn Flux still
+reports is dropped, so speech starts no turn and no barge-in. The partner still talks and reacts,
+and typed turns reach the bus from the overlay without passing through here.
+
 Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
 subtitles only.
 """
@@ -72,6 +76,8 @@ class PipecatVoice:
         self._half_duplex = settings.voice_half_duplex
         self._echo_tail_s = settings.voice_echo_tail_ms / 1000
         self._bot_stopped_at: float | None = None
+        # What check_mic last saw, so a change is acted on and logged once.
+        self._mic_was_on = True
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
@@ -207,7 +213,7 @@ class PipecatVoice:
 
     def on_partial_transcript(self, text: str) -> None:
         text = text.strip()
-        if not text or text == self._last_partial:
+        if not text or text == self._last_partial or not self.mic_on():
             return
         self._last_partial = text
         now = time.monotonic()
@@ -233,7 +239,25 @@ class PipecatVoice:
         self.bot_speaking = False
         self._bot_stopped_at = time.monotonic()
 
+    def mic_on(self) -> bool:
+        """The player's setting, read live so turning it off takes effect on the next frame."""
+        return self._link.settings.mic_enabled
+
+    async def check_mic(self) -> None:
+        """Acts on the player turning the mic on or off. EchoGate calls this for every frame."""
+        on = self.mic_on()
+        if on == self._mic_was_on:
+            return
+        self._mic_was_on = on
+        log.info("Mic turned %s in settings", "on" if on else "off")
+        if not on and self.user_speaking:
+            # The end of this turn will be dropped, and until then say() would refuse every line.
+            self.user_speaking = False
+            await self.send(AvatarState(state="idle"))
+
     def mic_muted(self) -> bool:
+        if not self.mic_on():
+            return True
         if not self._half_duplex:
             return False
         if self.bot_speaking:
@@ -245,6 +269,10 @@ class PipecatVoice:
     def _register_turn_events(self, stt: DeepgramFluxSTTService) -> None:
         @stt.event_handler("on_start_of_turn")
         async def _on_start(_service: DeepgramFluxSTTService, _transcript: str) -> None:
+            if not self.mic_on():
+                # Audio Flux had before the mic went off: no barge-in, and no "listening".
+                log.debug("Mic off; ignored a start of turn")
+                return
             self.user_speaking = True
             self._end_of_turn_at = None
             self._last_partial = ""
@@ -259,6 +287,11 @@ class PipecatVoice:
         @stt.event_handler("on_end_of_turn")
         async def _on_end(_service: DeepgramFluxSTTService, transcript: str) -> None:
             self.user_speaking = False
+            if not self.mic_on():
+                # They turned the mic off mid-sentence, so the half they said isn't a turn. No
+                # avatar change either: check_mic already reset it, and it may be talking now.
+                log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
+                return
             await self.send(AvatarState(state="idle"))
             transcript = transcript.strip()
             if not transcript:

@@ -2,15 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type {
   Brain,
   MemoryToast,
-  QuestionAsk,
   SettingsState,
 } from "../../lib/protocol.generated.ts";
 import { logger } from "../../lib/logger.ts";
 import { applySubtitle, type SubtitleLine } from "../logic/subtitles.ts";
 
 const SUBTITLE_LINGER_MS = 2500;
-// Unanswered questions go away on their own: the partner can't keep covering the game.
-const QUESTION_MS = 30000;
 
 export interface ShownToast {
   id: number;
@@ -20,18 +17,15 @@ export interface ShownToast {
 export interface CompanionFeed {
   subtitle: SubtitleLine | null;
   toasts: ShownToast[];
-  question: QuestionAsk | null;
   settings: SettingsState | null;
   handle(message: Brain): void;
   dismissToast(id: number): void;
-  dismissQuestion(): void;
 }
 
 /** Holds what the brain says to the player, apart from the cards and pointer App manages. */
 export function useCompanionFeed(): CompanionFeed {
   const [subtitle, setSubtitle] = useState<SubtitleLine | null>(null);
   const [toasts, setToasts] = useState<ShownToast[]>([]);
-  const [question, setQuestion] = useState<QuestionAsk | null>(null);
   const [settings, setSettings] = useState<SettingsState | null>(null);
   const nextToastId = useRef(0);
 
@@ -40,12 +34,6 @@ export function useCompanionFeed(): CompanionFeed {
     const timer = setTimeout(() => setSubtitle(null), SUBTITLE_LINGER_MS);
     return () => clearTimeout(timer);
   }, [subtitle]);
-
-  useEffect(() => {
-    if (question === null) return;
-    const timer = setTimeout(() => setQuestion(null), QUESTION_MS);
-    return () => clearTimeout(timer);
-  }, [question]);
 
   const handle = (message: Brain): void => {
     switch (message.type) {
@@ -58,7 +46,9 @@ export function useCompanionFeed(): CompanionFeed {
         break;
       }
       case "question.ask":
-        setQuestion(message);
+        // Questions are spoken and subtitled now, and answered like any turn. Only an older brain
+        // sends this, and a popup would cover the game.
+        logger.debug(`Ignored question.ask: ${message.text}`);
         break;
       case "settings.state":
         setSettings(message);
@@ -71,11 +61,9 @@ export function useCompanionFeed(): CompanionFeed {
   return {
     subtitle,
     toasts,
-    question,
     settings,
     handle,
     dismissToast: (id) =>
       setToasts((current) => current.filter((shown) => shown.id !== id)),
-    dismissQuestion: () => setQuestion(null),
   };
 }

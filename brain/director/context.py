@@ -26,3 +26,16 @@ async def gather_context(context: Callable[[str], Awaitable[str]] | None, query:
         # A reply without memory beats no reply at all.
         log.exception("Couldn't build the talker's context")
         return ""
+
+
+async def player_context(
+    context: Callable[[str], Awaitable[str]] | None,
+    excerpt: Callable[[str], str | None] | None,
+    transcript: str,
+) -> str:
+    """For player turns only, so page text can never reach a game-event reaction or a tip."""
+    gathered = await gather_context(context, transcript)
+    page = open_page_excerpt(excerpt, transcript)
+    if not page:
+        return gathered
+    return f"{gathered}\n\n{page}" if gathered else page

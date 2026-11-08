@@ -26,6 +26,8 @@ export interface PartnerSettings {
   proactive: boolean;
   personality: string;
   voice_id: string | null;
+  /** Kept here so "Type instead" survives a restart, and changing another setting can't undo it. */
+  mic_enabled: boolean;
   voice_style: VoiceStyle;
 }
 
@@ -34,6 +36,7 @@ export function partnerSettings(settings: Settings): PartnerSettings {
     proactive: settings.proactive ?? true,
     personality: settings.personality ?? DEFAULT_PERSONALITY,
     voice_id: settings.voice_id ?? null,
+    mic_enabled: settings.mic_enabled ?? true,
     voice_style: settings.voice_style ?? DEFAULT_VOICE_STYLE,
   };
 }
@@ -87,6 +90,7 @@ export const DEFAULT_CONFIG: LauncherConfig = {
     proactive: true,
     personality: DEFAULT_PERSONALITY,
     voice_id: null,
+    mic_enabled: true,
     voice_style: DEFAULT_VOICE_STYLE,
   },
 };
@@ -146,6 +150,7 @@ export function sanitizeConfig(raw: unknown): LauncherConfig {
       personality: text(settings.personality, defaults.settings.personality),
       voice_id:
         typeof settings.voice_id === "string" ? settings.voice_id : null,
+      mic_enabled: flag(settings.mic_enabled, true),
       voice_style:
         settings.voice_style === "classic" ? "classic" : DEFAULT_VOICE_STYLE,
     },

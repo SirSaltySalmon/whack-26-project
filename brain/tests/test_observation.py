@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from brain.perception.observation import Observation
+from brain.perception.observation import OBSERVATION_PROMPT, Observation
 
 
 def observation(**overrides: object) -> Observation:
@@ -48,3 +48,9 @@ def test_no_visible_health_means_no_fraction() -> None:
 def test_unknown_values_are_rejected() -> None:
     with pytest.raises(ValidationError):
         observation(danger_level="extreme")
+
+
+def test_the_prompt_prefers_plain_words_to_guessed_names() -> None:
+    # A wrong boss or item name misleads the partner more than a plain description does.
+    assert "only when that name is written on screen" in OBSERVATION_PROMPT
+    assert "plain words" in OBSERVATION_PROMPT

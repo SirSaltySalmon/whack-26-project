@@ -7,6 +7,7 @@ from brain.director.rules import (
     AskTalker,
     CancelSpeech,
     DirectorState,
+    PartnerSpoke,
     PlayBark,
     ReactToEvent,
     Say,
@@ -30,9 +31,15 @@ BARKS = {"danger_started": "danger", "danger_high": "danger_high", "player_died"
 
 
 def connected(at: float = 0.0, bark_events: Mapping[str, str] | None = None) -> DirectorState:
-    """Every condition for asking holds here, once QUIET_S has passed since `at`."""
+    """Every condition for asking holds here, once QUIET_S has passed since `at`.
+
+    Tips are off, so only the question rules are in play. test_advice.py has the tip rules.
+    """
     state = DirectorState(
-        question_quiet_s=QUIET_S, question_gap_s=GAP_S, bark_events=bark_events or {}
+        question_quiet_s=QUIET_S,
+        question_gap_s=GAP_S,
+        advice_gap_s=0,
+        bark_events=bark_events or {},
     )
     decide(OverlayConnected(display_scale=1.0, ts=at), state)
     return state
@@ -102,20 +109,36 @@ def test_tick_waits_out_the_quiet_stretch_and_waiting_spends_no_budget() -> None
 
 
 @pytest.mark.parametrize(
-    "activity",
+    "talk",
     [
         PlayerStartedSpeaking(ts=50.0),
         PlayerSpeech(transcript="hi", ts=50.0),
-        GameEvent("something", ts=50.0),
+        PartnerSpoke(ts=50.0),
         OverlayConnected(display_scale=1.0, ts=50.0),
     ],
-    ids=["start_of_turn", "speech", "game_event", "reconnect"],
+    ids=["start_of_turn", "speech", "partner_line", "reconnect"],
 )
-def test_activity_restarts_the_quiet_stretch(activity: Event) -> None:
+def test_talk_restarts_the_quiet_stretch(talk: Event) -> None:
     state = connected()
-    decide(activity, state)
+    decide(talk, state)
     assert decide(Tick(ts=50.0 + QUIET_S - 0.1), state) == []
     assert decide(Tick(ts=50.0 + QUIET_S), state) == [AskQuestion()]
+
+
+@pytest.mark.parametrize("name", ["something", "health_low", "player_died", "danger_ended"])
+def test_a_game_event_alone_doesnt_restart_the_quiet_stretch(name: str) -> None:
+    # The observer reports events all through active play, so counting them meant never asking.
+    state = connected(bark_events=BARKS)
+    assert decide(GameEvent(name, ts=50.0), state)  # The partner would react...
+    # ...but until that reaction is actually said, it's still quiet.
+    assert decide(Tick(ts=QUIET_S + 35.0), state) == [AskQuestion()]
+
+
+def test_events_every_few_seconds_still_leave_room_for_a_question() -> None:
+    state = connected()
+    for ts in range(1, 60, 3):
+        decide(GameEvent("something", ts=float(ts)), state)
+    assert decide(Tick(ts=60.0), state) == [AskQuestion()]
 
 
 def test_tick_waits_out_the_gap_since_the_last_question() -> None:
@@ -247,8 +270,20 @@ def test_a_mapped_end_of_danger_still_ends_it() -> None:
     assert not state.in_danger
 
 
-def test_a_bark_restarts_the_quiet_stretch() -> None:
+def test_a_bark_restarts_the_quiet_stretch_once_its_said() -> None:
     state = connected(bark_events=BARKS)
     decide(GameEvent("player_died", ts=50.0), state)
-    assert decide(Tick(ts=50.0 + QUIET_S - 0.1), state) == []
-    assert decide(Tick(ts=50.0 + QUIET_S), state) == [AskQuestion()]
+    decide(PartnerSpoke(ts=50.5), state)
+    assert decide(Tick(ts=50.5 + QUIET_S - 0.1), state) == []
+    assert decide(Tick(ts=50.5 + QUIET_S), state) == [AskQuestion()]
+
+
+def test_talk_before_the_overlay_connects_doesnt_let_it_ask() -> None:
+    state = DirectorState(question_quiet_s=QUIET_S, question_gap_s=GAP_S)
+    decide(PlayerSpeech(transcript="hi", ts=0.0), state)
+    decide(PartnerSpoke(ts=1.0), state)
+    assert decide(Tick(ts=10_000.0), state) == []
+
+
+def test_a_partner_line_decides_nothing_by_itself() -> None:
+    assert decide(PartnerSpoke(ts=1.0), connected()) == []

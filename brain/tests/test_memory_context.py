@@ -56,10 +56,10 @@ def test_empty_sections_are_omitted_and_fresh_live_state_is_rendered() -> None:
 @pytest.mark.parametrize(
     ("item", "expected"),
     [
-        (fact(), "base location: east of spawn (player said)"),
-        (fact(source="observed"), "base location: east of spawn (observed)"),
-        (fact(source="wiki", tentative=True), "base location: east of spawn (wiki, unconfirmed)"),
-        (fact(subject="boss", attribute="boss", value="x"), "boss: x (player said)"),
+        (fact(), "base / location: east of spawn (player said)"),
+        (fact(source="observed"), "base / location: east of spawn (observed)"),
+        (fact(source="wiki", tentative=True), "base / location: east of spawn (wiki, unconfirmed)"),
+        (fact(subject="boss", attribute="boss", value="x"), "boss / boss: x (player said)"),
     ],
 )
 def test_fact_labels(item: Fact, expected: str) -> None:

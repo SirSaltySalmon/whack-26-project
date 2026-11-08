@@ -59,6 +59,44 @@ def test_a_tentative_wiki_claim_can_still_be_asked_about(conn: sqlite3.Connectio
     assert UnknownStore(conn).wonder(GAME, "shimmer", "meaning", "What's shimmer?") is not None
 
 
+@pytest.mark.parametrize("settle", ["answered", "dropped"])
+def test_a_key_once_asked_is_never_asked_again(conn: sqlite3.Connection, settle: str) -> None:
+    unknowns, facts = UnknownStore(conn), FactStore(conn)
+    question = unknowns.wonder(GAME, "playthrough", "progress", "Where are you up to?")
+    assert question is not None
+    facts.mark_asked(question.id)
+    if settle == "answered":
+        facts.answer_question(question.id, "hardmode")
+        # Even once the answer is forgotten, the player was already asked.
+        facts.forget(GAME, "playthrough", "progress")
+    else:
+        facts.drop_question(question.id)
+    assert unknowns.wonder(GAME, "Playthrough", "progress", "So, how far in?") is None
+
+
+def test_a_guess_does_not_count_as_known(conn: sqlite3.Connection) -> None:
+    FactStore(conn).remember(
+        GAME, "playthrough", "progress", "early game", "observed", 0.7, tentative=True
+    )
+    assert UnknownStore(conn).wonder(GAME, "playthrough", "progress", "How far in?") is not None
+
+
+def test_a_guess_already_being_asked_about_is_not_asked_twice(conn: sqlite3.Connection) -> None:
+    FactStore(conn).remember(GAME, "playthrough", "progress", "early game", "observed", 0.3)
+    assert UnknownStore(conn).wonder(GAME, "playthrough", "progress", "How far in?") is None
+
+
+def test_a_question_made_moot_before_it_was_asked_does_not_block(
+    conn: sqlite3.Connection,
+) -> None:
+    facts = FactStore(conn)
+    guess = facts.remember(GAME, "playthrough", "progress", "early game", "observed", 0.3)
+    assert guess.fact is not None
+    facts.close(guess.fact.id)
+    assert facts.next_question(GAME) is None  # Dropped unasked: newer facts settled it.
+    assert UnknownStore(conn).wonder(GAME, "playthrough", "progress", "How far in?") is not None
+
+
 def test_open_unknowns_are_capped_so_it_cannot_nag(conn: sqlite3.Connection) -> None:
     unknowns = UnknownStore(conn)
     for index in range(MAX_OPEN_UNKNOWNS):

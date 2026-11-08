@@ -1,6 +1,11 @@
 """Decides when to speak. Pure and deterministic so every rule can be unit tested.
 
 An LLM never decides this. Models only choose what to do inside a turn these rules started.
+
+Questions and tips wait for a quiet stretch, measured from the player's last turn and the partner's
+last spoken line. Game events don't count by themselves: the observer reports them all through
+active play, so counting them meant the partner almost never found a moment to ask or advise. A
+reaction to one counts once it's actually said, which the director reports with PartnerSpoke.
 """
 
 from collections.abc import Mapping
@@ -9,6 +14,7 @@ from typing import Any
 
 from brain.events import (
     Event,
+    FactLearned,
     GameEvent,
     OverlayConnected,
     PlayerSpeech,
@@ -21,6 +27,18 @@ from brain.events import (
 # Names the observer's tracker publishes. They describe any game, so this stays game-agnostic.
 _DANGER_RISING = frozenset({"danger_started", "danger_high"})
 _DANGER_OVER = "danger_ended"
+# Learning about these is learning where the player stands, which is what grounds a tip. Memory
+# files progress under "playthrough" for every game, so this is no game-specific knowledge.
+_PROGRESS_SUBJECT = "playthrough"
+_PLAYER_SOURCE = "player"
+
+
+@dataclass(frozen=True)
+class PartnerSpoke(Event):
+    """The voice accepted one of the partner's lines. The director feeds this in itself.
+
+    Kept off the bus like Tick: only the rules care, and every subscriber would have to skip it.
+    """
 
 
 @dataclass(frozen=True)
@@ -90,60 +108,81 @@ class DirectorState:
     question_quiet_s: float = 20.0
     last_bark_at: float | None = None
     last_question_at: float | None = None
-    # Advice is rarer than questions: unasked-for tips get old much faster than curiosity does.
-    advice_gap_s: float = 300.0
-    advice_quiet_s: float = 30.0
-    last_advice_at: float | None = None
-    # Stays None until the overlay connects, so nothing is asked with no one to answer it.
-    last_activity_at: float | None = None
+    # Tips get old faster than curiosity does, so they're rarer than questions. A 0 gap turns them
+    # off. The first comes sooner than the gap, and sooner again once the partner learns where the
+    # player stands, because that's when a tip can be about their game rather than generic.
+    advice_gap_s: float = 180.0
+    advice_quiet_s: float = 20.0
+    advice_first_s: float = 90.0
+    advice_after_learning_s: float = 15.0
+    # When the next tip is due. None until the overlay connects.
+    next_advice_at: float | None = None
+    # The player's last turn or the partner's last spoken line. Connecting sets it too, so nothing
+    # is asked the moment the player arrives. Assigned rather than maxed, so it follows the latest.
+    last_talk_at: float | None = None
     turn_started_at: float | None = None
     in_danger: bool = False
+    # Also means the overlay has connected, so nothing is asked with no one there to answer it.
     greeted: bool = False
     # GameEvent name -> LineKind. Events not listed here go to the talker.
     bark_events: Mapping[str, str] = field(default_factory=dict)
 
 
-def _may_ask(ts: float, state: DirectorState) -> bool:
-    if state.in_danger or state.last_activity_at is None:
+def _quiet(ts: float, state: DirectorState, needed_s: float) -> bool:
+    if not state.greeted or state.in_danger:
         return False
-    if ts - state.last_activity_at < state.question_quiet_s:
+    return state.last_talk_at is None or ts - state.last_talk_at >= needed_s
+
+
+def _may_ask(ts: float, state: DirectorState) -> bool:
+    if not _quiet(ts, state, state.question_quiet_s):
         return False
     return state.last_question_at is None or ts - state.last_question_at >= state.question_gap_s
 
 
 def _may_advise(ts: float, state: DirectorState) -> bool:
-    if state.in_danger or state.last_activity_at is None or state.advice_gap_s <= 0:
+    due = state.next_advice_at
+    if state.advice_gap_s <= 0 or due is None or ts < due:
         return False
-    if state.last_advice_at is None:
-        # The clock starts once the player is here, so the first tip isn't the first thing said.
-        state.last_advice_at = ts
-        return False
-    if ts - state.last_activity_at < state.advice_quiet_s:
+    if not _quiet(ts, state, state.advice_quiet_s):
         return False
     # Right after a question, a tip would talk over the player's answer.
-    if state.last_question_at is not None and ts - state.last_question_at < state.advice_quiet_s:
-        return False
-    return ts - state.last_advice_at >= state.advice_gap_s
+    asked = state.last_question_at
+    return asked is None or ts - asked >= state.advice_quiet_s
+
+
+def _learned_where_they_stand(event: FactLearned) -> bool:
+    return event.subject.casefold() == _PROGRESS_SUBJECT or event.source == _PLAYER_SOURCE
 
 
 def decide(event: Event, state: DirectorState) -> list[Action]:
     """The hints setting isn't an input: it changes what the partner says, not when it talks."""
     match event:
         case OverlayConnected():
-            state.last_activity_at = event.ts
+            state.last_talk_at = event.ts
             # The overlay can reconnect during a session, and that shouldn't greet again.
             if state.greeted:
                 return []
             state.greeted = True
+            state.next_advice_at = event.ts + state.advice_first_s
             return [Say("Brain connected.")]
         case PlayerStartedSpeaking():
-            state.last_activity_at = event.ts
+            state.last_talk_at = event.ts
             state.turn_started_at = event.ts
             return [CancelSpeech()]
         case PlayerSpeech():
-            state.last_activity_at = event.ts
+            state.last_talk_at = event.ts
             started_at, state.turn_started_at = state.turn_started_at, None
             return [AskTalker(event.transcript, started_at)]
+        case PartnerSpoke():
+            state.last_talk_at = event.ts
+            return []
+        case FactLearned():
+            if state.next_advice_at is not None and _learned_where_they_stand(event):
+                # Only ever sooner: learning something must not push back a tip already due.
+                soon = event.ts + state.advice_after_learning_s
+                state.next_advice_at = min(state.next_advice_at, soon)
+            return []
         case GameEvent():
             if event.name in _DANGER_RISING:
                 state.in_danger = True
@@ -156,7 +195,6 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             if cooling:
                 return []
             state.last_bark_at = event.ts
-            state.last_activity_at = event.ts
             kind = state.bark_events.get(event.name)
             if kind is not None:
                 return [PlayBark(kind, event.name, event.data, ts=event.ts)]
@@ -167,7 +205,7 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 state.last_question_at = event.ts
                 return [AskQuestion()]
             if _may_advise(event.ts, state):
-                state.last_advice_at = event.ts
+                state.next_advice_at = event.ts + state.advice_gap_s
                 return [GiveAdvice()]
             return []
         case SettingsChanged():

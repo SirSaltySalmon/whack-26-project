@@ -2,6 +2,30 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: Questions are spoken and settle in the turn, the player wins corrections, and tips can point
+
+**Status:** built on `main`, for the team to review. Applies to `brain/memory/`, `brain/director/`, `brain/agent/`, `brain/learner/`, `brain/voice/`, `overlay/`, and additively to `shared/protocol/`. Replaces part of "Low confidence means talk to the player" (2026-11-07): spoken answers no longer wait for the next session note.
+
+Playtesting showed seven problems: questions came up as a popup, spoken answers rarely reached memory, unanswered questions came back, the mic couldn't be turned off, a corrected guess stayed wrong, questions were generic, and the partner almost never offered a tip or pointed at anything.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Questions are spoken only.** The brain no longer sends `question.ask`, and the overlay has no popup | A popup covered the game and took the answer away from the conversation |
+| 2 | **Player turns can write memory**: `answer_question`, `remember_fact`, `forget_fact` | A reply only reached memory through the next session note, which could time out and lose it. These run in the player's turn, need no extra model call, and only ever write source `player` |
+| 3 | **The talker sees the question just asked** under `ASKED`, and fact keys as `subject / attribute` | So a reply can settle the right question, and a correction can close the wrong fact instead of adding a second one |
+| 4 | **An unanswered question is dropped for good**: no reply within 20 s (45 s while typing), or 2 player turns that don't answer it. `wonder()` refuses any key already answered or dropped | The player moved on, so asking again would nag. The key stays unknown, and the talker says it doesn't know rather than guessing |
+| 5 | **A player claim replaces an observed or wiki one.** Only the screen disputing the player opens a conflict question | Asking the player to choose between their own words and our guess was wrong. Authority is still player > observed > wiki |
+| 6 | **Guesses from gear are stored tentative**, and the observer names things only when they're written on screen | Small icons in a downscaled frame are easy to misread, so the talker says "looks like" |
+| 7 | **Each game gets planned questions**, drafted once by the deep model from the brief and kept in the profile | Questions in the game's own terms ("Have you beaten X yet?") instead of a generic fallback. Still data, so `brain/` stays game-agnostic |
+| 8 | **Tips come sooner and more often**: the first after 90 s, then every 180 s, and 15 s after the partner learns where the player is. Quiet means no player turn and no partner line; game events no longer count | Game events arrive constantly in active play, so the old quiet window almost never opened |
+| 9 | **A tip may point.** Advice runs through the agent with only `point_at` | Exception to "tools only on player turns": at most one vision call per tip, still bounded by the advice budget, and it never opens a page, so `page_url` stays player-requested |
+| 10 | **The mic can be turned off** (`Settings.mic_enabled`), and the overlay has a text box that sends `player.text` | The brain treats a typed line exactly like speech, so watching, reacting and memory carry on |
+
+### What other tracks need to know
+- **Track 1 (Overlay):** the text box takes the keyboard only after the player clicks it, and hands it back to the game after sending.
+- **Track 3 (Voice and director):** muting feeds Flux silence through `EchoGate`, so there's no barge-in from audio. Typed turns still barge in.
+- **Track 4 (Memory and learning):** dropped questions use status `dropped`, so the schema is unchanged. `FactLearned` is published on the bus when a fact is stored, replaced or confirmed.
+
 ## 2026-11-08: Avatars are a gallery the overlay and Control Center share, without the brain
 
 **Status:** built on `main`, for the team to review. Applies to `overlay/src/renderer/` only. Replaces the suggestion under "What other tracks need to know" below to send avatar choices through `Settings`.

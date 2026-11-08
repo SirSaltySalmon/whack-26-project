@@ -1,7 +1,8 @@
 """Seeds a few facts, a question and a note so the Memory tab has something to show with no keys.
 
 Writes through FactStore.remember, memory's only write path, so the trust rules apply: the class
-change closes the old fact, and the player disagreeing with an observation becomes a conflict.
+change closes the old fact, the player overrules what was observed about their playstyle, and the
+screen disputing the player's class becomes a conflict question.
 Files everything under a test game title, never your real game. Meant to run once per title:
 re-runs reuse the same backdated clock, so the class history gets odd timestamps.
 
@@ -29,6 +30,7 @@ FACTS = [
     ("world", "bosses beaten", "Eye of Cthulhu", "observed", 0.85),
     ("player", "class", "Mage", "player", 0.9),
     ("player", "playstyle", "rushes bosses", "player", 0.8),
+    ("player", "class", "Ranger", "observed", 0.7),
 ]
 
 
@@ -36,14 +38,16 @@ def main() -> None:
     game = sys.argv[1] if len(sys.argv) > 1 else "Control Center Test"
     conn = connect(ROOT / Settings().db_path)
     now = time.time()
-    # Spread over the last hour, so the tab's "since" and "replaced" times differ.
-    ticks = iter(now - 3600 + i * 400 for i in range(len(FACTS)))
-    facts = FactStore(conn, clock=lambda: next(ticks))
+    # Spread over the last hour, so the tab's "since" and "replaced" times differ. One time per
+    # fact, not per clock read: a single write can read the clock several times.
+    clock = [now - 3600]
+    facts = FactStore(conn, clock=lambda: clock[0])
     row = conn.execute(
         "SELECT id FROM sessions WHERE game = ? ORDER BY id DESC LIMIT 1", (game,)
     ).fetchone()
     session = row[0] if row else None
-    for subject, attribute, value, source, confidence in FACTS:
+    for index, (subject, attribute, value, source, confidence) in enumerate(FACTS):
+        clock[0] = now - 3600 + index * 400
         result = facts.remember(game, subject, attribute, value, source, confidence, session)
         sys.stdout.write(f"{attribute}: {value} -> {result.outcome}\n")
     UnknownStore(conn).wonder(game, "player", "next goal", "What are you aiming for next?", session)

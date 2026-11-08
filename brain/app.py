@@ -19,6 +19,7 @@ from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
 from brain.game_setup import ensure_brief, name_game
+from brain.learner.questions import plan_and_queue_questions
 from brain.llm.factory import LLMFactory
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
@@ -84,6 +85,9 @@ async def run(
         vault_dir=None if replay_dir else settings.vault_dir,
         note_interval_s=settings.note_interval_s,
         note_min_new_events=settings.note_min_new_events,
+        question_answer_timeout_s=settings.question_answer_timeout_s,
+        question_typed_timeout_s=settings.question_typed_timeout_s,
+        question_max_turns=settings.question_max_turns,
     )
     await memory.start()
     link.settings = await memory.load_settings(OverlaySettings)
@@ -100,7 +104,11 @@ async def run(
         create_game_window(settings.game_process),
     )
     # Replays are tests and fallbacks, so they never spend money on vision.
-    scout = None if replay_dir else make_progress_scout(settings, factory, buffer, link, memory)
+    scout = (
+        None
+        if replay_dir
+        else make_progress_scout(settings, factory, buffer, link, memory, database)
+    )
     observer = (
         None
         if replay_dir
@@ -182,11 +190,13 @@ async def run(
         tools=tool_registry(tools, observer),
         personalities=personalities,
         take_question=memory.take_question,
-        send=link.send,
+        release_question=memory.release_question,
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
         advice_gap_s=settings.advice_gap_s,
         advice_quiet_s=settings.advice_quiet_s,
+        advice_first_s=settings.advice_first_s,
+        advice_after_learning_s=settings.advice_after_learning_s,
         page_excerpt=open_page.excerpt_for if open_page else None,
         barks=barks,
         voice_id=voice_id,
@@ -221,15 +231,27 @@ async def run(
                 # In the background: until a bark is ready, its event goes to the talker instead.
                 tasks.create_task(survive("Barks", barks.prepare(startup_voice)))
             if not replay_dir:
-                brief = ensure_brief(
-                    database,
-                    settings.game_title,
-                    factory.deep,
-                    game_hint,
-                    written,
-                    settings.brief_timeout_s,
-                )
-                tasks.create_task(survive("Game brief", brief))
+
+                async def brief_then_questions() -> None:
+                    # The questions are drafted from the brief, so they wait for it.
+                    await ensure_brief(
+                        database,
+                        settings.game_title,
+                        factory.deep,
+                        game_hint,
+                        written,
+                        settings.brief_timeout_s,
+                    )
+                    await plan_and_queue_questions(
+                        database,
+                        memory,
+                        settings.game_title,
+                        factory.deep,
+                        settings.planned_questions_max,
+                        settings.brief_timeout_s,
+                    )
+
+                tasks.create_task(survive("Game brief", brief_then_questions()))
             if tools:
                 tasks.create_task(survive("Wiki", find_wiki(settings, database, tools, control)))
             if open_page:

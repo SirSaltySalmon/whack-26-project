@@ -135,6 +135,7 @@ def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
         "proactive": False,
         "personality": "supportive",
         "voice_id": "v1",
+        "mic_enabled": False,
         "voice_style": "classic",
     }
     with rig.client.websocket_connect("/control") as socket:

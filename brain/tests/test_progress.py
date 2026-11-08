@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 
 import pytest
 
@@ -58,7 +59,10 @@ def seen(screen: str = "gameplay") -> Observation:
 
 
 def scout(
-    reply: VisionReply, memory: FakeMemory | None = None, clock: Clock | None = None
+    reply: VisionReply,
+    memory: FakeMemory | None = None,
+    clock: Clock | None = None,
+    planned: Callable[[], Awaitable[str | None]] | None = None,
 ) -> tuple[ProgressScout, FakeVision, FakeMemory]:
     vision = FakeVision(reply)
     memory = memory or FakeMemory()
@@ -73,6 +77,7 @@ def scout(
         max_calls=2,
         retry_gap_s=60.0,
         recheck_s=600.0,
+        planned_question=planned,
         clock=clock or Clock(),
     )
     return found, vision, memory
@@ -89,12 +94,14 @@ def test_value_joins_stage_and_next_milestone() -> None:
     assert ProgressEstimate.model_validate(UNCLEAR).as_value() is None
 
 
-async def test_stores_a_guess_as_an_observed_fact_with_capped_confidence() -> None:
+async def test_stores_a_guess_as_a_tentative_observed_fact_with_capped_confidence() -> None:
     found, vision, memory = scout(SURE)
     assert await found.check()
     assert memory.remembered == [
         (SUBJECT, ATTRIBUTE, "Pre-hardmode, Skeletron beaten; next: Wall of Flesh", "observed", 0.7)
     ]
+    # Read off small icons, so the talker must hear it as unconfirmed.
+    assert memory.tentative_remembered == [(SUBJECT, ATTRIBUTE)]
     call = vision.calls[0]
     assert call.detail == "high" and "Some Game" in call.prompt and "hotbar" in call.prompt
 
@@ -177,37 +184,71 @@ async def test_menus_dont_wake_it_and_gameplay_does() -> None:
     assert len(memory.remembered) == 1
 
 
-ASKING = {
-    **SURE,
-    "progress_question": "Have you beaten Skeletron yet?",
-    "questions": [
-        {"subject": "player", "topic": "Current Goal", "question": "What are you working on?"},
-        {"subject": "player", "topic": "progress", "question": "Duplicate of the main one?"},
-        {"subject": "player", "topic": "build", "question": "x" * 200},
-        {"subject": "player", "topic": "class", "question": "Over the limit?"},
-    ],
-}
+ASKING = {**SURE, "progress_question": "Have you beaten Skeletron yet?"}
+PLANNED = "Which boss did you beat last?"
 
 
-async def test_asks_where_the_player_is_and_up_to_two_more_questions() -> None:
-    found, _, memory = scout(ASKING)
+def plan_says(text: str | None) -> Callable[[], Awaitable[str | None]]:
+    async def planned() -> str | None:
+        return text
+
+    return planned
+
+
+async def test_asks_only_where_the_player_is() -> None:
+    # Other topics come from the game's planned questions, not from one frame.
+    found, vision, memory = scout(ASKING)
     await found.check()
-    # The duplicate topic and the over-long question are dropped, and the fourth is over the cap.
-    assert memory.wondered == [
-        (SUBJECT, ATTRIBUTE, "Have you beaten Skeletron yet?"),
-        ("player", "current goal", "What are you working on?"),
-    ]
-    assert memory.remembered[0][2].startswith("Pre-hardmode")
+    assert memory.wondered == [(SUBJECT, ATTRIBUTE, "Have you beaten Skeletron yet?")]
+    assert "questions:" not in vision.calls[0].prompt
+
+
+async def test_the_planned_question_beats_one_drafted_from_a_frame() -> None:
+    found, _, memory = scout(ASKING, planned=plan_says(PLANNED))
+    await found.check()
+    assert memory.wondered == [(SUBJECT, ATTRIBUTE, PLANNED)]
+
+
+async def test_without_a_plan_yet_the_drafted_question_is_used() -> None:
+    found, _, memory = scout(ASKING, planned=plan_says(None))
+    await found.check()
+    assert memory.wondered == [(SUBJECT, ATTRIBUTE, "Have you beaten Skeletron yet?")]
+
+
+async def test_a_broken_plan_read_falls_back_to_the_drafted_question() -> None:
+    async def broken() -> str | None:
+        raise RuntimeError("database is locked")
+
+    found, _, memory = scout(ASKING, planned=broken)
+    assert await found.check()
+    assert memory.wondered == [(SUBJECT, ATTRIBUTE, "Have you beaten Skeletron yet?")]
 
 
 async def test_a_shaky_guess_is_asked_about_not_stored() -> None:
-    found, _, memory = scout({**ASKING, "confidence": 0.3, "questions": []})
+    found, _, memory = scout({**ASKING, "confidence": 0.3})
     await found.check()
     assert memory.wondered == [(SUBJECT, ATTRIBUTE, "Have you beaten Skeletron yet?")]
     assert memory.remembered == []
 
 
-async def test_no_drafted_question_falls_back_to_a_plain_one() -> None:
+async def test_a_shaky_guess_isnt_stored_even_when_the_question_is_already_open() -> None:
+    found, _, memory = scout({**ASKING, "confidence": 0.3}, FakeMemory(wonder_result=None))
+    await found.check()
+    assert memory.remembered == []
+
+
+async def test_a_fair_tentative_guess_is_rechecked_after_the_recheck_time() -> None:
+    # Every guess the scout stores is tentative, so that alone mustn't stop it ever looking again.
+    clock = Clock()
+    memory = FakeMemory()
+    memory.facts[(SUBJECT, ATTRIBUTE)] = known("observed", 0.7, tentative=True, at=clock.now)
+    found, _, _ = scout(SURE, memory, clock)
+    assert not await found.check()
+    clock.now += 600
+    assert await found.check()
+
+
+async def test_no_drafted_question_and_no_plan_falls_back_to_a_plain_one() -> None:
     found, _, memory = scout(UNCLEAR)
     await found.check()
     assert memory.wondered == [(SUBJECT, ATTRIBUTE, FALLBACK_QUESTION)]
@@ -217,3 +258,9 @@ async def test_over_quota_still_asks_the_player() -> None:
     found, _, memory = scout(LLMUnavailableError("over quota"))
     await found.check()
     assert memory.wondered == [(SUBJECT, ATTRIBUTE, FALLBACK_QUESTION)]
+
+
+async def test_over_quota_asks_the_planned_question_when_there_is_one() -> None:
+    found, _, memory = scout(LLMUnavailableError("over quota"), planned=plan_says(PLANNED))
+    await found.check()
+    assert memory.wondered == [(SUBJECT, ATTRIBUTE, PLANNED)]

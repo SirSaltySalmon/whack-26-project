@@ -46,8 +46,8 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 - Every fact stores its source (`player`, `observed`, `wiki`), confidence and validity window.
 - Default authority: player > observed > wiki. For current game state, a fresh observation beats anything remembered.
 - Wiki facts stay tentative until confirmed by the player or the screen.
-- Never overwrite silently. Close the old fact's validity window; if trusted sources conflict, ask the player.
-- Low confidence means ask, not guess. Questions go through the director with their own budget so it doesn't nag.
+- Never overwrite silently. Close the old fact's validity window. The player's own claim replaces an observed or wiki one; if the screen disputes the player, ask the player.
+- Low confidence means ask, not guess. Questions go through the director with their own budget so it doesn't nag. They're spoken, never a popup, and a reply is recorded in the same turn. One nobody answers is dropped and never asked again.
 - Fight context drift: the talker only gets a small pre-assembled context, never raw session history. Use rolling summaries.
 - SQLite is the source of truth, including Markdown session notes. The Obsidian vault is a one-way export.
 
@@ -66,7 +66,7 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 - Convert coordinates in one tested function. Gemini boxes are `[ymin, xmin, ymax, xmax]` on a 0-1000 scale relative to the image sent, dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
 
 **Tools**
-- Tools run only on turns the player started, never on game events. That's what keeps `page_url` player-requested and vision calls bounded.
+- Tools run only on turns the player started, never on game events. That's what keeps `page_url` player-requested and vision calls bounded. One exception: a tip may call `point_at`, at most once per tip, and never opens a page. See [docs/DECISIONS.md](docs/DECISIONS.md).
 - Tools are plain functions in `brain/agent/`. MCP, if needed later, is an adapter around that registry, inside the brain. Pipecat's `MCPClient` doesn't fit: it needs an LLM in the pipeline and keeps only text results. See [docs/DECISIONS.md](docs/DECISIONS.md).
 - Speech runs in the director's one slot, so its decisions stay instant. A barge-in cancels the turn in progress, unless that turn has started a tool: then it finishes and answers once the player stops talking, and their next turn waits for it.
 
@@ -161,29 +161,36 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now: test the wiring, then build what's left.** Everything built is connected, but the connections haven't run against real models, audio or a game. Run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) next.
+**Now (2026-11-08 01:15, freeze about 04:30): commit, merge, measure, then run it live.** The spoken-questions work is still uncommitted. Then push and merge `perf/voice-path-stalls` (local only), merge `origin/wp4-wp5-readers`, build WP9 so latency is measured from the frame, then run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+
+**Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
+- [ ] WP9: log latency from the frame that showed the event, not from when it was published
+- [ ] WP11: latency report, event-loop stall watch, and observer, tool-choice and pointer evals. Results go in the test plan's Benchmarks table
+- [ ] WP10, if there's time before freeze: `look_back` answers "what just hit me?" from the last few seconds of frames
 
 **Wired, not yet run live**
 - [ ] Player turns use tools: look closer, point, wiki, note a question, think hard
 - [ ] Director runs speech in its own slot, cancels on barge-in unless a slow tool is running, and has a question budget
-- [ ] Overlay shows subtitles, memory toasts, questions and settings
+- [ ] Overlay shows subtitles, memory toasts and settings. Questions are spoken, not a popup
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
-- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as an observed `playthrough / progress` fact. The same call drafts questions for the player (where they're up to, plus up to 2 more, such as their goal), queued through the question budget. Check the guesses and questions on real Terraria hotbars
-- [ ] Advice: with hints on, a director rule offers a tip on what to do next every `advice_gap_s` (300 s) in a quiet moment, never in danger; the talker can answer SKIP to stay quiet
+- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as a tentative observed `playthrough / progress` fact. It asks the game's planned progress question if there is one. Check the guesses on real Terraria hotbars
+- [ ] Planned questions (`brain/learner/questions.py`): once per game, the deep model drafts up to 6 questions in the game's own terms from the brief and keeps them in the profile. Each session queues the ones memory doesn't know. Check them on Terraria
+- [ ] Mic off (`Settings.mic_enabled`) and the overlay's text box (`player.text`). Check that the game gets the keyboard back after Enter
+- [ ] Advice: with hints on, the first tip is after `advice_first_s` (90 s), then every `advice_gap_s` (180 s), and 15 s after the partner learns where the player is. Quiet means no player turn and no partner line. The talker can answer SKIP to stay quiet. A tip may call `point_at`
 - [ ] Barks (WP6): pre-generated per voice into `data/barks/`, played for mapped events and the looking filler, else the talker. Check event-to-bark under 300 ms and that barge-in stops one
+- [ ] Open wiki page (WP8): the partner can answer from the page the player has open, on the game's wiki only. Stage 1's page checks are not run
 
 **Done, with no keys or game**
 - [x] Shared contract for the remaining work (WP0)
-- [x] Shared fakes and the test plan's automated tests (WP1). WP8's tests come with WP8
+- [x] Shared fakes and the test plan's automated tests (WP1), including WP8's
 - [x] Typed turns and the extended overlay demo (WP2)
 - [x] Stage 0, apart from what needs a mouse or a visible window
-- [x] Recorder and replay (WP3). Not yet run on a real recording
+- [x] Recorder and replay (WP3). Not yet run on a real recording. The check that a reader's event comes from the frames waits on the WP4 merge
+- [x] Game brief (`brain/learner/brief.py`): at startup the deep model names the game and writes a 60-word brief into the profile, once per game. Check it on a few real games
 
-**Not started**
-- [ ] Readers and scene matching. Live state comes from the Haiku observer for now (Track 2)
-- [ ] Learner: learned regions, compiled readers (Track 4). The game brief is wired (`brain/learner/brief.py`): at startup the deep model names the game and writes a 60-word brief into the profile, once per game. Check it on a few real games
-- [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
+**Not on `main`**
+- [ ] Readers and learned regions (WP4 and WP5). Built on `origin/wp4-wp5-readers`, not merged. On `main` those files are still stubs, so live state comes from the Haiku observer. Scene matching was cut
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 
 **Still unproven from hour 0-1**
