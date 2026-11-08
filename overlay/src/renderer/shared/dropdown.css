@@ -1,0 +1,99 @@
+/* The settings dropdown, shared by the overlay's settings card and the Control Center. The trigger
+   is an .option, so each window and skin styles it like its other choices. Both windows define
+   these colour variables; the fallbacks cover the ones only the Control Center has. */
+/* One width for every dropdown, so a column of them lines up. */
+.dropdown {
+  position: relative;
+  width: 220px;
+  max-width: 100%;
+}
+
+/* .option capitalizes every word in the overlay; a dropdown keeps sentence case ("Type instead").
+   Skins that set their own case still win. */
+.option.dropdown-trigger {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  text-transform: none;
+}
+
+.dropdown-value {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dropdown-value::first-letter,
+.dropdown-item::first-letter {
+  /* Personalities arrive as lowercase ids; other labels are already in sentence case. */
+  text-transform: uppercase;
+}
+
+.dropdown-chevron {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+
+.dropdown-trigger[aria-expanded="true"] .dropdown-chevron {
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+
+/* Absolute inside the card, so it stays inside the card's masked, clickable rectangle and
+   scrolls with it rather than spilling over the game. */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+.dropdown-item {
+  padding: 5px 10px 5px 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: var(--hover, rgba(255, 255, 255, 0.07));
+  color: var(--text);
+}
+
+.dropdown-item[aria-selected="true"] {
+  position: relative;
+  color: var(--accent);
+}
+
+.dropdown-item[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 4px;
+  height: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+}
