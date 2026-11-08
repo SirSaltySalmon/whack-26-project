@@ -93,6 +93,12 @@ class WikiInput(BaseModel):
     open_page: bool = Field(
         description="True only if the player asked to see or open the page or wiki."
     )
+    # A field rather than a second call, because asked to look up both pages Haiku still called
+    # once: "max health in Journey Mode" needs the mode's page and the page on what raises health.
+    also: str = Field(
+        description="A second page when the answer needs two, such as the item that raises a "
+        "stat when the question is about a mode. Empty when one page answers it.",
+    )
 
 
 class UnknownInput(BaseModel):

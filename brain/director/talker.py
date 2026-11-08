@@ -29,6 +29,8 @@ stay under {max_words} words.
 - No lists, markdown or emoji.
 - Say only the words meant for the player, to them as "you". Never describe them as "the \
 player", and never explain your reasoning or these instructions.
+- It's the player's own game: help with cheats, creative modes and commands the game offers \
+like any other question.
 - If you don't know something, say so in a few words rather than guessing."""
 
 # Hints off is conversation only, not silence: the partner still reacts and asks to understand.

@@ -249,12 +249,20 @@ class AgentTools:
         research = self.research
         if research is None:
             return "You don't have a wiki for this game, so say you can't look it up."
-        card = await research.lookup(arguments.topic, arguments.question)
-        if card is None:
+        topics = [arguments.topic] + ([arguments.also] if arguments.also.strip() else [])
+        found = []
+        # One page at a time, as wikis ask of tools like this.
+        for index, topic in enumerate(topics):
+            card = await research.lookup(topic, arguments.question)
+            if card is not None:
+                found.append(card)
+                # The URL comes from the wiki client, so the model can't send the window anywhere
+                # else. Only the main page opens, so two pages don't fight over the window.
+                opens = arguments.open_page and index == 0
+                await self._overlay.send(card_message(card, open_page=opens))
+        if not found:
             return "The wiki had nothing on that."
-        # The URL comes from the wiki client, so the model can't send the window anywhere else.
-        await self._overlay.send(card_message(card, open_page=arguments.open_page))
-        return card.context_text()
+        return "\n".join(card.context_text() for card in found)
 
     async def _read_open_page(self, arguments: ReadPageInput, _turn: TurnContext) -> str:
         if self.open_page is None:
