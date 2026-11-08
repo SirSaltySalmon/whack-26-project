@@ -22,6 +22,7 @@ from brain.game_setup import ensure_brief, name_game
 from brain.hud import build_hud, live_state, send_debug_regions
 from brain.learner.questions import plan_and_queue_questions
 from brain.llm.factory import LLMFactory
+from brain.loop_watch import watch_loop
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
@@ -220,6 +221,7 @@ async def run(
             for name, part in (("Recorder", recorder), ("Message log", message_log)):
                 if part:
                     tasks.create_task(survive(name, part.run()))
+            tasks.create_task(survive("Loop watch", watch_loop()))
             tasks.create_task(server.serve())
             tasks.create_task(stop_when(stop))
             tasks.create_task(director.run())
