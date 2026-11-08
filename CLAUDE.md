@@ -120,6 +120,7 @@ npm --prefix overlay test
 npm --prefix overlay run format
 npm --prefix overlay run gen:protocol      # after any change in shared/protocol/, with the venv active
 python scripts/overlay_demo.py             # drives the overlay with no game, mic or API keys
+.\run.cmd scripts/debug_regions_demo.py    # overlay plus fixed HUD-region boxes: proves the debug view works without the learner
 ```
 
 ## Testing

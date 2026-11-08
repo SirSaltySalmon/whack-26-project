@@ -1,7 +1,8 @@
 """Starts the overlay and the brain from one terminal, and stops both when the brain stops.
 
 Usage: python scripts/run_all.py --live --debug-regions --type --off observer,voice
-Every argument goes to the brain unchanged. On Windows, `run.cmd` in the repo root runs this
+Every argument goes to the brain unchanged. A .py path first runs that script in the brain's place,
+such as `run.cmd scripts/debug_regions_demo.py`. On Windows, `run.cmd` in the repo root runs this
 with the venv's Python, so nothing needs activating and the execution policy doesn't apply.
 
 The brain runs in the foreground, so its log and `--type` input stay in this terminal. The
@@ -87,11 +88,18 @@ def stop_overlay(overlay: subprocess.Popen[str]) -> None:
         log.warning("The overlay didn't close; end it from Task Manager")
 
 
+def brain_command(args: list[str]) -> list[str]:
+    """`run.cmd scripts/x.py ...` runs that script in the brain's place, such as a demo."""
+    if args and args[0].endswith(".py"):
+        return args
+    return ["-m", "brain", *args]
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="[run_all] %(message)s")
     overlay = start_overlay()
     log.info("Overlay starting (pid %s); brain starting in this terminal", overlay.pid)
-    brain = subprocess.Popen([sys.executable, "-m", "brain", *sys.argv[1:]], cwd=ROOT)
+    brain = subprocess.Popen([sys.executable, *brain_command(sys.argv[1:])], cwd=ROOT)
     interrupts = 0
     try:
         while True:
