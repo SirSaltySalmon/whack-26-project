@@ -71,11 +71,6 @@ class ObservationTracker:
     def danger(self) -> str | None:
         return self._danger
 
-    @property
-    def last_frame_ts(self) -> float | None:
-        """The frame time of the last report taken, before the next one is."""
-        return self._last_ts
-
     def update(self, observation: Observation, ts: float) -> list[Change]:
         """Takes reports in frame order and returns whatever just became confirmed."""
         if self._last_ts is not None and ts - self._last_ts > self._max_gap_s:

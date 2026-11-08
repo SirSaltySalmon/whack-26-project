@@ -9,33 +9,20 @@ from collections.abc import Callable
 from typing import cast
 
 from brain.director.personalities import LineKind, PersonalityBook
-from brain.director.rules import PlayBark
 from brain.voice.barks import Bark, BarkBank
 from brain.voice.pipeline import Voice
 
 log = logging.getLogger(__name__)
 
 
-async def play_bark(voice: Voice, bark: Bark, action: PlayBark) -> bool:
+async def play_bark(voice: Voice, bark: Bark, event: str, ts: float | None) -> bool:
     """Returns whether the voice accepted it, so only accepted lines go into memory."""
-    event, ts, frame_ts, source = action.event, action.ts, action.frame_ts, action.source
     if not await voice.play(bark):
         log.debug("Player is talking; bark dropped: %s", bark.text)
         return False
-    now = time.monotonic()
     if ts is not None:
         # Measured to queuing, which is the part we control; audio follows within a chunk.
-        log.info("Latency: event to bark %.0f ms (%s)", (now - ts) * 1000, event)
-    if frame_ts is not None and ts is not None:
-        # From when it showed on screen, which is what "reacts as it happens" is judged on.
-        log.info(
-            "Latency: frame to bark %.0f ms (noticed in %.0f, spoke in %.0f, %s, %s)",
-            (now - frame_ts) * 1000,
-            (ts - frame_ts) * 1000,
-            (now - ts) * 1000,
-            source or "unknown",
-            event,
-        )
+        log.info("Latency: event to bark %.0f ms (%s)", (time.monotonic() - ts) * 1000, event)
     return True
 
 

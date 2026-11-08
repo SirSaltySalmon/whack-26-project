@@ -151,7 +151,7 @@ class ReaderEngine:
             self._next_due[name] = now + placed.spec.interval_s
             if box_is_masked(placed.box, frame, scale, self._padding):
                 # Masks are black, which would read as an empty bar.
-                self._apply(Reading(name, "masked"), now, frame.ts)
+                self._apply(Reading(name, "masked"), now)
             elif placed.reader.uses_ocr:
                 ocr.append(placed)
             else:
@@ -159,12 +159,10 @@ class ReaderEngine:
 
         if colour:
             for reading in await asyncio.to_thread(_read_colours, frame.image, colour):
-                self._apply(reading, now, frame.ts)
+                self._apply(reading, now)
         ocr_idle = self._ocr_task is None or self._ocr_task.done()
         if ocr and self._ocr is not None and ocr_idle:
-            self._ocr_task = asyncio.create_task(
-                self._read_ocr(self._ocr, frame.image, ocr, frame.ts)
-            )
+            self._ocr_task = asyncio.create_task(self._read_ocr(self._ocr, frame.image, ocr))
         self._check_failing(now)
         log.debug("Reader tick: %.1f ms", (time.perf_counter() - started) * 1000)
 
@@ -246,7 +244,7 @@ class ReaderEngine:
         return True
 
     async def _read_ocr(
-        self, ocr: OcrWorker, image: np.ndarray, readers: list[PlacedReader], frame_ts: float
+        self, ocr: OcrWorker, image: np.ndarray, readers: list[PlacedReader]
     ) -> None:
         for placed in readers:
             reader = placed.reader
@@ -257,16 +255,15 @@ class ReaderEngine:
             except Exception:
                 log.exception("OCR failed for reader %s", placed.spec.name)
                 continue
-            self._apply(reader.parse(lines), self._clock(), frame_ts)
+            self._apply(reader.parse(lines), self._clock())
 
-    def _apply(self, reading: Reading, now: float, frame_ts: float | None = None) -> None:
+    def _apply(self, reading: Reading, now: float) -> None:
         state = self._states.get(reading.reader)
         if state is None:
             return  # The profile was reloaded while this was being read
         for fired in state.update(reading, now, self._in_gameplay()):
             log.info("Reader %s: %s %s", reading.reader, fired.event, reading.display)
-            event = GameEvent(fired.event, fired.data, source="reader", frame_ts=frame_ts)
-            self._bus.publish(event)
+            self._bus.publish(GameEvent(fired.event, fired.data, source="reader"))
 
     def _check_failing(self, now: float) -> None:
         after_s = self._failing_after_s

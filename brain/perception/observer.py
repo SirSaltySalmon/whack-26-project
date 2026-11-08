@@ -162,9 +162,6 @@ class Observer:
         self._last_applied_ts = frame_ts
         if self._on_observation:
             self._on_observation(observation, frame_ts)
-        # A change needs consecutive frames to agree, so it was first visible in the one before.
-        # Changes that need more than two frames under-count by an interval or so.
-        first_seen = self._tracker.last_frame_ts or frame_ts
         changes = self._tracker.update(observation, frame_ts)
         suppressed = self.suppressed_events()
         for change in changes:
@@ -172,7 +169,7 @@ class Observer:
                 log.debug("Left %s to the readers", change.name)
                 continue
             log.info("Confirmed %s: %s", change.name, change.data)
-            self._bus.publish(GameEvent(change.name, change.data, frame_ts=first_seen))
+            self._bus.publish(GameEvent(change.name, change.data))
         self._refocus(observation, [change.name for change in changes])
 
     def _refocus(self, observation: Observation, changes: list[str]) -> None:

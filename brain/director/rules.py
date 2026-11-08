@@ -74,9 +74,6 @@ class PlayBark:
     data: dict[str, Any]  # Passed on, in case there's no bark and it falls back
     # When the event happened, for the event-to-bark latency log. Not part of what was decided.
     ts: float | None = field(default=None, compare=False)
-    # When its frame was captured, and who noticed it, for the frame-to-bark log. Same reason.
-    frame_ts: float | None = field(default=None, compare=False)
-    source: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)
@@ -200,16 +197,7 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             state.last_bark_at = event.ts
             kind = state.bark_events.get(event.name)
             if kind is not None:
-                return [
-                    PlayBark(
-                        kind,
-                        event.name,
-                        event.data,
-                        ts=event.ts,
-                        frame_ts=event.frame_ts,
-                        source=event.source,
-                    )
-                ]
+                return [PlayBark(kind, event.name, event.data, ts=event.ts)]
             return [ReactToEvent(event.name, event.data)]
         case Tick():
             # Questions first: an answer makes the next tip better.
