@@ -29,6 +29,9 @@ class GameEvent(Event):
     data: dict[str, Any] = field(default_factory=dict)
     # "observer", "reader" or "replay". Lets replay re-run readers without doubling their events.
     source: str = "observer"
+    # When the frame that first showed it was captured (monotonic). `ts` is when it was published,
+    # seconds later for the observer, so latency is measured from here. See brain/latency.py.
+    frame_ts: float | None = None
 
 
 @dataclass(frozen=True)

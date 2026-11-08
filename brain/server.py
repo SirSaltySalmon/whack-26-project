@@ -115,7 +115,14 @@ class OverlayLink:
             log.debug("Overlay not connected; dropped %s", message.type)
             return
         async with self._send_lock:
-            await socket.send_text(message.model_dump_json())
+            try:
+                await socket.send_text(message.model_dump_json())
+            except (WebSocketDisconnect, RuntimeError):
+                # The overlay closed between the check above and this send. Same as not being
+                # connected: dropped. Raising here would end whatever sent it, such as the debug
+                # view's loop, which then wouldn't come back when the overlay reconnects.
+                log.info("Overlay went away; dropped %s", message.type)
+                self.detach(socket)
 
     def attach(self, socket: WebSocket) -> None:
         self._socket = socket

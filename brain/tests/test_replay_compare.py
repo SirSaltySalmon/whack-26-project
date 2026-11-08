@@ -67,6 +67,7 @@ def test_normalize_drops_ids_and_geometry_at_any_depth_but_keeps_content() -> No
             "personality": "protective",
             "mic_enabled": True,
             "voice_style": "expressive",
+            "memory_search": "keyword",
             "paused": False,
             "vision_enabled": True,
         },

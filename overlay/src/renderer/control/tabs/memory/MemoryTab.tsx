@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Notice, Pill, Toggle } from "../../components/ui.tsx";
-import { ago, groupFacts } from "../../logic/memory.ts";
+import { Notice, Pill, Section, Toggle } from "../../components/ui.tsx";
+import { ago, groupFacts, SOURCE_LABEL } from "../../logic/memory.ts";
 import { FactGroupCard } from "./FactGroupCard.tsx";
 import { useMemoryQuery } from "./useMemoryQuery.ts";
 
@@ -46,7 +46,9 @@ export function MemoryTab() {
       )}
       {memory.lastToast && (
         <Notice>
-          <Pill tone={memory.lastToast.source}>{memory.lastToast.source}</Pill>{" "}
+          <Pill tone={memory.lastToast.source}>
+            {SOURCE_LABEL[memory.lastToast.source]}
+          </Pill>{" "}
           {memory.lastToast.text}
         </Notice>
       )}
@@ -55,39 +57,45 @@ export function MemoryTab() {
       )}
 
       <div className="mem-columns">
-        <section className="mem-facts" aria-label="Facts">
-          <h2>What the partner knows</h2>
-          <p className="cc-hint">
-            Every fact keeps its source and confidence. You beat the screen, the
-            screen beats the wiki, and nothing is overwritten: old values are
-            closed with the time they stopped being true.
-          </p>
-          {groups.length === 0 && results && (
-            <p className="cc-empty-line">
-              {text
-                ? "Nothing matches."
-                : "Nothing remembered yet. Tell the partner about yourself."}
-            </p>
-          )}
-          {groups.map((group) => (
-            <FactGroupCard key={group.key} group={group} />
-          ))}
-        </section>
+        <Section
+          title="What the partner knows"
+          className="mem-facts"
+          hint="Every fact keeps its source and confidence. You beat the screen, the screen beats the wiki, and nothing is overwritten: old values are closed with the time they stopped being true."
+        >
+          <div className="mem-fact-list" aria-label="Facts">
+            {!results && !memory.error && (
+              <p className="cc-empty-line">Loading…</p>
+            )}
+            {groups.length === 0 && results && (
+              <p className="cc-empty-line">
+                {text
+                  ? "Nothing matches."
+                  : "Nothing remembered yet. Tell the partner about yourself."}
+              </p>
+            )}
+            {groups.map((group) => (
+              <FactGroupCard key={group.key} group={group} />
+            ))}
+          </div>
+        </Section>
 
         <aside className="mem-side">
-          <section className="mem-panel">
-            <h2>What it would recall</h2>
-            <p className="cc-hint">
-              The exact context the talker gets for{" "}
-              {text ? "this search" : "a turn right now"}: small and
-              pre-assembled, never the raw session.
-            </p>
+          <Section
+            title="What it would recall"
+            hint={
+              <>
+                The exact context the talker gets for{" "}
+                {text ? "this search" : "a turn right now"}: small and
+                pre-assembled, never the raw session.
+              </>
+            }
+          >
             {memory.recall ? (
               <>
                 <pre className="mem-recall">
                   {memory.recall.context || "(nothing)"}
                 </pre>
-                <p className="cc-hint">
+                <p className="cc-hint mem-meta">
                   {memory.recall.context.length} characters · built in{" "}
                   {memory.recall.elapsed_ms} ms
                 </p>
@@ -95,10 +103,9 @@ export function MemoryTab() {
             ) : (
               <p className="cc-hint">Loading…</p>
             )}
-          </section>
+          </Section>
 
-          <section className="mem-panel">
-            <h2>Questions for you</h2>
+          <Section title="Questions for you">
             {results?.questions.length ? (
               <ul className="mem-list">
                 {results.questions.map((question) => (
@@ -118,16 +125,15 @@ export function MemoryTab() {
                 None open. When unsure, it asks instead of guessing.
               </p>
             )}
-          </section>
+          </Section>
 
-          <section className="mem-panel">
-            <h2>Session notes</h2>
+          <Section title="Session notes">
             {results?.notes.length ? (
               results.notes.map((note) => (
                 <details key={note.id} className="mem-note">
                   <summary>
-                    {note.kind === "recap" ? "Recap" : "Rolling note"} ·{" "}
-                    {ago(note.created_at)}
+                    {note.kind === "recap" ? "Recap" : "Rolling note"}
+                    <span className="mem-meta">{ago(note.created_at)}</span>
                   </summary>
                   <pre>{note.body}</pre>
                 </details>
@@ -135,7 +141,7 @@ export function MemoryTab() {
             ) : (
               <p className="cc-hint">Written every few minutes of play.</p>
             )}
-          </section>
+          </Section>
         </aside>
       </div>
     </div>

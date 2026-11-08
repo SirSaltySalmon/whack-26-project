@@ -89,6 +89,8 @@ export function Avatar({
       className={`avatar${hovered ? " avatar-hovered" : ""}`}
       data-rect-id="avatar"
       data-paused={settings?.paused ? "" : undefined}
+      // On the frame too, so skins can style the frame around any picture by state.
+      data-state={state}
       style={{
         left: frame.x,
         top: frame.y,

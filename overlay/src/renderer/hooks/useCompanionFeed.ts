@@ -1,23 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Brain,
+  DebugRegion,
   MemoryToast,
   SettingsState,
 } from "../../lib/protocol.generated.ts";
 import { logger } from "../../lib/logger.ts";
-import { applySubtitle, type SubtitleLine } from "../logic/subtitles.ts";
+import {
+  applySubtitle,
+  endStaleSubtitle,
+  type SubtitleLine,
+} from "../logic/subtitles.ts";
 
 const SUBTITLE_LINGER_MS = 2500;
+// Spoken words arrive well under a second apart, so this long without one means the line is over.
+const SUBTITLE_STALE_MS = 8000;
+// The brain sends regions about twice a second while debugging, so silence means it stopped.
+const DEBUG_REGIONS_STALE_MS = 3000;
 
 export interface ShownToast {
   id: number;
   toast: MemoryToast;
 }
 
+/** `seq` changes with every message, so the same level sent again shows the alert again. */
+export interface DangerSignal {
+  level: "none" | "medium" | "high";
+  seq: number;
+}
+
 export interface CompanionFeed {
   subtitle: SubtitleLine | null;
+  danger: DangerSignal | null;
   toasts: ShownToast[];
   settings: SettingsState | null;
+  debugRegions: DebugRegion[];
   handle(message: Brain): void;
   dismissToast(id: number): void;
 }
@@ -27,13 +44,34 @@ export function useCompanionFeed(): CompanionFeed {
   const [subtitle, setSubtitle] = useState<SubtitleLine | null>(null);
   const [toasts, setToasts] = useState<ShownToast[]>([]);
   const [settings, setSettings] = useState<SettingsState | null>(null);
+  const [debugRegions, setDebugRegions] = useState<DebugRegion[]>([]);
+  const [danger, setDanger] = useState<DangerSignal | null>(null);
   const nextToastId = useRef(0);
 
   useEffect(() => {
-    if (!subtitle?.done) return;
-    const timer = setTimeout(() => setSubtitle(null), SUBTITLE_LINGER_MS);
+    if (subtitle === null) return;
+    if (subtitle.done) {
+      const timer = setTimeout(() => setSubtitle(null), SUBTITLE_LINGER_MS);
+      return () => clearTimeout(timer);
+    }
+    // Each chunk is a new object, so this restarts while words keep coming. A line whose speech
+    // failed never gets its final chunk, and would otherwise stay on screen for good.
+    const id = subtitle.utteranceId;
+    const timer = setTimeout(() => {
+      logger.warn(
+        `Subtitle ${id} got no words for ${SUBTITLE_STALE_MS} ms and never ended; fading it`,
+      );
+      setSubtitle((current) => endStaleSubtitle(current, id));
+    }, SUBTITLE_STALE_MS);
     return () => clearTimeout(timer);
   }, [subtitle]);
+
+  // Each message is a new array, so this restarts the countdown on every message.
+  useEffect(() => {
+    if (debugRegions.length === 0) return;
+    const timer = setTimeout(() => setDebugRegions([]), DEBUG_REGIONS_STALE_MS);
+    return () => clearTimeout(timer);
+  }, [debugRegions]);
 
   const handle = (message: Brain): void => {
     switch (message.type) {
@@ -53,6 +91,15 @@ export function useCompanionFeed(): CompanionFeed {
       case "settings.state":
         setSettings(message);
         break;
+      case "debug.regions":
+        setDebugRegions(message.regions);
+        break;
+      case "danger.state":
+        setDanger((current) => ({
+          level: message.level,
+          seq: (current?.seq ?? 0) + 1,
+        }));
+        break;
       default:
         logger.warn(`No handler for ${message.type}`);
     }
@@ -60,8 +107,10 @@ export function useCompanionFeed(): CompanionFeed {
 
   return {
     subtitle,
+    danger,
     toasts,
     settings,
+    debugRegions,
     handle,
     dismissToast: (id) =>
       setToasts((current) => current.filter((shown) => shown.id !== id)),

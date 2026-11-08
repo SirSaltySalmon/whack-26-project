@@ -1,6 +1,7 @@
 import { logger } from "../../lib/logger.ts";
 import { parseChoice, PNG_DATA_URL } from "../logic/avatars.ts";
 import type { Frame } from "../logic/layout.ts";
+import { parseSkin, type SkinId } from "../logic/skins.ts";
 
 /** Where the player put things. Only a convenience, so failures log and fall back to defaults. */
 function read(key: string): unknown {
@@ -81,6 +82,16 @@ export const savedRemoveBackground = {
   },
   save(remove: boolean): void {
     write("overlay.removeBackground", remove);
+  },
+};
+
+/** The overlay's look. Shared with the Control Center, which can change it too. */
+export const savedSkin = {
+  load(): SkinId {
+    return parseSkin(read("overlay.skin"));
+  },
+  save(skin: SkinId): void {
+    write("overlay.skin", skin);
   },
 };
 

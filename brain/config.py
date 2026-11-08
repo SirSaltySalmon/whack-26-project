@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from shared.protocol.messages import VoiceOption
@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     elevenlabs_api_key: SecretStr | None = None
     exa_api_key: SecretStr | None = None
     cartesia_api_key: SecretStr | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _blank_key_is_unset(cls, value: object, info: ValidationInfo) -> object:
+        # `KEY=` in .env or the shell should mean no key, not a key that fails every call.
+        blank = isinstance(value, str) and not value.strip()
+        return None if blank and (info.field_name or "").endswith("_api_key") else value
+
+    # Parts turned off for testing, such as `observer,tts`. See brain/switches.py, and --off.
+    disable: str = ""
 
     brain_port: int = 8765
 
@@ -134,6 +144,15 @@ class Settings(BaseSettings):
     note_interval_s: float = 300.0
     note_min_new_events: int = 5
 
+    # Meaning-based memory search, used only when the player picks it in settings. Runs locally on
+    # the CPU. MiniLM rather than bge-small, which scored unrelated questions as high as related
+    # ones on our facts: see docs/DECISIONS.md.
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_cache_dir: Path = Path("data/models")
+    # Cosine similarity below this isn't recalled. Tuned for MiniLM, where unrelated questions
+    # scored at most 0.20 and related ones mostly 0.28 or more.
+    recall_min_similarity: float = 0.25
+
     # Recording a session for replay. Only runs with --record, because it stores screen and mic.
     record_fps: int = 5
     record_max_gb: float = 10.0
@@ -156,6 +175,8 @@ class Settings(BaseSettings):
     progress_retry_gap_s: float = 120.0
     progress_recheck_s: float = 900.0  # How long a sure guess stands before looking again
     profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
+    # Draws each learned HUD region over the game with what its reader reads. Also --debug-regions.
+    debug_regions: bool = False
 
     # Pre-generated barks.
     barks_dir: Path = Path("data/barks")

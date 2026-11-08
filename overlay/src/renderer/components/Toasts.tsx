@@ -24,7 +24,7 @@ function Toast({
   return (
     <div className="toast" data-rect-id={`toast-${shown.id}`}>
       <span className="toast-heading">Memory updated</span>
-      <span>{shown.toast.text}</span>
+      <span className="toast-text">{shown.toast.text}</span>
       <span className="toast-source">{SOURCE_LABELS[shown.toast.source]}</span>
     </div>
   );

@@ -14,6 +14,7 @@ from brain.tests.fakes import FakeTextLLM, FakeVision, make_frame
 
 EXPECTED_ARGUMENTS = {
     "look_closer": {"question", "area"},
+    "look_back": {"question"},
     "point_at": {"target"},
     "lookup_wiki": {"topic", "question", "open_page"},
     "read_open_page": {"question"},

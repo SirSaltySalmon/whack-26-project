@@ -1,0 +1,149 @@
+/* The Latency tab. Sections, pills and buttons come from form.css. Every number is mono and
+   tabular, so a column of times lines up digit for digit. */
+
+/* Amber rather than red: a slow reaction is worth noticing, not an error. */
+.lat-over {
+  color: var(--warn);
+}
+
+.lat-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+}
+
+.lat-hero-total {
+  margin: 0;
+  font: 500 44px/1.05 var(--mono);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-empty {
+  color: var(--text-faint);
+}
+
+.lat-hero-what {
+  display: flex;
+  flex-direction: column;
+}
+
+.lat-hero-what strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Seeing is neutral and speaking takes the accent, so the bar reads as one reaction in two parts. */
+.lat-split {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lat-split > span {
+  flex-basis: 0;
+}
+
+.lat-split-noticed {
+  background: #7d818d;
+}
+
+.lat-split-spoke {
+  background: var(--accent);
+}
+
+.lat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font: 11.5px/1.5 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-legend > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.lat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.lat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-table th {
+  padding: 0 14px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.lat-table td {
+  padding: 7px 14px 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.lat-table tbody tr:first-child td {
+  border-top: 0;
+}
+
+.lat-table th:last-child,
+.lat-table td:last-child {
+  padding-right: 0;
+}
+
+.lat-table tbody tr {
+  transition: background-color var(--ease);
+}
+
+.lat-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lat-table .lat-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lat-table td.lat-num,
+.lat-table .lat-time {
+  font: 12px/1.5 var(--mono);
+}
+
+.lat-time,
+.lat-target {
+  color: var(--text-muted);
+}
+
+.lat-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+}
+
+.lat-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.lat-stat-value {
+  font: 500 22px/1.3 var(--mono);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}

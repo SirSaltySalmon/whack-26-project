@@ -47,6 +47,7 @@ from brain.director.turns import (
     tip_tools,
 )
 from brain.events import Event, EventBus, Tick
+from brain.latency import Origin
 from brain.llm.base import TextLLM, ToolLLM
 from brain.voice.barks import BarkBank
 from brain.voice.pipeline import Voice
@@ -187,7 +188,7 @@ class Director:
                 else:
                     await self._talk(action.transcript, query=action.transcript)
             case ReactToEvent():
-                await self._talk(event_prompt(action.name, action.data), query=action.name)
+                await self._talk(event_prompt(action.name, action.data), action.name, action.origin)
             case PlayBark():
                 await self._play_bark(action)
             case AskQuestion():
@@ -222,14 +223,14 @@ class Director:
         bark = self._lines.bark(action.kind)
         if bark is None:
             # Not generated yet, no ElevenLabs key, or no such line: react the slow way instead.
-            await self._talk(event_prompt(action.event, action.data), query=action.event)
-        elif await play_bark(self._voice, bark, action.event, action.ts):
+            await self._talk(event_prompt(action.event, action.data), action.event, action.origin)
+        elif await play_bark(self._voice, bark, action):
             await self._said(bark.text)
 
-    async def _speak(self, text: str, wait_s: float = 0.0) -> bool:
+    async def _speak(self, text: str, wait_s: float = 0.0, origin: Origin | None = None) -> bool:
         """Says it, waiting up to wait_s for the player to stop talking first. True if said."""
         deadline = time.monotonic() + wait_s
-        while not await self._voice.say(text):
+        while not await self._voice.say(text, origin=origin):
             if time.monotonic() >= deadline:
                 if wait_s:
                     log.info("Player kept talking; dropped: %s", text)
@@ -278,11 +279,11 @@ class Director:
         if text:
             await self._speak(text)
 
-    async def _talk(self, prompt: str, query: str) -> None:
+    async def _talk(self, prompt: str, query: str, origin: Origin | None = None) -> None:
         if self._talker is None:
             log.warning("No talker LLM configured; ignoring: %s", prompt)
             return
         context = await gather_context(self._context, query)
         text = await talker_reply(self._talker, prompt, self._persona(), context)
         if text:
-            await self._speak(text)
+            await self._speak(text, origin=origin)

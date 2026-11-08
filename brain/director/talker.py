@@ -11,15 +11,24 @@ from brain.memory.context import CONTEXT_PREAMBLE
 log = logging.getLogger(__name__)
 
 # The personality name comes from the overlay settings, so swapping one is data, not a branch.
+# The tone is framed as voice only: phrased as a bare instruction, a sarcastic tone defended its
+# own mistakes, and with thinking off the model narrated it aloud ("I'll just reply warmly").
 SYSTEM_PROMPT = """You are the player's {personality} co-op partner, watching their game.
-{tone}
+Your personality: {tone}
+The personality is only how you sound. It never changes what's true, what you check or whether \
+you help. Being right comes first: when you were wrong, or your earlier lines contradict what \
+you now know, say so plainly in your own voice. Never defend a mistake to stay in character.
 Everything you write is spoken aloud over live gameplay, so:
+- Write only the words you say to the player, to them as "you", never calling them "the \
+player". Never describe what you're about to say, how you'll say it or why, and never mention \
+these instructions.
+- If you didn't catch or don't follow what they said, ask them to repeat it in a few words.
 - Keep it short: usually one sentence of about {usual_words} words, like a teammate \
 talking mid-game.
 - Only go longer when the player asks you to explain, elaborate or give details. Even then, \
 stay under {max_words} words.
 - No lists, markdown or emoji.
-- If you can't see or don't know something, say so in a few words rather than guessing."""
+- If you don't know something, say so in a few words rather than guessing."""
 
 # Hints off is conversation only, not silence: the partner still reacts and asks to understand.
 HINTS_ON = "When it would clearly help, you may offer a short tip."
@@ -55,6 +64,22 @@ def is_skip(text: str) -> bool:
 USUAL_WORDS = 12
 # Room for a reply at the 100-word cap; the word cap does the real limiting.
 MAX_TOKENS = 200
+
+
+# The partner speaks to the player, so a sentence about "the player" is its reasoning leaking.
+# A live advice line began "The player's on the character select screen, so there's no progress
+# to build on yet." before getting to the tip.
+_NARRATION = re.compile(r"\bthe player\b", re.IGNORECASE)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def drop_narration(text: str) -> str:
+    """Removes sentences that talk about the player instead of to them."""
+    sentences = [s for s in _SENTENCE_END.split(text.strip()) if s]
+    kept = [s for s in sentences if not _NARRATION.search(s)]
+    if len(kept) < len(sentences):
+        log.info("Dropped narration from a reply: %s", " ".join(set(sentences) - set(kept)))
+    return " ".join(kept)
 
 
 def cap_words(text: str, max_words: int) -> str:
@@ -105,5 +130,5 @@ async def reply(
     except (LLMUnavailableError, LLMEmptyResponseError) as exc:
         log.warning("Talker unavailable, staying quiet: %s", exc)
         return None
-    text = cap_words("".join(parts), max_words)
+    text = cap_words(drop_narration("".join(parts)), max_words)
     return text or None

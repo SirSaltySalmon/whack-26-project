@@ -32,6 +32,9 @@ class Settings(BaseModel):
     # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
     # kept so the two can be compared by ear.
     voice_style: Literal["expressive", "classic"] = "expressive"
+    # How memory finds what the player's words are about. "keyword" matches words, "semantic"
+    # matches meaning with a local embedding model, and "hybrid" merges the two.
+    memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
     # Paused, the partner says nothing, but keeps listening, watching and taking notes. Never
     # restored at startup, so a restart can't leave it silent with no idea why.
     paused: bool = False
@@ -51,6 +54,14 @@ class SubtitleChunk(BaseModel):
 class AvatarState(BaseModel):
     type: Literal["avatar.state"] = "avatar.state"
     state: Literal["idle", "listening", "talking", "reacting"]
+
+
+class DangerState(BaseModel):
+    """How much trouble the player is in, so the overlay can show it without covering the game.
+    Sent when the level changes, and again when the overlay connects."""
+
+    type: Literal["danger.state"] = "danger.state"
+    level: Literal["none", "medium", "high"]
 
 
 class PointerFly(BaseModel):
@@ -132,6 +143,26 @@ class PageRead(BaseModel):
     request_id: str
 
 
+class DebugRegion(BaseModel):
+    name: str
+    # Overlay window coordinates, like PointerFly.target.
+    rect: Rect
+    status: Literal["ok", "masked", "unreadable"]
+    # What the reader read, such as "72/100" or "62%".
+    display: str | None = None
+
+
+class DebugRegions(BaseModel):
+    """A debug view of where each HUD region was found and what its reader reads.
+
+    Always the full current set, so an empty list clears the view. Send it about twice a second
+    while debugging: the overlay hides the view when messages stop.
+    """
+
+    type: Literal["debug.regions"] = "debug.regions"
+    regions: list[DebugRegion]
+
+
 # --- Overlay to brain ---
 class OverlayReady(BaseModel):
     type: Literal["overlay.ready"] = "overlay.ready"
@@ -205,7 +236,9 @@ BrainMessage = Annotated[
     | MemoryToast
     | QuestionAsk
     | SettingsState
-    | PageRead,
+    | PageRead
+    | DebugRegions
+    | DangerState,
     Field(discriminator="type"),
 ]
 OverlayMessage = Annotated[

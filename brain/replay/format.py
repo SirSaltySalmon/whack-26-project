@@ -163,7 +163,12 @@ def event_record(event: Event, t: float) -> EventRecord | None:
     if isinstance(event, SettingsChanged):
         settings = event.settings.model_dump(mode="json")
         return EventRecord(t=t, kind=kind, data={"settings": settings})
-    data = {f.name: getattr(event, f.name) for f in dataclasses.fields(event) if f.name != "ts"}
+    # Monotonic times belong to this process, so they mean nothing in a replay.
+    data = {
+        f.name: getattr(event, f.name)
+        for f in dataclasses.fields(event)
+        if f.name not in ("ts", "frame_ts")
+    }
     # A JSON round trip turns tuples into lists now, so the record matches what's read back.
     return EventRecord(t=t, kind=kind, data=json.loads(json.dumps(data, default=str)))
 

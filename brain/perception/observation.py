@@ -5,12 +5,11 @@ all, are they in trouble, then what's going on and what's worth mentioning. A si
 show what changed, so the brain should compare consecutive observations rather than ask the model.
 """
 
-import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-_HEALTH_NUMBERS = re.compile(r"(\d[\d,]*)\s*/\s*(\d[\d,]*)")
+from brain.perception.numbers import parse_fraction
 
 OBSERVATION_PROMPT = """You are the eyes of an AI companion watching someone play a video game. \
 It could be any game, so don't assume a genre. The companion uses your report to stay aware of \
@@ -80,10 +79,7 @@ class Observation(BaseModel):
         """Prefers numbers read off the screen: the model reads them well but does the sum badly."""
         if not self.health_visible:
             return None
-        match = _HEALTH_NUMBERS.search(self.health_raw or "")
-        if match:
-            current = int(match.group(1).replace(",", ""))
-            maximum = int(match.group(2).replace(",", ""))
-            if maximum > 0 and current <= maximum:
-                return current / maximum
+        numbers = parse_fraction(self.health_raw or "")
+        if numbers:
+            return numbers[0] / numbers[1]
         return None if self.health_percent is None else self.health_percent / 100

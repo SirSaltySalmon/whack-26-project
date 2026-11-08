@@ -10,6 +10,8 @@ import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
 import { ChatBox } from "./components/ChatBox.tsx";
+import { DangerAlert } from "./components/DangerAlert.tsx";
+import { DebugRegions } from "./components/DebugRegions.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
 import { Subtitles } from "./components/Subtitles.tsx";
@@ -21,6 +23,7 @@ import { useClickThrough } from "./hooks/useClickThrough.ts";
 import { useCompanionFeed } from "./hooks/useCompanionFeed.ts";
 import { usePageReader } from "./hooks/usePageReader.ts";
 import { useRectReporter } from "./hooks/useRectReporter.ts";
+import { useSkin } from "./hooks/useSkin.ts";
 import { useViewport } from "./hooks/useViewport.ts";
 import {
   savedAvatarFrame,
@@ -57,6 +60,7 @@ export function App() {
   const [lastPage, setLastPage] = useState(savedLastPage.load);
   const feed = useCompanionFeed();
   const avatars = useAvatars();
+  const skin = useSkin(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [settingsFrame, setSettingsFrame] = useState(() =>
@@ -184,6 +188,7 @@ export function App() {
 
   return (
     <>
+      <DebugRegions regions={feed.debugRegions} viewport={viewport} />
       <Avatar
         frame={avatarFrame}
         state={avatarState}
@@ -253,6 +258,7 @@ export function App() {
         <SettingsPanel
           state={feed.settings}
           avatars={avatars}
+          skin={skin}
           frame={clampFrame(settingsFrame, viewport)}
           onFrame={setSettingsFrame}
           onChange={sendSettings}
@@ -273,7 +279,12 @@ export function App() {
       />
 
       <Toasts toasts={feed.toasts} onDone={feed.dismissToast} />
-      <Subtitles line={feed.subtitle} />
+      <DangerAlert danger={feed.danger} />
+      <Subtitles
+        line={feed.subtitle}
+        speaker={feed.settings?.settings.personality ?? null}
+        avatarSide={home.x < viewport.width / 2 ? "left" : "right"}
+      />
       <Pointer command={pointer} home={home} viewport={viewport} />
     </>
   );

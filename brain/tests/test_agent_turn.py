@@ -233,8 +233,11 @@ async def test_the_guidance_covers_corrections_details_and_pointing_when_suggest
     await Harness().run(llm)
     # Corrections: the player is right, and memory gets fixed rather than argued with.
     assert "they're right" in llm.system and "under ASKED" in llm.system
-    # NOW is a rough report, so specific details get a closer look first.
-    assert "low-resolution" in llm.system and "an item name, a number" in llm.system
+    # NOW is a rough report, so specific details get a closer look first, and "can't see" only
+    # comes after one, even when the partner's earlier lines said it couldn't.
+    assert "low-resolution" in llm.system and "on-screen detail" in llm.system
+    assert "look_closer has tried this turn" in llm.system and "look again now" in llm.system
+    assert "look_back has tried this turn" in llm.system
     # Suggestions point at what they're about, in the same round as other tools.
     assert "when you suggest" in llm.system and "in the same round" in llm.system
 

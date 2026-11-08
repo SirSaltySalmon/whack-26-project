@@ -6,6 +6,9 @@
   bottom: 9%;
   left: 50%;
   z-index: 90;
+  /* Starting at the centre leaves only half the screen to shrink into, so a line would wrap at
+     50% instead of max-width. Sizing to the text lets it use the full 60%. */
+  width: max-content;
   max-width: 60%;
   padding: 6px 16px;
   border-radius: 10px;

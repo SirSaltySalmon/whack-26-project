@@ -15,6 +15,32 @@ Architectural decisions that change the plan. Add new entries at the top. Don't 
 | 5 | **Pause and blind are never restored at startup**, and a settings update without one keeps the current value | The Control Center sends its saved settings on connect, so without this, opening it would unpause the partner or let it see again |
 | 6 | **Reopen wiki moves from the character to the settings panel** | The character's Wiki button only reopened the last page visited, which looked hardcoded to one game. Keeping it in settings means a closed wiki window can still come back |
 
+## 2026-11-08: The overlay has swappable skins, and danger has one quiet look
+
+**Status:** built on `main`, not yet run live. Applies to `overlay/src/renderer/skins/`, `brain/danger_feed.py` and `shared/protocol/messages.py`.
+
+- **Skins are CSS, keyed on `data-skin` on the overlay's root.** Sticker (default), Island, Signal, Pixel, Broadcast and Classic, listed in `logic/skins.ts`. The player picks one in the overlay's settings card or the Control Center's Avatar tab, and both windows follow. It's saved in the overlay, like the avatar, so it works before the brain connects. Adding one is a stylesheet and a line in the list, never a branch in a component.
+- **Danger looks the same in every skin:** a small black pill at the top for 4 s and one faint glow at the screen edges that fades within 2 s. Full-width banners and screen shakes were tried in mockups and rejected as too obtrusive during a fight. The pill is masked like any element. The glow isn't, because masking the screen edges would hide the game's health bars, which is why it's faint and brief.
+- **`danger.state` (additive)** carries `none`, `medium` or `high`. `brain/danger_feed.py` forwards the tracker's `danger_started`, `danger_high` and `danger_ended` events, so the alert and the spoken line follow the same rule, and replays show it too. It's sent again when the overlay reconnects mid-fight.
+- **Fonts are bundled** in `overlay/src/renderer/assets/fonts/` (Google Fonts, Open Font License), so the stage demo needs no network.
+
+## 2026-11-08: Reactions are timed from the frame that showed them
+
+**Status:** built on `main` (WP9), not yet run live. Applies to `brain/latency.py`, `brain/events.py`, `brain/perception/tracker.py`, `brain/perception/observer.py`, `brain/director/` and `brain/voice/`.
+
+The prompt judges how fast the partner reacts to what happens on screen. `Latency: event to bark` started when the event was published, seconds after the frame for the observer, so it hid the slowest part.
+
+- **`GameEvent.frame_ts`** is when the frame that first showed the event was captured. The tracker uses the first frame of the agreeing run, not the confirming one, because that's when it was first visible.
+- **Reactions carry an `Origin`** (event, source, frame time, publish time) on `PlayBark` and `ReactToEvent`, with `compare=False`, so the rules' decisions and tests don't change.
+- **Two log lines, split into noticed and spoke:** `frame to bark` when a bark's audio is queued, and `frame to first audio` when the voice really starts playing, for barks and talker lines alike. The old `event to bark` line stays, so earlier numbers can still be compared. `scripts/latency_report.py` and the Control Center's Latency tab parse these formats, so change all three together.
+- **No number rather than a wrong one:** a line queued behind speech already playing isn't timed, because a later start could be credited to it. The player's next turn drops a pending timing, and audio starting more than 10 s after queuing isn't credited.
+- **Replays don't record `frame_ts`:** monotonic times mean nothing in another process.
+
+### What other tracks need to know
+
+- `Voice.say` and `Voice.play` take a keyword `origin: Origin | None = None`. Any new voice or fake must accept it.
+- After the WP4 merge, the reader engine should publish with `frame_ts` set to the first of its `confirm_reads` frames. Until then reader events log no frame latency.
+
 ## 2026-11-08: Questions are spoken and settle in the turn, the player wins corrections, and tips can point
 
 **Status:** built on `main`, for the team to review. Applies to `brain/memory/`, `brain/director/`, `brain/agent/`, `brain/learner/`, `brain/voice/`, `overlay/`, and additively to `shared/protocol/`. Replaces part of "Low confidence means talk to the player" (2026-11-07): spoken answers no longer wait for the next session note.
@@ -92,6 +118,20 @@ Replay is the test harness, so the same recording has to give the same result ev
 
 **Known limit:** lines come out in order, so if director rules change which events get a reply, later lines can answer the wrong thing. `compare_replay.py` shows where.
 
+
+
+## 2026-11-07: How the HUD readers and learner judge what they read
+
+**Status:** accepted by the project owner (empty bars, building WP5 with WP4, skipping scene matching); the rest are our defaults. Applies to WP4 (`brain/perception/readers.py`, `reader_rules.py`, `reader_engine.py`, `ocr.py`) and WP5 (`brain/learner/`).
+
+- **An empty colour bar reads `unreadable`, never 0.** A bar that changes colour (hearts turning gold, say) looks the same as an empty one, and reading it as 0 would fire false low-health reactions. The observer keeps covering health while a reader can't.
+- **Failing counts only during gameplay.** A reader counts as failing, and asks the learner to relearn, only after `reader_failing_after_s` unreadable while the observer confirms gameplay. Menus, death screens and our own masks don't count. Readers whose rules are all `above` (things that come and go, like a boss bar) never count as failing, and re-arm once they've been gone for 3 reads. This decides by rule type, not by name, so it stays game-agnostic.
+- **Bars are measured by how far the colour reaches,** not by an unbroken run, so segmented bars, rows of icons and text over a bar still read. A column counts when 30% of it matches.
+- **OCR skips text detection for numbers.** RapidOCR's recognition alone read `72/100` in about 15 ms; with detection it took about 850 ms. Regions are already cropped to the text. Only multi-line `ocr_text` uses detection. OCR has its own thread and is skipped while busy, so it never delays colour readers.
+- **A changed game size pauses readers** and asks for a relearn, because many games pin their HUD in pixels, so fractions of the frame move when the window does.
+- **Reader values go straight after mood in the talker's context,** ahead of the observer's text, which memory would otherwise cut first. A reader replaces the observer's value for the same key, and the observer stops publishing events working readers cover, though its focus boosts still see them.
+- **The learner waits for gameplay.** It doesn't start a pass, or spend a vision call, until a fresh gameplay frame exists.
+- **The debug view hides its labels from vision but not its outlines.** Outlines sit outside each box, so they can't mask a reader or change what it reads. Labels carry values, so they're masked like any overlay text.
 
 ## 2026-11-07: Look less often by default, and faster for a few seconds when it matters
 
@@ -382,3 +422,20 @@ The original comparison of memory stores assumed a single game. Its ranking stil
 **How:** `LLMFactory` picks the vendor from the model name: `claude-*` runs on Anthropic, anything else on Gemini, so going back is a change to `talker_model` or `vision_model`. All Haiku roles share one rate limiter, raised to 240 a minute.
 
 **Unproven:** whether Haiku's `box_2d` boxes (0-1000, `[ymin, xmin, ymax, xmax]`) are as accurate as Gemini's. Check with `scripts/check_pointing.py`.
+
+## 2026-11-08: Meaning-based memory search, switchable in settings
+**Change:** recall can match by meaning as well as by keywords. Settings has a new "Memory search" choice, `memory_search` in the protocol: Keywords (`keyword`, the default and the old behavior), Both (`hybrid`) and Meaning (`semantic`).
+
+**Why:** FTS5 matches words, and speech paraphrases. "Where's my house?" never found `base / location` by keywords.
+
+**How:**
+- `brain/memory/semantic.py` loads the model in the background only when the player picks Both or Meaning, embeds new facts and note lines, and embeds each question on its own thread. Every failure falls back to keywords.
+- `brain/memory/vectors.py` keeps sqlite-vec tables next to the facts and notes. They're derived data: created at runtime, so there's no schema bump and no need to delete databases, and rebuilt if the model changes. Search is an exact scan rather than vec0's nearest-neighbour query, because that query picks neighbours before filtering out closed facts and other games.
+- Both merges keyword and meaning results by reciprocal rank fusion, so the two scores never need to be on one scale.
+- Replays stay on keywords, so a stage fallback never waits on a model download.
+
+**Model:** `sentence-transformers/all-MiniLM-L6-v2`, not the `BAAI/bge-small-en-v1.5` the architecture first named. On 12 questions against our facts, bge-small scored unrelated questions as high as related ones (0.62 for "tell me a joke"), so no cutoff could separate them. MiniLM scored unrelated questions at most 0.22 and related ones mostly 0.28 or more, so `recall_min_similarity` is 0.25. snowflake-arctic-embed-xs was worse than both.
+
+**Measured on the main dev machine:** model load about 0.2-0.4 s once cached, a question about 4-20 ms, `context()` about 4.5 ms in Both against 1 ms in Keywords. The first use downloads about 90 MB into `data/models`, so run it once before the demo.
+
+**Limit:** the talker already gets the newest 8 facts, and recall skips those, so this only adds anything once memory holds more than that, or for older session notes.

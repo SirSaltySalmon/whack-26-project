@@ -1,66 +1,135 @@
 /* Keys, Voices and Console tabs. Memory is in memory.css, shared pieces in form.css. */
 
-/* Keys */
+/* Keys: flush rows under the section's hairline, closed by one more before the footnote. */
 .cc-keys {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
+  margin: 0 -16px 12px;
+  border-bottom: 1px solid var(--border);
+  container-type: inline-size;
+}
+
+.cc-section-head + .cc-keys {
+  margin-top: -14px;
 }
 
 .cc-key {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) auto minmax(260px, 1fr);
-  gap: 14px;
+  /* Fixed state and form columns, so every key's field lines up whatever its badge says. */
+  grid-template-columns: minmax(0, 1fr) 124px minmax(260px, 0.9fr);
+  gap: 16px;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cc-key:first-child {
+  border-top: 0;
 }
 
 .cc-key-title {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   align-items: baseline;
+}
+
+.cc-key-title strong {
+  font-weight: 600;
 }
 
 .cc-key-title code {
   color: var(--text-muted);
 }
 
+.cc-key-title .cc-hint {
+  margin: 0;
+  color: var(--text-faint);
+}
+
+.cc-key-state {
+  justify-self: start;
+}
+
+/* Remove shows only for a saved key; its column is kept either way so the Save buttons align. */
 .cc-key-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 72px;
   gap: 6px;
 }
 
-/* Voices */
+@container (max-width: 600px) {
+  .cc-key {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
+  }
+
+  .cc-key-form {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Voices: one hairline list, the picked row marked by an accent rail. */
 .voice-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .voice-row {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  min-height: 42px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
   cursor: pointer;
+  transition: background-color var(--ease);
 }
 
-.voice-row-on {
+.voice-row:first-child {
+  border-top: 0;
+}
+
+.voice-row:hover {
+  background: var(--hover);
+}
+
+.voice-row-on,
+.voice-row-on:hover {
+  background: rgba(110, 231, 183, 0.05);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.voice-row input[type="radio"] {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+
+.voice-row input[type="radio"]:checked {
   border-color: var(--accent);
-  background: rgba(110, 231, 183, 0.06);
-}
-
-.voice-row input {
-  accent-color: var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 3px, transparent 3.5px);
 }
 
 .voice-name {
   min-width: 120px;
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.voice-row .cc-hint {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .voice-row .cc-pill,
@@ -75,35 +144,70 @@
   margin-top: 12px;
 }
 
+.voice-add .cc-input:first-child {
+  flex: 0 1 220px;
+}
+
+.voice-add .cc-input + .cc-input {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 6px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  transition:
+    border-color var(--ease),
+    box-shadow var(--ease);
+}
+
+.chips:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: var(--focus-ring);
 }
 
 .chip {
   display: inline-flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
-  padding: 2px 4px 2px 10px;
-  border-radius: 999px;
-  background: var(--surface-raised);
+  height: 22px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
 }
 
 .chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   border: 0;
+  border-radius: 4px;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
 }
 
+.chip button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
 .chip-input {
   flex: 1;
   min-width: 140px;
+  height: 24px;
+  padding: 0 4px;
   border: 0;
   background: none;
   outline: none;
@@ -128,30 +232,55 @@
   align-items: center;
   color: var(--text-muted);
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.console-follow input {
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .console-log {
   flex: 1;
   min-height: 200px;
-  padding: 10px 12px;
+  padding: 8px 0;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #090b10;
-  font:
-    12px/1.55 "Cascadia Mono",
-    Consolas,
-    monospace;
+  background: #08090c;
+  font: 12px/1.6 var(--mono);
+}
+
+.console-log > .cc-hint {
+  margin: 0;
+  padding: 48px 16px;
+  font-family: var(--font);
+  text-align: center;
+}
+
+.console-log > .cc-hint::before {
+  content: "›_";
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font: 18px var(--mono);
 }
 
 .console-line {
+  padding: 0 14px;
+  color: #b9bdc7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #c5cad6;
+}
+
+.console-line:hover {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .console-error {
   color: var(--danger);
+  box-shadow: inset 2px 0 0 rgba(248, 113, 113, 0.5);
 }
 .console-warn {
   color: var(--warn);
@@ -161,5 +290,5 @@
 }
 .console-you {
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
 }

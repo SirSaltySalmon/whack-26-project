@@ -210,7 +210,8 @@ def test_the_type_flag_reaches_run(monkeypatch: pytest.MonkeyPatch, argv: list[s
         calls.append(kwargs)
 
     monkeypatch.setattr(entry_point, "run", fake_run)
-    monkeypatch.setattr(entry_point, "Settings", object)
+    # Real settings, but never the developer's .env.
+    monkeypatch.setattr(entry_point, "Settings", lambda: Settings(_env_file=None))  # type: ignore[call-arg]
     monkeypatch.setattr("brain.game_setup.pick_game", lambda settings: (settings, ""))
     monkeypatch.setattr(entry_point, "configure_logging", lambda *_: None)
     monkeypatch.setattr(sys, "argv", ["brain", *argv])

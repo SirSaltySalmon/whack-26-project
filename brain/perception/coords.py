@@ -4,9 +4,15 @@ Gemini boxes are [ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the imag
 scale means downscaling the image before sending doesn't change the result.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from brain.perception.profile_schema import Box
 from shared.protocol.messages import Rect
+
+# How far past an image edge, as a share of its size, a model's box may reach and still be
+# clipped rather than refused.
+EDGE_SLACK = 0.02
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,50 @@ def dip_to_physical(rect: Rect, display_scale: float) -> Rect:
     )
 
 
+def pixel_box_to_normalized(box_px: Sequence[float], width: int, height: int) -> NormalizedBox:
+    """A model's [x_min, y_min, x_max, y_max], in pixels of the image it saw, as a NormalizedBox.
+
+    Claude places pixel boxes well and 0-1000 boxes badly. Raises ValueError for anything
+    malformed, as NormalizedBox does, because model output is untrusted.
+    """
+    if len(box_px) != 4 or width <= 0 or height <= 0:
+        raise ValueError(f"Not a box for a {width} x {height} image: {box_px}")
+    x_min, y_min, x_max, y_max = (float(v) for v in box_px)
+    # A pixel or two past the edge is the model being loose about a target at the edge, so it's
+    # clipped. Further out is nonsense, and NormalizedBox refuses it.
+    x_min, x_max = (_clip_edge(v, width) for v in (x_min, x_max))
+    y_min, y_max = (_clip_edge(v, height) for v in (y_min, y_max))
+    return NormalizedBox(
+        ymin=y_min / height * 1000,
+        xmin=x_min / width * 1000,
+        ymax=y_max / height * 1000,
+        xmax=x_max / width * 1000,
+    )
+
+
+def _clip_edge(value: float, size: int) -> float:
+    slack = size * EDGE_SLACK
+    if -slack <= value < 0:
+        return 0.0
+    if size < value <= size + slack:
+        return float(size)
+    return value
+
+
 def box_to_dip_rect(box: NormalizedBox, crop: CropRegion, display_scale: float) -> Rect:
     """Model box to overlay coordinates. Use this for all pointing."""
     return physical_to_dip(box_to_physical_rect(box, crop), display_scale)
+
+
+def fraction_box_to_dip_rect(
+    box: Box, width: int, height: int, region: CropRegion | None, display_scale: float
+) -> Rect:
+    """A learned box (fractions of the frame) to overlay coordinates, for drawing it in-game."""
+    offset_x, offset_y = (region.x, region.y) if region else (0, 0)
+    physical = Rect(
+        x=offset_x + box.x * width,
+        y=offset_y + box.y * height,
+        width=box.w * width,
+        height=box.h * height,
+    )
+    return physical_to_dip(physical, display_scale)

@@ -412,6 +412,93 @@
       "title": "ControlShutdown",
       "type": "object"
     },
+    "DangerState": {
+      "description": "How much trouble the player is in, so the overlay can show it without covering the game.\nSent when the level changes, and again when the overlay connects.",
+      "properties": {
+        "level": {
+          "enum": [
+            "none",
+            "medium",
+            "high"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "type": {
+          "const": "danger.state",
+          "default": "danger.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level"
+      ],
+      "title": "DangerState",
+      "type": "object"
+    },
+    "DebugRegion": {
+      "properties": {
+        "display": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "masked",
+            "unreadable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "rect",
+        "status"
+      ],
+      "title": "DebugRegion",
+      "type": "object"
+    },
+    "DebugRegions": {
+      "description": "A debug view of where each HUD region was found and what its reader reads.\n\nAlways the full current set, so an empty list clears the view. Send it about twice a second\nwhile debugging: the overlay hides the view when messages stop.",
+      "properties": {
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/DebugRegion"
+          },
+          "title": "Regions",
+          "type": "array"
+        },
+        "type": {
+          "const": "debug.regions",
+          "default": "debug.regions",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "regions"
+      ],
+      "title": "DebugRegions",
+      "type": "object"
+    },
     "ElementRect": {
       "properties": {
         "element_id": {
@@ -1032,6 +1119,16 @@
     },
     "Settings": {
       "properties": {
+        "memory_search": {
+          "default": "keyword",
+          "enum": [
+            "keyword",
+            "hybrid",
+            "semantic"
+          ],
+          "title": "Memory Search",
+          "type": "string"
+        },
         "mic_enabled": {
           "default": true,
           "title": "Mic Enabled",
@@ -1211,6 +1308,8 @@
           "card.close": "#/$defs/CardClose",
           "card.show": "#/$defs/CardShow",
           "card.update": "#/$defs/CardUpdate",
+          "danger.state": "#/$defs/DangerState",
+          "debug.regions": "#/$defs/DebugRegions",
           "page.read": "#/$defs/PageRead",
           "pointer.fly": "#/$defs/PointerFly",
           "pointer.hide": "#/$defs/PointerHide",
@@ -1254,6 +1353,12 @@
         },
         {
           "$ref": "#/$defs/PageRead"
+        },
+        {
+          "$ref": "#/$defs/DebugRegions"
+        },
+        {
+          "$ref": "#/$defs/DangerState"
         }
       ],
       "title": "Brain"

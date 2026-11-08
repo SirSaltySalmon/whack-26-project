@@ -1,6 +1,7 @@
 /* What the Control Center saves between runs, and how it becomes the brain's command line and
    environment. Pure, so the main process and the window share it and tests need no Electron. */
 import type {
+  MemorySearch,
   Settings,
   VoiceOption,
   VoiceStyle,
@@ -30,6 +31,7 @@ export interface PartnerSettings {
   mic_enabled: boolean;
   /** Pausing and blinding are never kept here: the brain starts unpaused and seeing. */
   voice_style: VoiceStyle;
+  memory_search: MemorySearch;
 }
 
 export function partnerSettings(settings: Settings): PartnerSettings {
@@ -39,11 +41,19 @@ export function partnerSettings(settings: Settings): PartnerSettings {
     voice_id: settings.voice_id ?? null,
     mic_enabled: settings.mic_enabled ?? true,
     voice_style: settings.voice_style ?? DEFAULT_VOICE_STYLE,
+    memory_search: settings.memory_search ?? DEFAULT_MEMORY_SEARCH,
   };
 }
 
 /** Matches the brain's default in shared/protocol/messages.py. */
 export const DEFAULT_VOICE_STYLE: VoiceStyle = "expressive";
+/** Matches the brain's default in shared/protocol/messages.py. */
+export const DEFAULT_MEMORY_SEARCH: MemorySearch = "keyword";
+const MEMORY_SEARCHES: readonly MemorySearch[] = [
+  "keyword",
+  "hybrid",
+  "semantic",
+];
 
 const DEFAULT_PERSONALITY = "supportive";
 
@@ -93,6 +103,7 @@ export const DEFAULT_CONFIG: LauncherConfig = {
     voice_id: null,
     mic_enabled: true,
     voice_style: DEFAULT_VOICE_STYLE,
+    memory_search: DEFAULT_MEMORY_SEARCH,
   },
 };
 
@@ -154,6 +165,9 @@ export function sanitizeConfig(raw: unknown): LauncherConfig {
       mic_enabled: flag(settings.mic_enabled, true),
       voice_style:
         settings.voice_style === "classic" ? "classic" : DEFAULT_VOICE_STYLE,
+      memory_search:
+        MEMORY_SEARCHES.find((mode) => mode === settings.memory_search) ??
+        DEFAULT_MEMORY_SEARCH,
     },
   };
 }

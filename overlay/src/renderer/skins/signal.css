@@ -1,0 +1,298 @@
+/* Signal: the partner as a piece of hardware. Black plates and light spec sheets, mono labels,
+   dot-matrix headings, and one red dot that marks whatever is live. */
+
+:root[data-skin="signal"] {
+  --sig-black: #050505;
+  --sig-paper: #efefef;
+  --sig-ink: #0d0d0d;
+  --sig-red: #ff3b30;
+  --sig-mono: "Geist Mono", ui-monospace, Consolas, monospace;
+  --sig-matrix: 900 20px/1 "Doto", "Geist Mono", ui-monospace, monospace;
+  --sig-grid: radial-gradient(#fff2 30%, #0000 34%) 0 0 / 7px 7px;
+  --surface: var(--sig-black);
+  --border: #ffffff4d;
+  --text: var(--sig-paper);
+  --text-muted: #9c9c9c;
+  --accent: var(--sig-paper);
+  --idle: #efefef80;
+  --listening: var(--sig-paper);
+  --danger-font: var(--sig-mono);
+}
+
+:root[data-skin="signal"] body {
+  font-family: var(--sig-mono);
+}
+
+/* Light spec sheets. Dark text on paper reads over bright skies and dark caves alike, and the
+   tokens flip inside, so the base rules (and the avatar gallery) follow without restating them. */
+:root[data-skin="signal"] :is(.card, .toast, .minimized-tab) {
+  --surface: var(--sig-paper);
+  --surface-raised: var(--sig-paper);
+  --border: var(--sig-ink);
+  --text: var(--sig-ink);
+  --text-muted: #5c5c5c;
+  --accent: var(--sig-ink);
+  box-shadow: none;
+  color: var(--text);
+  color-scheme: light;
+}
+
+/* Small radii and no soft shadows, which would spill past the brain's 8 px mask. */
+:root[data-skin="signal"] :is(.avatar-grip, .avatar-button, .avatar-wiki),
+:root[data-skin="signal"] :is(.toast, .minimized-tab, .chat-box, .chat-pill),
+:root[data-skin="signal"] :is(.subtitles-box, .pointer-label, .option),
+:root[data-skin="signal"] :is(.card-buttons button, .avatar-tile),
+:root[data-skin="signal"] .avatar-controls {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+:root[data-skin="signal"] :is(.subtitles-box, .pointer-label),
+:root[data-skin="signal"] .card-buttons button {
+  border: 1px solid var(--border);
+}
+
+:root[data-skin="signal"] :is(.avatar-wiki, .chat-pill, .minimized-tab),
+:root[data-skin="signal"] :is(.pointer-label, .settings-heading, .option) {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Pressed and chosen controls invert: black on light, or light on black. */
+:root[data-skin="signal"] :is(.avatar-button, .avatar-wiki):enabled:hover,
+:root[data-skin="signal"] :is(.card-buttons button, .option):enabled:hover,
+:root[data-skin="signal"] :is(.card-buttons button.active, .option-on) {
+  background: var(--text);
+  color: var(--surface);
+}
+
+/* The one red: a dot on the live voice, the new memory, the chosen option and the target. */
+:root[data-skin="signal"] .avatar::after,
+:root[data-skin="signal"] :is(.toast-heading, .option-on)::before,
+:root[data-skin="signal"] .pointer-body::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sig-red);
+}
+
+:root[data-skin="signal"] :is(.toast-heading, .option-on)::before {
+  display: inline-block;
+  margin-right: 7px;
+  vertical-align: 0.12em;
+}
+
+/* Avatar. A black plate gives any picture the same screen to sit on, over day or night. */
+:root[data-skin="signal"] .avatar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--sig-grid), var(--sig-black);
+}
+
+:root[data-skin="signal"] .avatar::after {
+  position: absolute;
+  inset: 10px auto auto 10px;
+  box-shadow: 0 0 0 3px #ff3b3038;
+}
+
+/* The status LED rests dim, holds red while listening and blinks while talking. */
+:root[data-skin="signal"] .avatar[data-state="idle"]::after {
+  background: #efefef48;
+  box-shadow: none;
+}
+
+:root[data-skin="signal"] .avatar[data-state="talking"]::after,
+:root[data-skin="signal"] .pointer-on::before {
+  animation: signal-pulse 0.5s steps(2, jump-none) infinite alternate;
+}
+
+/* A lit outline rather than a coloured glow, so the picture keeps its own colours. */
+:root[data-skin="signal"] .avatar-image:not([data-state="idle"]) {
+  filter: drop-shadow(0 0 1px #efefef) drop-shadow(0 0 1px #efefef);
+}
+
+/* Stepped, like a display refreshing in frames rather than a face breathing. */
+:root[data-skin="signal"] .avatar [data-state="talking"] {
+  animation-timing-function: steps(3, jump-none);
+}
+
+/* The circle placeholder becomes a dot-matrix disc that lights up when the partner is active. */
+:root[data-skin="signal"] .avatar-art {
+  background: radial-gradient(var(--idle) 36%, #0000 41%) center / 8px 8px;
+  outline-width: 1px;
+}
+
+:root[data-skin="signal"] .avatar-art:not([data-state="idle"]) {
+  --idle: var(--sig-paper);
+}
+
+:root[data-skin="signal"] .avatar-grip {
+  background-image: radial-gradient(#efefefc0 35%, #0000 42%);
+  background-size: 4px 4px;
+}
+
+/* Six dots in a stair, like the grip on a piece of kit. The corner keeps its full box so it stays
+   easy to grab; only the drawing moves into the pseudo-element. */
+:root[data-skin="signal"] .resize-corner {
+  border: 0;
+}
+
+:root[data-skin="signal"] .resize-corner::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: radial-gradient(currentColor 1.3px, #0000 1.7px) 0 0 / 4px 4px;
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+}
+
+/* Subtitles. The strip lives on the inner box so the outer element keeps its fade. */
+:root[data-skin="signal"] .subtitles {
+  padding: 0;
+  background: none;
+  font-size: 20px;
+  text-align: left;
+}
+
+:root[data-skin="signal"] .subtitles-box {
+  padding: 9px 18px 12px;
+  background: var(--sig-black);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  animation: signal-wipe 0.4s steps(8) backwards;
+}
+
+:root[data-skin="signal"] .subtitles-box::before {
+  content: "\25CF  PARTNER";
+  display: block;
+  color: var(--sig-red);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+:root[data-skin="signal"] .subtitles-word {
+  animation: signal-flick 0.3s steps(1) var(--word-delay) backwards;
+}
+
+:root[data-skin="signal"] .toast {
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  animation: signal-print 0.7s steps(7) backwards;
+}
+
+:root[data-skin="signal"] :is(.toast-heading, .card-title) {
+  font: var(--sig-matrix);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="signal"] .toast-source {
+  padding-left: 12px;
+  border-left: 1px dashed;
+}
+
+:root[data-skin="signal"] .card {
+  border-radius: 4px;
+  animation: signal-print 0.6s steps(6) backwards;
+}
+
+/* The hairline is drawn inset, so the whole bar stays a drag handle. */
+:root[data-skin="signal"] .card-bar {
+  padding: 0 10px 0 12px;
+  background: linear-gradient(var(--sig-ink) 0 0) 50% 100% / calc(100% - 24px)
+    1px no-repeat;
+}
+
+:root[data-skin="signal"] .card-text {
+  padding: 12px 12px 20px;
+  font-size: 14px;
+}
+
+:root[data-skin="signal"] .settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:root[data-skin="signal"] .settings-heading::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dotted;
+}
+
+/* Pointer. The dot sits on the arrow's tip, which the flips move to another corner. */
+:root[data-skin="signal"] .pointer-arrow {
+  fill: #fff;
+  stroke: var(--sig-black);
+  stroke-width: 2.5;
+  filter: none;
+}
+
+:root[data-skin="signal"] .pointer-body::before {
+  position: absolute;
+  inset: -3px auto auto -3px;
+  box-shadow: 0 0 0 3px #ff3b304d;
+}
+
+:root[data-skin="signal"] .flip-x::before {
+  right: -3px;
+  left: auto;
+}
+
+:root[data-skin="signal"] .flip-y::before {
+  top: auto;
+  bottom: -3px;
+}
+
+:root[data-skin="signal"] .pointer-on .pointer-label {
+  animation: signal-wipe 0.3s steps(6) backwards;
+}
+
+@keyframes signal-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@keyframes signal-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+/* Off, on, dim, on: a segment catching as it lights. */
+@keyframes signal-flick {
+  from {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes signal-pulse {
+  from {
+    opacity: 0.25;
+    scale: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="signal"] :is(.avatar-art, .subtitles-box, .subtitles-word),
+  :root[data-skin="signal"] :is(.toast, .card, .pointer-label),
+  :root[data-skin="signal"] .avatar::after,
+  :root[data-skin="signal"] .pointer-body::before {
+    animation: none !important;
+  }
+}

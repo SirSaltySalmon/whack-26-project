@@ -28,6 +28,7 @@ from brain.events import (
     Tick,
     VoicePreviewRequested,
 )
+from brain.latency import Origin
 
 # Names the observer's tracker publishes. They describe any game, so this stays game-agnostic.
 _DANGER_RISING = frozenset({"danger_started", "danger_high"})
@@ -68,6 +69,8 @@ class ReactToEvent:
 
     name: str
     data: dict[str, Any] = field(default_factory=dict)
+    # Where it was first seen, for the frame-to-voice latency log. Not part of what was decided.
+    origin: Origin | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ class PlayBark:
     data: dict[str, Any]  # Passed on, in case there's no bark and it falls back
     # When the event happened, for the event-to-bark latency log. Not part of what was decided.
     ts: float | None = field(default=None, compare=False)
+    origin: Origin | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -226,9 +230,10 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 return []
             state.last_bark_at = event.ts
             kind = state.bark_events.get(event.name)
+            origin = Origin.of(event)
             if kind is not None:
-                return [PlayBark(kind, event.name, event.data, ts=event.ts)]
-            return [ReactToEvent(event.name, event.data)]
+                return [PlayBark(kind, event.name, event.data, ts=event.ts, origin=origin)]
+            return [ReactToEvent(event.name, event.data, origin=origin)]
         case Tick():
             if state.paused:
                 return []

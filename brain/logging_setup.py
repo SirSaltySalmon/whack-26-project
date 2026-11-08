@@ -9,7 +9,8 @@ QUIET_TIME = "%H:%M:%S"
 
 # These log a line per request, and the observer sends a request every 0.8 s.
 # google_genai logs "AFC is enabled" on every tool call.
-CHATTY_LIBRARIES = ("httpx", "httpx2", "httpcore", "websockets", "google_genai")
+# RapidOCR logs its model paths every time an OCR engine is built.
+CHATTY_LIBRARIES = ("httpx", "httpx2", "httpcore", "websockets", "google_genai", "RapidOCR")
 
 
 def configure_logging(verbose: bool = False) -> None:

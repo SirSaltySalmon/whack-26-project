@@ -174,6 +174,7 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
         "voice_id": "v2",
         "voice_style": "classic",
         "mic_enabled": True,
+        "memory_search": "semantic",
         "paused": False,
         "vision_enabled": True,
     }

@@ -1,0 +1,298 @@
+/* Broadcast: the partner is your caster. Slanted navy panels, one orange accent, italic caps and
+   hard wipes. Slants are clip-paths with fixed px runs, so nothing paints outside its own box. */
+
+:root[data-skin="broadcast"] {
+  --navy: #0d1330;
+  --orange: #ff5a1f;
+  --surface: var(--navy);
+  --surface-raised: #18215a;
+  --text: #fff;
+  --text-muted: #b4bde6;
+  --accent: var(--orange);
+  --talking: var(--orange);
+  --bc-font: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --danger-font: var(--bc-font);
+  --bc-shadow: 4px 4px 0 rgba(4, 7, 22, 0.6);
+}
+
+/* Condensed type reads small, so the base size steps up to match a 14 px regular face. */
+:root[data-skin="broadcast"] body {
+  font: italic 600 15px/1.35 var(--bc-font);
+}
+
+/* Caster cam. At z -1 inside the avatar's stacking context, so the picture and the controls
+   always paint on top of it. */
+:root[data-skin="broadcast"] .avatar::before,
+:root[data-skin="broadcast"] .avatar::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+:root[data-skin="broadcast"] .avatar::before {
+  inset: 0;
+  background:
+    repeating-linear-gradient(-60deg, #ffffff0d 0 3px, #0000 3px 9px),
+    linear-gradient(#1e2c74, var(--navy));
+  clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+}
+
+:root[data-skin="broadcast"] .avatar::after {
+  inset: auto auto 0 0;
+  width: 90%;
+  height: 8px;
+  background: var(--orange);
+  transform-origin: 0 50%;
+}
+
+:root[data-skin="broadcast"] .avatar[data-state="talking"]::after {
+  animation: bc-bar 0.42s ease-in-out infinite alternate;
+}
+
+/* The mic is hot. */
+:root[data-skin="broadcast"] .avatar[data-state="listening"]::after {
+  background: var(--listening);
+}
+
+/* Stands on the bar rather than being covered by it. */
+:root[data-skin="broadcast"] .avatar-image {
+  height: calc(100% - 8px);
+}
+
+:root[data-skin="broadcast"] .avatar-art {
+  background: radial-gradient(circle at 35% 30%, #2b3c94, var(--navy) 70%);
+  border: 4px solid var(--orange);
+}
+
+:root[data-skin="broadcast"]
+  :is(.avatar-controls, .avatar-grip, .resize-corner) {
+  border-color: var(--orange);
+  border-radius: 0;
+}
+
+:root[data-skin="broadcast"] :is(.avatar-button, .avatar-wiki) {
+  border-bottom: 2px solid var(--orange);
+  border-radius: 0;
+  text-transform: uppercase;
+}
+
+/* Every slanted plate. One run for every end, so they all share an angle. */
+:root[data-skin="broadcast"]
+  :is(.subtitles-name, .option, .pointer-label, .minimized-tab, .chat-pill) {
+  padding: 3px 14px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+}
+
+/* An orange slab, then navy, at the same slant as the ends. */
+:root[data-skin="broadcast"] :is(.pointer-label, .minimized-tab, .chat-pill) {
+  padding: 2px 14px 2px 24px;
+  background: linear-gradient(105deg, var(--orange) 0 14px, var(--navy) 14px);
+  color: #fff;
+  font-weight: 800;
+}
+
+/* Lower third. The outer box only positions and fades; the white bar is the text line, so the
+   name plate can sit above it inside the same masked rectangle. */
+:root[data-skin="broadcast"] .subtitles {
+  padding: 0;
+  background: none;
+  font-size: 22px;
+  text-align: left;
+}
+
+:root[data-skin="broadcast"] .subtitles-box {
+  animation: bc-wipe 0.45s var(--snap) backwards;
+}
+
+:root[data-skin="broadcast"] .subtitles-name {
+  display: inline-block;
+  margin-left: 18px;
+  padding: 1px 14px 0;
+  background: var(--orange);
+  color: var(--navy);
+  font: italic 800 13px/1.5 var(--bc-font);
+}
+
+/* The navy base edge keeps the white bar distinct against a bright sky. */
+:root[data-skin="broadcast"] .subtitles-text {
+  position: relative;
+  display: block;
+  padding: 7px 34px 7px 40px;
+  border-bottom: 4px solid var(--navy);
+  background: #fff;
+  color: var(--navy);
+  clip-path: polygon(16px 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+}
+
+:root[data-skin="broadcast"] .subtitles-text::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 28px;
+  background: var(--orange);
+  clip-path: polygon(16px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+:root[data-skin="broadcast"] .subtitles-word {
+  animation: bc-word 0.35s var(--snap) var(--word-delay) backwards;
+}
+
+/* Ticker. Skewed whole so the hard shadow slants too, with the text skewed back so the italic
+   isn't doubled. */
+:root[data-skin="broadcast"] .toast {
+  padding: 6px 16px 6px 14px;
+  border-width: 0 0 0 7px;
+  border-radius: 0;
+  box-shadow: var(--bc-shadow);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transform: skewX(-12deg);
+  animation: bc-tick 0.5s var(--snap) backwards;
+}
+
+:root[data-skin="broadcast"] .toast > * {
+  transform: skewX(12deg);
+}
+
+:root[data-skin="broadcast"] :is(.toast-heading, .settings-heading) {
+  color: var(--orange);
+  font-weight: 800;
+}
+
+:root[data-skin="broadcast"] .toast-source {
+  color: #9fb0ff;
+  font-size: 12px;
+}
+
+/* Stat panels. */
+:root[data-skin="broadcast"] .card {
+  border: 0;
+  border-top: 5px solid var(--orange);
+  border-radius: 0;
+  background: linear-gradient(#16205a, var(--navy) 64px);
+  box-shadow: var(--bc-shadow);
+  animation: bc-slide 0.55s var(--snap) backwards;
+}
+
+:root[data-skin="broadcast"] .card-bar {
+  padding: 0 6px 0 14px;
+  background: none;
+}
+
+:root[data-skin="broadcast"] .card-title {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+:root[data-skin="broadcast"] .card-buttons button {
+  color: var(--orange);
+  font: italic 800 26px/1 var(--bc-font);
+}
+
+:root[data-skin="broadcast"] .card-buttons button.active,
+:root[data-skin="broadcast"] .option-on {
+  background: var(--orange);
+  color: var(--navy);
+  font-weight: 800;
+}
+
+:root[data-skin="broadcast"] .settings-heading {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="broadcast"] .option:not(.option-on):hover:not(:disabled) {
+  background: rgba(255, 90, 31, 0.3);
+}
+
+:root[data-skin="broadcast"] .chat-pill {
+  padding: 0 8px 0 20px;
+  font-size: 13px;
+  letter-spacing: 0;
+  /* Caps wouldn't fit the pill's fixed width. */
+  text-transform: none;
+}
+
+:root[data-skin="broadcast"] .chat-box {
+  border-left: 6px solid var(--orange);
+  border-radius: 0;
+  box-shadow: var(--bc-shadow);
+}
+
+/* The path moves inside the svg, so the flips on the svg turn the nudge toward the tip for free.
+   Visible overflow keeps the tip from being clipped as it moves. */
+:root[data-skin="broadcast"] .pointer-arrow {
+  overflow: visible;
+  fill: var(--orange);
+  stroke: var(--navy);
+  stroke-width: 2.5;
+  filter: drop-shadow(2px 2px 0 rgba(4, 7, 22, 0.5));
+}
+
+:root[data-skin="broadcast"] .pointer-on .pointer-arrow path {
+  animation: bc-nudge 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes bc-bar {
+  from {
+    opacity: 0.55;
+    transform: scaleX(0.6);
+  }
+}
+
+@keyframes bc-wipe {
+  from {
+    clip-path: polygon(0 0, 0 0, -24px 100%, -24px 100%);
+  }
+  to {
+    clip-path: polygon(0 0, calc(100% + 24px) 0, 100% 100%, -24px 100%);
+  }
+}
+
+@keyframes bc-word {
+  from {
+    opacity: 0;
+    translate: -14px 0;
+  }
+}
+
+/* Explicit ends, because a shape doesn't interpolate to none. The -8px leaves room for the shadow. */
+@keyframes bc-tick {
+  from {
+    clip-path: inset(-8px 100% -8px -8px);
+  }
+  to {
+    clip-path: inset(-8px);
+  }
+}
+
+@keyframes bc-slide {
+  from {
+    opacity: 0;
+    translate: 48px 0;
+  }
+}
+
+@keyframes bc-nudge {
+  to {
+    translate: -4px -4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="broadcast"]
+    :is(.subtitles-box, .toast, .card, .pointer-arrow path),
+  :root[data-skin="broadcast"] .avatar::after {
+    animation: none !important;
+  }
+}

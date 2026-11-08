@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event
+from brain.latency import Origin
 from brain.llm.base import Detail, SchemaT, ToolCall, ToolDeclaration, ToolStep
 from brain.memory.models import Fact, RememberResult, Source
 from brain.perception.coords import CropRegion
@@ -34,14 +35,18 @@ class FakeVoice:
         self.live = dict(live or {})
         self.said: list[str] = []
         self.played: list[Bark] = []
+        # What each accepted or refused line reacted to, in order, for the latency tests.
+        self.origins: list[Origin | None] = []
         self.voice_id: str | None = None
 
-    async def say(self, text: str) -> bool:
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
         self.said.append(text)
+        self.origins.append(origin)
         return self.accepts
 
-    async def play(self, bark: Bark) -> bool:
+    async def play(self, bark: Bark, *, origin: Origin | None = None) -> bool:
         self.played.append(bark)
+        self.origins.append(origin)
         return self.accepts
 
     async def set_voice(self, voice_id: str | None) -> None:

@@ -87,3 +87,15 @@ class GameProfile:
     game: str
     brief: str = ""
     data: dict[str, Any] = field(default_factory=dict)
+
+
+RecallMode = Literal["keyword", "hybrid", "semantic"]
+
+
+@dataclass(frozen=True)
+class Hit:
+    """Something recall found. `key` names the fact or note, so the same one found by keywords
+    and by meaning counts once."""
+
+    key: tuple[Literal["fact", "note"], int]
+    text: str

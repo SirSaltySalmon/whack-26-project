@@ -19,7 +19,7 @@ from brain.tests.fakes import (
 )
 
 # Fits both reply shapes, because extra fields are ignored when a reply is validated.
-SEEN = {"answer": "A red door.", "sure": True, "found": False, "label": "", "box_2d": []}
+SEEN = {"answer": "A red door.", "sure": True, "found": False, "label": "", "box_px": []}
 LOOK = {"question": "what's that?", "area": "whole"}
 POINT = {"target": "the door"}
 BOTH_VISION_TOOLS = [("look_closer", LOOK), ("point_at", POINT)]

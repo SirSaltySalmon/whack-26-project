@@ -1,0 +1,298 @@
+/* The island skin: the partner as part of the OS. Tinted glass with a rim of light, one black pill
+   for speech, and springs for every entrance. No backdrop-filter: the window can't see the game. */
+
+:root[data-skin="island"] {
+  --surface: rgba(18, 22, 40, 0.66);
+  --surface-raised: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.2);
+  --text: #f5f7ff;
+  --text-muted: #bcc2de;
+  --accent: #aab6ff;
+  --idle: #8d9bf2;
+  --listening: #8ee8c6;
+  --talking: #aab6ff;
+  --reacting: #ffc97a;
+  --bar-height: 44px; /* Room for the grabber above the title. */
+  --danger-font: Onest, "Segoe UI", system-ui, sans-serif;
+  /* A fixed height, so a tall card gets the same sheen as a pill instead of a grey wash. */
+  --isl-sheen: linear-gradient(#ffffff21, #fff0 26px);
+  --isl-rim: inset 0 0 0 1px #fff3, inset 0 1px 1px #ffffff4d;
+  /* Offset plus blur stays inside the brain's 8 px mask padding. */
+  --isl-lift: 0 2px 6px rgba(0, 0, 12, 0.42);
+  --isl-glow: #0000;
+  /* The pointer bobs toward its target; the flips change which side that is. */
+  --isl-x: -2.5px;
+  --isl-y: -2.5px;
+}
+
+:root[data-skin="island"] body {
+  font-family: Onest, "Segoe UI", system-ui, sans-serif;
+}
+
+/* Character. The plate's state ring is inset, so nothing leaves the frame the player sized. */
+:root[data-skin="island"] .avatar[data-state="listening"] {
+  --isl-glow: var(--listening);
+}
+:root[data-skin="island"] .avatar[data-state="talking"] {
+  --isl-glow: var(--talking);
+}
+:root[data-skin="island"] .avatar[data-state="reacting"] {
+  --isl-glow: var(--reacting);
+}
+:root[data-skin="island"] .avatar::before {
+  --isl-ring: inset 0 0 0 2px color-mix(in oklab, var(--isl-glow) 55%, #0000);
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #fff3, #fff1 45%, #8ca0ff1f), #12162857;
+  box-shadow: var(--isl-rim), var(--isl-ring), var(--isl-lift);
+  transition: box-shadow 0.3s;
+}
+
+/* Inset more at the top, where talking and reacting stretch the picture upward. */
+:root[data-skin="island"] .avatar-image {
+  inset: 14px 8px 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 22px);
+  filter: drop-shadow(0 0 5px color-mix(in oklab, var(--isl-glow) 80%, #0000))
+    drop-shadow(0 2px 3px rgba(0, 0, 16, 0.45));
+  transition: filter 0.3s;
+}
+
+/* Image layers only, so the base rules still colour the orb by state. */
+:root[data-skin="island"] .avatar-art {
+  --isl-halo: 0 0 10px color-mix(in oklab, var(--isl-glow) 50%, #0000);
+  outline-width: 1.5px;
+  outline-offset: 5px;
+  background-image:
+    radial-gradient(ellipse 34% 20% at 40% 22%, #ffffffd0, #fff0 70%),
+    radial-gradient(circle at 50% 38%, #ffffff70, #fff0 50%, #0a0e4a80);
+  box-shadow: var(--isl-rim), var(--isl-halo);
+}
+:root[data-skin="island"] .avatar-controls {
+  border: 1px solid #ffffff57;
+  border-radius: 22px;
+}
+
+/* Controls and small pills share one glass capsule. */
+:root[data-skin="island"]
+  :is(.avatar-grip, .avatar-button, .avatar-wiki, .minimized-tab, .chat-box),
+:root[data-skin="island"] :is(.chat-pill, .pointer-label) {
+  border: 0;
+  border-radius: 99px;
+  background: var(--isl-sheen), var(--surface);
+  box-shadow: var(--isl-rim), var(--isl-lift);
+  font-weight: 600;
+}
+:root[data-skin="island"] .avatar-grip::before {
+  content: "";
+  position: absolute;
+  inset: 4.5px 12px;
+  border-radius: 99px;
+  background: #ffffffb8;
+}
+
+/* A quarter circle, concentric with the rounded corner it sits in. */
+:root[data-skin="island"] .resize-corner {
+  right: 4px;
+  bottom: 4px;
+  border-width: 2.5px;
+  border-bottom-right-radius: 16px;
+}
+
+/* Subtitles. The box is the visual, so the outer element keeps only its place and its fade. */
+:root[data-skin="island"] .subtitles {
+  padding: 0;
+  background: none;
+  font-size: 22px;
+  font-weight: 500;
+}
+:root[data-skin="island"] .subtitles-box {
+  --isl-rim: inset 0 0 0 1px #ffffff24;
+  padding: 10px 26px;
+  border-radius: 26px;
+  background: #000;
+  box-shadow: var(--isl-rim), var(--isl-lift);
+  animation: isl-open 0.75s var(--spring) backwards;
+}
+:root[data-skin="island"] .subtitles-word {
+  animation: isl-word 0.45s ease-out var(--word-delay) backwards;
+}
+
+/* Toasts */
+:root[data-skin="island"] .toast {
+  --isl-from: 0 -20px;
+  --isl-scale: 0.6;
+  align-items: center;
+  padding: 6px 7px 6px 14px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--isl-sheen), var(--surface);
+  box-shadow: var(--isl-rim), var(--isl-lift);
+  font-size: 14px;
+  animation: isl-in 0.8s var(--spring) backwards;
+}
+:root[data-skin="island"] .toast-heading {
+  color: var(--text);
+  font-weight: 700;
+}
+:root[data-skin="island"] .toast-heading::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+:root[data-skin="island"] .toast-source {
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+  color: color-mix(in oklab, var(--accent) 65%, white);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Cards and settings: a glass sheet, denser than a pill because it holds reading. */
+:root[data-skin="island"] .card {
+  --isl-from: 0 18px;
+  --isl-scale: 0.96;
+  border: 0;
+  border-radius: 22px;
+  background: var(--isl-sheen), #121628c2;
+  box-shadow: var(--isl-rim), var(--isl-lift);
+  animation: isl-in 0.65s var(--spring) backwards;
+}
+:root[data-skin="island"] .card-bar {
+  position: relative;
+  padding: 8px 9px 0 18px;
+  background: none;
+}
+:root[data-skin="island"] .card-bar::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 5px;
+  border-radius: 99px;
+  background: #ffffff57;
+}
+:root[data-skin="island"] .card-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* A background image, so the base hover and active colours still show beneath the fill. */
+:root[data-skin="island"] .card-buttons button {
+  border-radius: 50%;
+  background-image: linear-gradient(#ffffff1f, #ffffff1f);
+  font-size: 15px;
+}
+:root[data-skin="island"] .card-text {
+  padding: 4px 18px 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+:root[data-skin="island"] .settings {
+  padding: 0 18px 18px;
+}
+
+/* The base rules colour options from the tokens; only the shape changes. */
+:root[data-skin="island"] .option {
+  padding: 4px 13px;
+  border-radius: 99px;
+  font-weight: 500;
+}
+
+/* Chat: lighter type than the other pills, since it holds what the player writes. */
+:root[data-skin="island"] :is(.chat-box, .chat-pill) {
+  padding: 0 14px;
+  font-weight: 500;
+}
+:root[data-skin="island"] .chat-box:focus-within,
+:root[data-skin="island"] .chat-pill:hover:not(:disabled) {
+  --isl-rim: inset 0 0 0 1.5px var(--accent);
+}
+
+/* Pointer */
+:root[data-skin="island"] .pointer-body.flip-x {
+  --isl-x: 2.5px;
+  --isl-sx: -1;
+}
+:root[data-skin="island"] .pointer-body.flip-y {
+  --isl-y: 2.5px;
+  --isl-sy: -1;
+}
+:root[data-skin="island"] .pointer-on {
+  animation: isl-bob 1.6s ease-in-out infinite;
+}
+
+/* Visible overflow, or the viewBox would cut the white rim off the tip. */
+:root[data-skin="island"] .pointer-arrow {
+  overflow: visible;
+  fill: #8494ff;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px #aab6ffd9) drop-shadow(0 1px 1px #0006);
+}
+
+/* Gloss: CSS can't put a gradient in an SVG fill, so a layer after the arrow lies over it. */
+:root[data-skin="island"] .pointer-body::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #ffffffc0, #fff0 55%);
+  clip-path: polygon(4px 4px, 29px 13px, 17.5px 17.5px, 13px 29px);
+  scale: var(--isl-sx, 1) var(--isl-sy, 1);
+}
+:root[data-skin="island"] .pointer-body.flip-x::after {
+  right: 0;
+  left: auto;
+}
+
+/* Ends wider than the box, so the resting shadow isn't clipped as it lands. */
+@keyframes isl-open {
+  from {
+    clip-path: inset(0 calc(50% - 26px) round 26px);
+    scale: 0.94;
+  }
+  to {
+    clip-path: inset(-8px round 34px);
+  }
+}
+
+@keyframes isl-word {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    translate: 0 6px;
+  }
+}
+
+@keyframes isl-in {
+  from {
+    opacity: 0;
+    translate: var(--isl-from);
+    scale: var(--isl-scale);
+  }
+}
+
+@keyframes isl-bob {
+  50% {
+    translate: var(--isl-x) var(--isl-y);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="island"] :is(.subtitles-box, .toast, .card, .pointer-on) {
+    animation: none !important;
+  }
+}

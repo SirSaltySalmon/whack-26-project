@@ -103,6 +103,7 @@ def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
         "voice_id": "voice-2",
         "mic_enabled": True,
         "voice_style": "expressive",
+        "memory_search": "keyword",
         "paused": False,
         "vision_enabled": True,
     }
@@ -117,6 +118,7 @@ def test_settings_state_after_an_update_still_offers_them_and_shows_the_change()
         "voice_id": "voice-2",
         "mic_enabled": True,
         "voice_style": "classic",
+        "memory_search": "hybrid",
         "paused": True,
         "vision_enabled": False,
     }
@@ -249,3 +251,27 @@ def test_page_content_reaches_the_bus() -> None:
         truncated=False,
         ts=ANY,
     )
+
+
+class ClosingSocket:
+    """Closed by the overlay just as the brain sends, as happened in a live run."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def send_text(self, _text: str) -> None:
+        raise self.error
+
+
+async def test_a_send_racing_the_overlay_closing_is_dropped_not_raised() -> None:
+    from fastapi import WebSocketDisconnect
+
+    from shared.protocol.messages import DebugRegions
+
+    for error in (WebSocketDisconnect(code=1006), RuntimeError("close message has been sent")):
+        link = OverlayLink(EventBus())
+        link.attach(ClosingSocket(error))  # type: ignore[arg-type]
+        await link.send(DebugRegions(regions=[]))
+        assert not link.connected
+        # And the next send is simply dropped, like any send with no overlay.
+        await link.send(DebugRegions(regions=[]))

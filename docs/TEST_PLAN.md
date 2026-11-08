@@ -32,7 +32,7 @@ Checked on 2026-11-07, with no keys or game:
 - **Questions are spoken now.** The popup and its "Not now" button are gone (decision of 2026-11-08). An unanswered question is dropped, and it is not asked again.
 - **A skipped reaction still uses up its budget.** `decide` runs before the speech slot is checked, so a reaction skipped because the partner is busy still starts the cooldown, and a skipped question still starts the question gap. It's harmless at these values, but it could look like a missed reaction when tuning.
 - **The wiki opens behind a cookie dialog.** The window's session is in memory, so wiki.gg should ask again on every launch. Dismiss it before recording a demo.
-- **`Latency: event to bark` leaves out the time spent noticing.** It starts when the event is published, not when its frame was captured, so observer events look seconds faster than they are. It also stops at queuing, not playback. [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) fixes this.
+- **`Latency: event to bark` leaves out the time spent noticing.** It starts when the event is published, not when its frame was captured, so observer events look seconds faster than they are. It also stops at queuing, not playback. **Fixed by [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency):** `frame to bark` and `frame to first audio` now count from the frame. The old line stays for comparison.
 
 ## 1. Automated tests
 
@@ -113,6 +113,7 @@ Use headphones.
 - [ ] Interrupting mid-sentence stops the audio and ends the subtitle
 - [ ] Interrupting a plain reply drops it. Talking during `look_closer` doesn't: the answer comes once you stop, and a card already shown stays up
 - [ ] `End of turn to first audio` is under 1 s for a plain reply. If not, stream by sentence and compare TTS models
+- [ ] A reaction the talker says logs `Latency: frame to first audio`, and a bark logs both `frame to bark` and `frame to first audio`. Talking over a reaction before it plays logs neither, and the Control Center's Latency tab shows the same numbers as the log
 - [ ] Switching voice in settings changes the next line, and survives a restart (needs `VOICE_OPTIONS`)
 - [ ] A quiet stretch speaks a question. Answering out loud or in the text box shows a memory toast, and it doesn't ask during danger
 
@@ -128,6 +129,11 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] With hints off, about 10 reactions and questions stay free of tips and of anything not yet found. This depends on the model following its prompt, so read them
 - [ ] Pointer accuracy on HUD and on moving world targets, with `pointer_ttl_ms` tuned
 - [ ] Terraria's pixel font reads well in an enlarged `look_closer` crop
+- [ ] Learning: with `GAME_TITLE` set and no profile, the log shows `Learning where the HUD is`, then `Reader health (...) kept` or `rejected` with a reason, and a "Learned where your ..." toast. It makes at most 6 Gemini calls
+- [ ] With `--debug-regions`, boxes sit on the HUD elements, turn grey under a card dragged over them, and show values that follow the game
+- [ ] Taking damage below 25% logs `Reader health: health_low` and the reaction comes within about a second. The observer doesn't raise a second `health_low`
+- [ ] Resizing the game window logs `Readers paused` and a relearn follows
+- [ ] `scripts/export_profile.py` saves a fixture, and `PROFILE_FIXTURE` loads it on a fresh database with a `SEEDED profile` warning
 - [ ] A 30-minute session: no drift in replies, cost near the estimate, and notes appear in the vault
 - [ ] Record a few minutes with `--record`. The log's MB/s at the end is near the 1-2 MB/s estimate, and `dropped_frames` in `manifest.json` stays at 0
 - [ ] Replay that session twice with `--exit-when-done --write-messages`. `compare_replay.py` finds no difference between the two runs, or between either run and the recording's `messages.jsonl`
@@ -153,6 +159,7 @@ The numbers for the pitch, measured with [WP11](REMAINING_WORK.md#wp11-proof-ben
 
 ## Known gaps these tests won't close
 
-- **Must-have 3:** learned regions and compiled readers are on `origin/wp4-wp5-readers`, not on `main`. Until that merges, confirmed events stay about 2.4 s old.
-- **Barks** are pre-generated, and the 300 ms budget is not measured. `Latency: event to bark` also starts when the event is published, which [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) fixes.
+- **Must-have 3:** learned regions and compiled readers are on `main`, from an early snapshot; the live-tested version is on `claude/night`. Until a profile is learned, confirmed events stay about 2.4 s old.
+- **Barks** are pre-generated, and the 300 ms budget is not measured yet. [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) now logs it from the frame, so a live run can.
+- **Frame to first audio isn't logged in subtitles-only mode,** including replays, because there's no audio to time. `frame to bark` is still logged there, when it's queued.
 - **The game brief** is written on `main`. It still needs a check on a few real games.

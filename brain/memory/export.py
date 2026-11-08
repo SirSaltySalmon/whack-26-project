@@ -8,7 +8,6 @@ import re
 import sqlite3
 import tempfile
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -148,42 +147,37 @@ def _write_if_changed(path: Path, content: str, root: Path) -> bool:
     return True
 
 
-@dataclass(frozen=True)
-class _SessionPage:
-    session: Session
-    notes: list[Note]
-    moments: list[LoggedEvent]
-
-
-def _load_pages(conn: sqlite3.Connection, game: str) -> list[_SessionPage]:
-    pages: list[_SessionPage] = []
+def _sessions(conn: sqlite3.Connection, game: str) -> list[Session]:
     rows = conn.execute(
         "SELECT id, game, started_at, ended_at FROM sessions WHERE game = ? ORDER BY id DESC",
         (game,),
     ).fetchall()
-    for row in rows:
-        notes = conn.execute(
-            "SELECT id, session_id, kind, body, from_ts, to_ts, created_at FROM session_notes"
-            " WHERE session_id = ? ORDER BY created_at, id",
-            (row["id"],),
-        ).fetchall()
-        events = conn.execute(
-            "SELECT id, session_id, ts, name FROM events"
-            " WHERE session_id = ? AND name NOT LIKE 'turn.%' ORDER BY ts, id",
-            (row["id"],),
-        ).fetchall()
-        pages.append(
-            _SessionPage(
-                Session(row["id"], row["game"], row["started_at"], row["ended_at"]),
-                [Note(**dict(note)) for note in notes],
-                [LoggedEvent(**dict(event)) for event in events],
-            )
-        )
-    return pages
+    return [Session(row["id"], row["game"], row["started_at"], row["ended_at"]) for row in rows]
 
 
-def export_vault(conn: sqlite3.Connection, vault_dir: Path, game: str) -> list[Path]:
+def _load_page(conn: sqlite3.Connection, session_id: int) -> tuple[list[Note], list[LoggedEvent]]:
+    notes = conn.execute(
+        "SELECT id, session_id, kind, body, from_ts, to_ts, created_at FROM session_notes"
+        " WHERE session_id = ? ORDER BY created_at, id",
+        (session_id,),
+    ).fetchall()
+    events = conn.execute(
+        "SELECT id, session_id, ts, name FROM events"
+        " WHERE session_id = ? AND name NOT LIKE 'turn.%' ORDER BY ts, id",
+        (session_id,),
+    ).fetchall()
+    return [Note(**dict(note)) for note in notes], [LoggedEvent(**dict(event)) for event in events]
+
+
+def export_vault(
+    conn: sqlite3.Connection, vault_dir: Path, game: str, live_session: int | None = None
+) -> list[Path]:
     """Writes one game's notes and returns the files that changed. It never deletes anything.
+
+    With `live_session`, only that session's page is rebuilt, and other pages are written only
+    when missing, because notes and moments are only ever added to the session being played.
+    Rebuilding every page took seconds once a few hundred sessions had built up, and it holds up
+    the memory worker that the voice path waits on. Delete a page to have it rebuilt.
 
     Blocking file and database work, so call it through `Database.run`. Raises OSError when the
     vault can't be written, and the caller decides how to report that.
@@ -192,9 +186,10 @@ def export_vault(conn: sqlite3.Connection, vault_dir: Path, game: str) -> list[P
     folder = safe_name(game)
     # Returned paths stay under vault_dir as the caller wrote it. Only the safety check resolves.
     base = vault_dir / folder
+    sessions_dir = base / "Sessions"
 
     profile = conn.execute("SELECT brief FROM profile WHERE game = ?", (game,)).fetchone()
-    pages = _load_pages(conn, game)
+    sessions = _sessions(conn, game)
     facts = [
         fact_from_row(row)
         for row in conn.execute(
@@ -205,23 +200,30 @@ def export_vault(conn: sqlite3.Connection, vault_dir: Path, game: str) -> list[P
     closed = [fact for fact in reversed(facts) if fact.valid_to is not None]
 
     brief = profile["brief"] if profile else ""
-    sessions = [page.session for page in pages]
     documents = {
         base / "Index.md": render_index(game, folder, brief, sessions),
         base / "Facts.md": render_facts(current, closed),
     }
-    for page in pages:
-        path = base / "Sessions" / f"{session_stem(page.session)}.md"
-        documents[path] = render_session(game, folder, page.session, page.notes, page.moments)
+    # One directory listing rather than a check per session, because there can be hundreds.
+    incremental = live_session is not None and sessions_dir.is_dir()
+    existing = set(os.listdir(sessions_dir)) if incremental else set()
+    for session in sessions:
+        name = f"{session_stem(session)}.md"
+        if session.id != live_session and name in existing:
+            continue
+        notes, moments = _load_page(conn, session.id)
+        documents[sessions_dir / name] = render_session(game, folder, session, notes, moments)
 
     written = [path for path, text in documents.items() if _write_if_changed(path, text, root)]
     log.info("Vault export for %r: %d of %d files changed", game, len(written), len(documents))
     return written
 
 
-async def export_quietly(database: Database, vault_dir: Path, game: str) -> None:
+async def export_quietly(
+    database: Database, vault_dir: Path, game: str, live_session: int | None = None
+) -> None:
     """Logs a failure instead of raising, because the vault is only a view of SQLite."""
     try:
-        await database.run(lambda conn: export_vault(conn, vault_dir, game))
+        await database.run(lambda conn: export_vault(conn, vault_dir, game, live_session))
     except OSError:
         log.exception("Vault export to %s failed", vault_dir)
