@@ -60,7 +60,8 @@ class CaptureLoop:
                 rects = self._overlay.rects
                 frame = await loop.run_in_executor(self._executor, self._capture_safely, rects)
                 if frame is not None:
-                    self._buffer.push(frame)
+                    # _capture already copied it on the capture thread.
+                    self._buffer.push_owned(frame)
                 elapsed = time.monotonic() - started
                 await asyncio.sleep(max(0.0, self._interval - elapsed))
         finally:
@@ -86,7 +87,7 @@ class CaptureLoop:
         started = time.monotonic()
         if self._window is None:
             image = self._source.grab()
-            return None if image is None else Frame(started, image, rects)
+            return None if image is None else Frame(started, image.copy(), rects)
 
         # Checked on both sides of the grab, so an alt-tab during it can't leak another app.
         region = self._window.visible_region()
@@ -98,4 +99,5 @@ class CaptureLoop:
         cropped = crop_to_region(image, region)
         if cropped is None:
             return None
-        return Frame(started, cropped[0], rects, cropped[1])
+        # Copied here, on the capture thread: the crop is a view of a buffer the source may reuse.
+        return Frame(started, cropped[0].copy(), rects, cropped[1])

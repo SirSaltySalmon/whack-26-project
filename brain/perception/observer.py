@@ -11,6 +11,7 @@ from collections.abc import Callable, Collection
 from typing import Protocol
 
 import cv2
+import numpy as np
 
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import EventBus, GameEvent
@@ -25,6 +26,7 @@ from brain.perception.observation import (
     sightings_prompt,
 )
 from brain.perception.sightings import Send, crop_of, noticed, show
+from brain.perception.still import StillFrames, thumbnail
 from brain.perception.tracker import ELEVATED, ObservationTracker
 
 log = logging.getLogger(__name__)
@@ -47,19 +49,32 @@ class OverlayScale(Protocol):
     def display_scale(self) -> float: ...
 
 
-def prepare_sized(
+def _masked_and_shrunk(
     frame: Frame, display_scale: float, padding_px: int, max_edge_px: int
-) -> tuple[bytes, int, int]:
-    """Hides the overlay so the model can't read its own subtitles, then shrinks and encodes.
-
-    Also returns the image's width and height as sent, which the model's pixel boxes refer to.
-    """
+) -> np.ndarray:
+    """Hides the overlay so the model can't read its own subtitles, then shrinks."""
     masked = mask_overlay(frame.image, frame.overlay_rects, display_scale, padding_px, frame.region)
     height, width = masked.shape[:2]
     scale = min(1.0, max_edge_px / max(height, width))
     if scale < 1.0:
         masked = cv2.resize(masked, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    return encode_jpeg(masked), masked.shape[1], masked.shape[0]
+    return masked
+
+
+def prepare_sized(
+    frame: Frame, display_scale: float, padding_px: int, max_edge_px: int
+) -> tuple[bytes, int, int]:
+    """Masks, shrinks and encodes. Also returns the image's width and height as sent, which the
+    model's pixel boxes refer to."""
+    image = _masked_and_shrunk(frame, display_scale, padding_px, max_edge_px)
+    return encode_jpeg(image), image.shape[1], image.shape[0]
+
+
+def _prepare_with_thumb(
+    frame: Frame, display_scale: float, padding_px: int, max_edge_px: int
+) -> tuple[bytes, int, int, np.ndarray]:
+    image = _masked_and_shrunk(frame, display_scale, padding_px, max_edge_px)
+    return encode_jpeg(image), image.shape[1], image.shape[0], thumbnail(image)
 
 
 def prepare_image(frame: Frame, display_scale: float, padding_px: int, max_edge_px: int) -> bytes:
@@ -85,6 +100,9 @@ class Observer:
         # Set only with --debug-regions: then each report also boxes what it noticed, for the
         # overlay to draw. Off, the prompt and reply stay as short as they were.
         debug_send: Send | None = None,
+        # Skips a frame that looks like the last one sent, at low focus only. None sends every
+        # frame, as tests expect.
+        still: StillFrames | None = None,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
@@ -101,6 +119,8 @@ class Observer:
         self._watching = watching
         self._was_watching = True
         self._debug_send = debug_send
+        self._still = still
+        self.skipped = 0  # Frames not sent because nothing changed, for the log.
         self._tasks: set[asyncio.Task[None]] = set()
         self._last_sent_ts: float | None = None
         self._last_applied_ts: float | None = None
@@ -147,6 +167,8 @@ class Observer:
             log.info("Vision turned %s by the player", "on" if watching else "off")
             if not watching:
                 self._tracker.forget()
+                if self._still is not None:
+                    self._still.forget()
         return watching
 
     def _tick(self, now: float) -> None:
@@ -166,13 +188,15 @@ class Observer:
     async def _observe(self, frame: Frame) -> None:
         started = time.monotonic()
         try:
-            image, width, height = await asyncio.to_thread(
-                prepare_sized,
+            image, width, height, thumb = await asyncio.to_thread(
+                _prepare_with_thumb,
                 frame,
                 self._overlay.display_scale,
                 self._padding_px,
                 self._max_edge_px,
             )
+            if self._is_still(thumb, frame.ts):
+                return
             debugging = self._debug_send is not None
             prompt = sightings_prompt(width, height) if debugging else OBSERVATION_PROMPT
             schema = SightedObservation if debugging else Observation
@@ -201,6 +225,17 @@ class Observer:
             return
         if self._apply(observation, frame.ts) and isinstance(observation, SightedObservation):
             await self._show_sightings(observation, frame, width, height)
+
+    def _is_still(self, thumb: np.ndarray, frame_ts: float) -> bool:
+        """While watching closely, every frame is sent: that's when a change matters most."""
+        if self._still is None or self.focus.level() != "low":
+            return False
+        if not self._still.should_skip(thumb, frame_ts):
+            return False
+        self.skipped += 1
+        self._tracker.still(frame_ts)
+        log.debug("Skipping an unchanged frame (%d so far)", self.skipped)
+        return True
 
     async def _show_sightings(
         self, observation: SightedObservation, frame: Frame, width: int, height: int

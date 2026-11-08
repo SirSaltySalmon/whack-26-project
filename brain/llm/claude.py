@@ -7,12 +7,13 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Any, Literal
 
 import anthropic
+import httpx2  # The SDK's own HTTP library. anthropic is pinned exactly, so this is too.
 
 from brain.llm.base import (
     Detail,
+    Limiter,
     LLMEmptyResponseError,
     LLMUnavailableError,
-    RateLimiter,
     SchemaT,
     ToolDeclaration,
 )
@@ -26,6 +27,19 @@ Effort = Literal["low", "medium", "high"]
 THINKING_HEADROOM_TOKENS = 4000
 # On a policy decline the API reruns the request on a model it picks, inside the same call.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# The SDK drops idle connections after 5 s, but the talker can go a minute between turns, and a
+# new connection pays a TCP and TLS handshake before the first token. The server closing one
+# first is fine: the pool notices and opens another.
+KEEPALIVE_S = 120.0
+
+
+def shared_http_client() -> httpx2.AsyncClient:
+    """One pool for every Claude role, so the observer's steady calls keep it warm for turns."""
+    return anthropic.DefaultAsyncHttpxClient(
+        limits=httpx2.Limits(
+            max_connections=100, max_keepalive_connections=20, keepalive_expiry=KEEPALIVE_S
+        )
+    )
 
 
 # Anthropic's structured output rejects these with a 400. The reply is still validated against
@@ -65,16 +79,20 @@ class ClaudeClient:
         self,
         model: str,
         api_key: str,
-        limiter: RateLimiter,
+        limiter: Limiter,
         effort: Effort = "low",
         timeout_s: float = 10.0,
         think: bool = True,
         fallback: bool = True,
+        http_client: httpx2.AsyncClient | None = None,
     ) -> None:
         self._model = model
         # No retries: a retried frame arrives too late to describe what's on screen now, and a
         # retried deep answer too late for the turn that asked.
-        self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=0, timeout=timeout_s)
+        # The timeout is applied per request, so roles sharing http_client keep their own.
+        self._client = anthropic.AsyncAnthropic(
+            api_key=api_key, max_retries=0, timeout=timeout_s, http_client=http_client
+        )
         self._limiter = limiter
         self._effort = effort
         # Off for the talker: thinking costs time on the voice path.

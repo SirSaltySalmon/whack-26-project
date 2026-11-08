@@ -75,7 +75,8 @@ async def test_the_engine_asks_for_a_relearn_when_hearts_grow_past_the_box() -> 
     for _ in range(int(GROWN_AFTER_S / 0.25) + 2):
         await rig.show(heart_row(13))
     failing = [e for e in rig.published() if isinstance(e, ReadersFailing)]
-    assert failing == [ReadersFailing("Some Game", ("health",), grown=True)]
+    # Compared without `ts`: Windows' coarse clock made two events built moments apart equal.
+    assert [(e.game, e.readers, e.grown) for e in failing] == [("Some Game", ("health",), True)]
     # The reading doesn't change, since its own box is still full: that's why the growth had to be
     # noticed beside the box rather than in the reading.
     assert rig.engine.live_state() == before

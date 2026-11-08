@@ -10,6 +10,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 
 from brain.capture.ring_buffer import RingBuffer
 from brain.config import Settings
@@ -104,7 +105,8 @@ def build_hud(
         learner = GameLearner(
             database,
             game,
-            factory.vision,
+            # Learning runs on its own schedule, so it leaves the player's share of the budget.
+            partial(factory.vision, background=True),
             buffer,
             link,
             bus,

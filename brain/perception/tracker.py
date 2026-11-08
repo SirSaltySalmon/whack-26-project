@@ -56,6 +56,9 @@ class ObservationTracker:
         """Drops everything seen so far. Called when the partner is blinded: none of it holds once
         it looks again, and a fight still going then must be confirmed afresh."""
         self._last_ts: float | None = None
+        # The last frame looked at, reported or found unchanged (see still). Staleness and gaps
+        # go by this, so a still screen the observer skipped isn't mistaken for not seeing.
+        self._seen_ts: float | None = None
         self._previous_ts: float | None = None
         # When each streak began, so a confirmed change can say when it was first seen.
         self._elevated_since = self._high_since = self._calm_since = self._screen_since = 0.0
@@ -82,11 +85,12 @@ class ObservationTracker:
 
     def update(self, observation: Observation, ts: float) -> list[Change]:
         """Takes reports in frame order and returns whatever just became confirmed."""
-        if self._last_ts is not None and ts - self._last_ts > self._max_gap_s:
+        if self._seen_ts is not None and ts - self._seen_ts > self._max_gap_s:
             # Frames this far apart, say after an alt-tab, say nothing about each other.
             self._forget_streaks()
         self._previous_ts = self._last_ts if self._previous is not None else None
         self._last_ts = ts
+        self._seen_ts = max(ts, self._seen_ts or ts)
 
         changes = self._update_danger(observation, ts)
         changes += self._update_screen(observation, ts)
@@ -96,12 +100,18 @@ class ObservationTracker:
         self._previous = observation
         return changes
 
+    def still(self, ts: float) -> None:
+        """A frame looked the same as the last one reported, so what was seen still holds. It
+        doesn't count towards confirming anything: only a real report can do that."""
+        if self._seen_ts is not None:
+            self._seen_ts = max(self._seen_ts, ts)
+
     def live_state(self, now: float) -> dict[str, str]:
         """What the talker may rely on right now. Only confirmed values, and nothing stale.
 
         Most important first, because memory cuts this to a fixed length.
         """
-        if self._last_ts is None or now - self._last_ts > self._stale_after_s:
+        if self._seen_ts is None or now - self._seen_ts > self._stale_after_s:
             return {"screen": "can't see the game right now"}
         state: dict[str, str] = {}
         state["danger"] = self._danger or "none"

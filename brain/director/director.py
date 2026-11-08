@@ -131,11 +131,13 @@ class Director:
 
     def _handle(self, event: Event) -> None:
         if isinstance(event, Tick) and self._slot.busy():
-            # A tick only brings up questions and tips, which a busy slot would skip, and deciding
-            # one would spend its budget on nothing. The next tick tries again.
+            # A busy slot would skip a tick's question or tip, and deciding one would waste budget.
             return
-        for action in decide(event, self._state):
-            self._dispatch(action)
+        try:
+            for action in decide(event, self._state):
+                self._dispatch(action)
+        except Exception:  # One bad event mustn't end the brain, or stop the ticker unseen.
+            log.exception("Director failed to handle %s", type(event).__name__)
 
     def _dispatch(self, action: Action) -> None:
         match action:

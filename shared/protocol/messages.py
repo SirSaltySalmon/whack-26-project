@@ -8,19 +8,14 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
+# Re-exported, so imports from this module keep working after the split.
+from shared.protocol.debug import DebugRegion as DebugRegion
+from shared.protocol.debug import DebugRegions, DebugSightings
+from shared.protocol.debug import DebugSighting as DebugSighting
+from shared.protocol.geometry import ElementRect as ElementRect
+from shared.protocol.geometry import Rect as Rect
+
 PROTOCOL_VERSION = 1
-
-
-class Rect(BaseModel):
-    x: float
-    y: float
-    width: float
-    height: float
-
-
-class ElementRect(BaseModel):
-    element_id: str
-    rect: Rect
 
 
 class Pacing(BaseModel):
@@ -163,47 +158,6 @@ class PageRead(BaseModel):
     request_id: str
 
 
-class DebugRegion(BaseModel):
-    name: str
-    # Overlay window coordinates, like PointerFly.target.
-    rect: Rect
-    status: Literal["ok", "masked", "unreadable"]
-    # What the reader read, such as "72/100" or "62%".
-    display: str | None = None
-
-
-class DebugRegions(BaseModel):
-    """A debug view of where each HUD region was found and what its reader reads.
-
-    Always the full current set, so an empty list clears the view. Send it about twice a second
-    while debugging: the overlay hides the view when messages stop.
-    """
-
-    type: Literal["debug.regions"] = "debug.regions"
-    regions: list[DebugRegion]
-
-
-class DebugSighting(BaseModel):
-    """Something a model looked at or noticed, drawn over the game while debugging."""
-
-    label: str
-    # Overlay window coordinates, like DebugRegion.rect.
-    rect: Rect
-    # noticed: the observer's report. look, point and look_back: what a player-turn tool used.
-    kind: Literal["noticed", "look", "point", "look_back"]
-    ttl_ms: int = Field(gt=0)
-
-
-class DebugSightings(BaseModel):
-    """Adds sightings to the debug view. Each fades on its own once its ttl_ms runs out.
-
-    Sent only with --debug-regions, so the overlay draws whatever arrives.
-    """
-
-    type: Literal["debug.sightings"] = "debug.sightings"
-    sightings: list[DebugSighting]
-
-
 # --- Overlay to brain ---
 class OverlayReady(BaseModel):
     type: Literal["overlay.ready"] = "overlay.ready"
@@ -298,5 +252,6 @@ OverlayMessage = Annotated[
 BrainMessageAdapter: TypeAdapter[BrainMessage] = TypeAdapter(BrainMessage)
 OverlayMessageAdapter: TypeAdapter[OverlayMessage] = TypeAdapter(OverlayMessage)
 
-# The Control Center's messages are in control.py, and Protocol, which lists every direction for
-# the generated TypeScript, is in __init__.py.
+# Rect and ElementRect are in geometry.py and the debug view's messages in debug.py, both
+# re-exported here. The Control Center's messages are in control.py, and Protocol, which lists
+# every direction for the generated TypeScript, is in __init__.py.

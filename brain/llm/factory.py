@@ -1,10 +1,11 @@
 """Builds the client for each role, so changing a model or vendor happens in one place."""
 
+import httpx2
 from google.genai import types
 
 from brain.config import Settings
-from brain.llm.base import LLMUnavailableError, RateLimiter, TextLLM, VisionLLM
-from brain.llm.claude import ClaudeClient
+from brain.llm.base import Limiter, LLMUnavailableError, RateLimiter, TextLLM, VisionLLM
+from brain.llm.claude import ClaudeClient, shared_http_client
 from brain.llm.gemini import GeminiClient
 
 DEFAULT_RPM = 5
@@ -16,31 +17,55 @@ class LLMFactory:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._limiters: dict[str, RateLimiter] = {}
+        # Made on first use and shared by every Claude role. See shared_http_client.
+        self._http: httpx2.AsyncClient | None = None
 
-    def _limiter(self, model: str) -> RateLimiter:
+    def _limiter(self, model: str, background: bool = False) -> Limiter:
+        """`background` is for calls nobody is waiting on: they leave the player a share."""
         if model not in self._limiters:
             rpm = self._settings.rpm_by_model.get(model, DEFAULT_RPM)
             self._limiters[model] = RateLimiter(rpm)
-        return self._limiters[model]
+        shared = self._limiters[model]
+        return shared.for_background() if background else shared
 
-    def _build(self, model: str, thinking: types.ThinkingLevel) -> GeminiClient:
+    def _http_client(self) -> httpx2.AsyncClient:
+        if self._http is None:
+            self._http = shared_http_client()
+        return self._http
+
+    def _build(
+        self, model: str, thinking: types.ThinkingLevel, background: bool = False
+    ) -> GeminiClient:
         key = self._settings.gemini_api_key
         if key is None:
             raise LLMUnavailableError("GEMINI_API_KEY isn't set")
-        return GeminiClient(model, key.get_secret_value(), self._limiter(model), thinking)
+        return GeminiClient(
+            model, key.get_secret_value(), self._limiter(model, background), thinking
+        )
 
     def _fast(
-        self, model: str, thinking: types.ThinkingLevel, think: bool = False
+        self,
+        model: str,
+        thinking: types.ThinkingLevel,
+        think: bool = False,
+        background: bool = False,
     ) -> ClaudeClient | GeminiClient:
         """The vendor follows the model's name, so switching back is a config change."""
         if not model.startswith("claude"):
-            return self._build(model, thinking)
+            return self._build(model, thinking, background)
         key = self._settings.anthropic_api_key
         if key is None:
             raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
-        limiter = self._limiter(model)
+        limiter = self._limiter(model, background)
         # The fast roles run on Haiku, which has no server-side fallback.
-        return ClaudeClient(model, key.get_secret_value(), limiter, think=think, fallback=False)
+        return ClaudeClient(
+            model,
+            key.get_secret_value(),
+            limiter,
+            think=think,
+            fallback=False,
+            http_client=self._http_client(),
+        )
 
     def talker(self) -> ClaudeClient | GeminiClient:
         # Thinking costs time on the voice path, so it's off unless talker_thinking turns it on.
@@ -51,17 +76,28 @@ class LLMFactory:
     def tips(self) -> ClaudeClient | GeminiClient:
         """The talker's model, thinking briefly first. Nobody waits on a tip, and with thinking
         off a tip once opened by describing the player's screen."""
-        return self._fast(self._settings.talker_model, types.ThinkingLevel.LOW, think=True)
+        return self._fast(
+            self._settings.talker_model, types.ThinkingLevel.LOW, think=True, background=True
+        )
 
-    def vision(self) -> ClaudeClient | GeminiClient:
-        return self._fast(self._settings.vision_model, types.ThinkingLevel.LOW)
+    def vision(self, background: bool = False) -> ClaudeClient | GeminiClient:
+        """Background for the learner and the progress scout; player-facing for pointing."""
+        return self._fast(
+            self._settings.vision_model, types.ThinkingLevel.LOW, background=background
+        )
 
     def observer(self) -> ClaudeClient:
         model = self._settings.observer_model
         key = self._settings.anthropic_api_key
         if key is None:
             raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
-        return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
+        # Background: it runs all the time, so it's what would otherwise crowd out a turn.
+        return ClaudeClient(
+            model,
+            key.get_secret_value(),
+            self._limiter(model, background=True),
+            http_client=self._http_client(),
+        )
 
     def closeup(self) -> VisionLLM:
         """For questions about the screen while the player waits, so speed matters most."""
@@ -69,18 +105,23 @@ class LLMFactory:
         if key is None:
             return self.vision()
         model = self._settings.closeup_model
-        return ClaudeClient(model, key.get_secret_value(), self._limiter(model))
+        return ClaudeClient(
+            model, key.get_secret_value(), self._limiter(model), http_client=self._http_client()
+        )
 
-    def deep(self) -> TextLLM:
-        """For think_hard and session notes. Falls back to Gemini without ANTHROPIC_API_KEY."""
+    def deep(self, background: bool = False) -> TextLLM:
+        """For think_hard and, in the background, session notes, the brief and naming the game.
+        Falls back to Gemini without ANTHROPIC_API_KEY."""
         key = self._settings.anthropic_api_key
         if key is None:
-            return self._build(self._settings.deep_fallback_model, types.ThinkingLevel.HIGH)
+            fallback = self._settings.deep_fallback_model
+            return self._build(fallback, types.ThinkingLevel.HIGH, background)
         model = self._settings.deep_model
         return ClaudeClient(
             model,
             key.get_secret_value(),
-            self._limiter(model),
+            self._limiter(model, background),
             effort=self._settings.deep_effort,
             timeout_s=self._settings.deep_timeout_s,
+            http_client=self._http_client(),
         )

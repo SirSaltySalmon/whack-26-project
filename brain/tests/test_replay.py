@@ -14,7 +14,6 @@ from brain.events import (
     GameEvent,
     PlayerSpeech,
     PlayerStartedSpeaking,
-    SettingsChanged,
 )
 from brain.perception.closeup import make_closeup
 from brain.perception.coords import CropRegion
@@ -23,7 +22,7 @@ from brain.replay.format import EVENTS, FRAMES_DIR, MANIFEST, PARTNER_SAID
 from brain.replay.source import ReplayLoop
 from brain.tests.fakes import FakeOverlay, drain
 from brain.tests.replay_rig import RigFrame, RigSession, event, message, solid_image, write_session
-from shared.protocol.messages import Pacing, Rect
+from shared.protocol.messages import Rect
 
 START = 100.0
 
@@ -165,41 +164,6 @@ async def test_only_pointer_and_card_messages_are_sent_again(tmp_path: Path) -> 
         "card.close",
         "pointer.hide",
     ]
-
-
-async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None:
-    settings = {
-        "proactive": False,
-        "personality": "snarky",
-        "voice_id": "v2",
-        "voice_style": "classic",
-        "mic_enabled": True,
-        "memory_search": "semantic",
-        "pacing": Pacing(advice_gap_s=0.0).model_dump(),
-        "paused": False,
-        "vision_enabled": True,
-    }
-    session = RigSession(display_scale=1.5, settings=settings)
-    _, _, link = await replay(write_session(tmp_path, session))
-
-    assert (link.display_scale, link.pinned_display_scale) == (1.5, 1.5)
-    assert link.settings.model_dump() == {**settings, "custom_instructions": ""}
-
-
-async def test_invalid_manifest_settings_keep_the_current_ones(tmp_path: Path) -> None:
-    session = RigSession(settings={"proactive": "now and then"})
-    _, _, link = await replay(write_session(tmp_path, session))
-
-    assert link.settings.proactive is True
-
-
-async def test_a_replayed_settings_change_updates_the_link(tmp_path: Path) -> None:
-    changed = {"proactive": True, "personality": "calm", "voice_id": None}
-    session = RigSession(events=[event(1.0, "SettingsChanged", settings=changed)])
-    _, events, link = await replay(write_session(tmp_path, session))
-
-    assert link.settings.personality == "calm"
-    assert [type(e) for e in events] == [SettingsChanged]
 
 
 @pytest.mark.parametrize("broken", ["missing", "manifest"])

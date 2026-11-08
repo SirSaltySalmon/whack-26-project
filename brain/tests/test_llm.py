@@ -2,7 +2,7 @@ import pytest
 from pydantic import SecretStr
 
 from brain.config import Settings
-from brain.llm.base import LLMUnavailableError, RateLimiter
+from brain.llm.base import BackgroundLimiter, LLMUnavailableError, RateLimiter
 from brain.llm.claude import ClaudeClient
 from brain.llm.factory import LLMFactory
 
@@ -84,3 +84,43 @@ def test_talker_thinking_turns_it_on_for_replies_and_player_turns() -> None:
     )
     talker = LLMFactory(settings).talker()
     assert isinstance(talker, ClaudeClient) and talker._think and not talker._fallback
+
+
+def test_every_claude_role_shares_one_warm_connection_pool() -> None:
+    # The talker is idle between turns; sharing the observer's pool saves it a TLS handshake.
+    settings = Settings(_env_file=None, anthropic_api_key=SecretStr("test"))  # type: ignore[call-arg]
+    factory = LLMFactory(settings)
+    roles = [
+        factory.talker(),
+        factory.tips(),
+        factory.observer(),
+        factory.closeup(),
+        factory.deep(),
+    ]
+    pools = {id(role._client._client) for role in roles if isinstance(role, ClaudeClient)}
+    assert len(pools) == 1
+
+
+def test_background_calls_leave_the_player_a_share_of_the_minute() -> None:
+    limiter = RateLimiter(10, clock=lambda: 0.0)
+    background = limiter.for_background()
+    assert sum(background.try_acquire() for _ in range(10)) == 9
+    # The observer has used all it may, but the player's own turn still gets through.
+    assert limiter.try_acquire()
+    assert not limiter.try_acquire() and not background.try_acquire()
+
+
+def test_a_model_allowed_one_call_a_minute_keeps_none_back() -> None:
+    assert RateLimiter(1, clock=lambda: 0.0).for_background().try_acquire()
+
+
+def test_the_observer_and_tips_run_in_the_background_but_turns_do_not() -> None:
+    settings = Settings(_env_file=None, anthropic_api_key=SecretStr("test"))  # type: ignore[call-arg]
+    factory = LLMFactory(settings)
+    background = [factory.observer(), factory.tips(), factory.vision(background=True)]
+    player = [factory.talker(), factory.closeup(), factory.vision(), factory.deep()]
+    assert all(
+        isinstance(c, ClaudeClient) and isinstance(c._limiter, BackgroundLimiter)
+        for c in background
+    )
+    assert all(isinstance(c, ClaudeClient) and isinstance(c._limiter, RateLimiter) for c in player)

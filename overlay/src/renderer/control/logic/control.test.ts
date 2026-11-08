@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { BrainStatus, FactView } from "../../../lib/protocol.generated.ts";
+import type { KeyList } from "../../../lib/controlBridge.ts";
+import type {
+  BrainDescription,
+  BrainStatus,
+  FactView,
+} from "../../../lib/protocol.generated.ts";
 import type { ControlTab } from "../tabs/types.ts";
 import { liveCapabilities, predictCapabilities } from "./capabilities.ts";
+import { availableKeys } from "./choices.ts";
 import { ago, groupFacts } from "./memory.ts";
 import { RequestTracker } from "./requests.ts";
 import { pickTab, sortTabs } from "./tabs.ts";
@@ -185,4 +191,21 @@ test("ages read naturally", () => {
   assert.equal(ago(now / 1000 - 10, now), "just now");
   assert.equal(ago(now / 1000 - 300, now), "5 min ago");
   assert.equal(ago(now / 1000 - 7200, now), "2 h ago");
+});
+
+test("keys count as available when saved here or set in the brain's .env", () => {
+  const keys = {
+    keys: [
+      { name: "DEEPGRAM_API_KEY", saved: true },
+      { name: "GEMINI_API_KEY", saved: false },
+    ],
+    canEncrypt: true,
+  } as unknown as KeyList; // Only the fields availableKeys reads
+  const description = {
+    keys_set: { ANTHROPIC_API_KEY: true, GEMINI_API_KEY: false },
+  } as unknown as BrainDescription; // Likewise
+  assert.deepEqual([...availableKeys(keys, description)].sort(), [
+    "ANTHROPIC_API_KEY",
+    "DEEPGRAM_API_KEY",
+  ]);
 });
