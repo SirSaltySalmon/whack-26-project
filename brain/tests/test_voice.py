@@ -55,6 +55,21 @@ def test_half_duplex_mutes_while_talking_and_through_the_echo_tail() -> None:
     assert not voice.mic_muted()
 
 
+async def test_no_headphones_can_be_turned_on_mid_game_and_off_again() -> None:
+    # Turned on in settings while playing: it was a launch option, so it did nothing until restart.
+    voice = _voice(half_duplex=False)
+    voice._mic_was_on = True
+    voice._half_was = False
+    voice.bot_speaking = True
+    assert not voice.mic_muted()
+    voice._link.settings = voice._link.settings.model_copy(update={"no_headphones": True})
+    await voice.check_mic()
+    assert voice.half_duplex() and voice.mic_muted()
+    voice._link.settings = voice._link.settings.model_copy(update={"no_headphones": False})
+    await voice.check_mic()
+    assert not voice.mic_muted()
+
+
 def _listening_voice() -> tuple["PipecatVoice", EventBus]:
     bus = EventBus()
     voice = PipecatVoice.__new__(PipecatVoice)

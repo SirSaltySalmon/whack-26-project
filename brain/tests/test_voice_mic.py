@@ -74,6 +74,7 @@ class Harness:
         voice._echo_tail_s = 0.4
         voice._bot_stopped_at = None
         voice._mic_was_on = True
+        voice._half_was = False
         voice._bridge = self.bridge  # type: ignore[assignment]
         voice._register_turn_events(self.flux)  # type: ignore[arg-type]
         self.voice = voice

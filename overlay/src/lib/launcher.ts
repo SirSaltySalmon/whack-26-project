@@ -30,6 +30,7 @@ export interface PartnerSettings {
   voice_id: string | null;
   /** Kept here so "Type instead" survives a restart, and changing another setting can't undo it. */
   mic_enabled: boolean;
+  no_headphones: boolean;
   /** Pausing and blinding are never kept here: the brain starts unpaused and seeing. */
   voice_style: VoiceStyle;
   memory_search: MemorySearch;
@@ -43,6 +44,7 @@ export function partnerSettings(settings: Settings): PartnerSettings {
     personality: settings.personality ?? DEFAULT_PERSONALITY,
     voice_id: settings.voice_id ?? null,
     mic_enabled: settings.mic_enabled ?? true,
+    no_headphones: settings.no_headphones ?? false,
     voice_style: settings.voice_style ?? DEFAULT_VOICE_STYLE,
     memory_search: settings.memory_search ?? DEFAULT_MEMORY_SEARCH,
     custom_instructions: settings.custom_instructions ?? "",
@@ -107,6 +109,7 @@ export const DEFAULT_CONFIG: LauncherConfig = {
     personality: DEFAULT_PERSONALITY,
     voice_id: null,
     mic_enabled: true,
+    no_headphones: false,
     voice_style: DEFAULT_VOICE_STYLE,
     memory_search: DEFAULT_MEMORY_SEARCH,
     custom_instructions: "",
@@ -174,6 +177,11 @@ export function sanitizeConfig(raw: unknown): LauncherConfig {
       voice_id:
         typeof settings.voice_id === "string" ? settings.voice_id : null,
       mic_enabled: flag(settings.mic_enabled, true),
+      // Was a launch option; someone who had it on keeps it on as the live setting.
+      no_headphones: flag(
+        settings.no_headphones,
+        flag(tuning.halfDuplex, false),
+      ),
       voice_style:
         settings.voice_style === "classic" ? "classic" : DEFAULT_VOICE_STYLE,
       memory_search:

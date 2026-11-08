@@ -83,6 +83,7 @@ class PipecatVoice:
         self._bot_stopped_at: float | None = None
         # What check_mic last saw, so a change is acted on and logged once.
         self._mic_was_on = True
+        self._half_was = self._half_duplex
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
@@ -226,6 +227,10 @@ class PipecatVoice:
 
     async def check_mic(self) -> None:
         """Acts on the player turning the mic on or off. EchoGate calls this for every frame."""
+        half = self.half_duplex()
+        if half != self._half_was:
+            self._half_was = half
+            log.info("No headphones %s: mic muted while the partner talks", "on" if half else "off")
         on = self.mic_on()
         if on == self._mic_was_on:
             return
@@ -236,10 +241,14 @@ class PipecatVoice:
             self.user_speaking = False
             await self.send(AvatarState(state="idle"))
 
+    def half_duplex(self) -> bool:
+        """VOICE_HALF_DUPLEX at startup, or the player's live "no headphones" setting."""
+        return self._half_duplex or self._link.settings.no_headphones
+
     def mic_muted(self) -> bool:
         if not self.mic_on():
             return True
-        if not self._half_duplex:
+        if not self.half_duplex():
             return False
         if self.bot_speaking:
             return True

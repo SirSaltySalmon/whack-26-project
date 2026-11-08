@@ -22,6 +22,12 @@ const MIC_CHOICES: readonly DropdownOption<OnOff>[] = [
   { value: "off", label: "Type instead" },
 ];
 
+// "On" means headphones. Off, the mic is muted while the partner talks so it can't hear itself.
+const HEADPHONE_CHOICES: readonly DropdownOption<OnOff>[] = [
+  { value: "on", label: "Headphones" },
+  { value: "off", label: "Speakers" },
+];
+
 const VOICE_STYLE_CHOICES: readonly DropdownOption<VoiceStyle>[] = [
   { value: "expressive", label: "Expressive" },
   { value: "classic", label: "Classic" },
@@ -73,6 +79,7 @@ export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
+  const headphones = !(settings.no_headphones ?? false);
   const style = settings.voice_style ?? DEFAULT_VOICE_STYLE;
   const memorySearch = settings.memory_search ?? DEFAULT_MEMORY_SEARCH;
   return (
@@ -97,6 +104,17 @@ export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
           options={MIC_CHOICES}
           onChange={(mic) =>
             onChange({ ...settings, mic_enabled: mic === "on" })
+          }
+        />
+      </div>
+      <h3 className="settings-heading">Listening on</h3>
+      <div className="settings-row">
+        <Dropdown
+          label="Listening on"
+          value={headphones ? "on" : "off"}
+          options={HEADPHONE_CHOICES}
+          onChange={(choice) =>
+            onChange({ ...settings, no_headphones: choice === "off" })
           }
         />
       </div>

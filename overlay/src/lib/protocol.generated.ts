@@ -60,6 +60,7 @@ export type Personalities = string[];
 export type CustomInstructions = string;
 export type MemorySearch = "keyword" | "hybrid" | "semantic";
 export type MicEnabled = boolean;
+export type NoHeadphones = boolean;
 export type AdviceFirstS = number;
 export type AdviceGapS = number;
 export type AdviceQuietS = number;
@@ -332,6 +333,7 @@ export interface Settings {
   custom_instructions?: CustomInstructions;
   memory_search?: MemorySearch;
   mic_enabled?: MicEnabled;
+  no_headphones?: NoHeadphones;
   pacing?: Pacing;
   paused?: Paused;
   personality?: Personality;

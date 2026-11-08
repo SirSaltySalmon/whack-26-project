@@ -1756,6 +1756,11 @@
           "title": "Mic Enabled",
           "type": "boolean"
         },
+        "no_headphones": {
+          "default": false,
+          "title": "No Headphones",
+          "type": "boolean"
+        },
         "pacing": {
           "$ref": "#/$defs/Pacing"
         },

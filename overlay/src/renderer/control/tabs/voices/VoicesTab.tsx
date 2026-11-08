@@ -146,18 +146,24 @@ export function VoicesTab() {
         )}
       </Section>
 
+      <Section title="Speakers" hint="Applies right away, even mid-game.">
+        <Toggle
+          label="No headphones"
+          hint="Mutes the mic while the partner talks, so it can't hear itself. You lose barge-in."
+          on={control.choices.settings.no_headphones ?? false}
+          onChange={(no_headphones) =>
+            control.changeSettings({
+              ...control.choices.settings,
+              no_headphones,
+            })
+          }
+        />
+      </Section>
+
       <Section
         title="Listening"
         hint="Applies the next time the partner starts."
       >
-        <Toggle
-          label="No headphones"
-          hint="Mutes the mic while the partner talks, so it can't hear itself. You lose barge-in."
-          on={config.tuning.halfDuplex}
-          onChange={(halfDuplex) =>
-            updateConfig((c) => ({ ...c, tuning: { ...c.tuning, halfDuplex } }))
-          }
-        />
         <Field
           label="Words to listen for"
           hint="Boss, item and place names that speech to text should get right."
