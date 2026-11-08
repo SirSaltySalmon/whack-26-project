@@ -4,6 +4,7 @@ Gemini boxes are [ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the imag
 scale means downscaling the image before sending doesn't change the result.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from brain.perception.profile_schema import Box
@@ -60,6 +61,23 @@ def dip_to_physical(rect: Rect, display_scale: float) -> Rect:
         y=rect.y * display_scale,
         width=rect.width * display_scale,
         height=rect.height * display_scale,
+    )
+
+
+def pixel_box_to_normalized(box_px: Sequence[float], width: int, height: int) -> NormalizedBox:
+    """A model's [x_min, y_min, x_max, y_max], in pixels of the image it saw, as a NormalizedBox.
+
+    Claude places pixel boxes well and 0-1000 boxes badly. Raises ValueError for anything
+    malformed, as NormalizedBox does, because model output is untrusted.
+    """
+    if len(box_px) != 4 or width <= 0 or height <= 0:
+        raise ValueError(f"Not a box for a {width} x {height} image: {box_px}")
+    x_min, y_min, x_max, y_max = (float(v) for v in box_px)
+    return NormalizedBox(
+        ymin=y_min / height * 1000,
+        xmin=x_min / width * 1000,
+        ymax=y_max / height * 1000,
+        xmax=x_max / width * 1000,
     )
 
 

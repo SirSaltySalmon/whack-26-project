@@ -63,7 +63,7 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 - The game aims with the mouse, so overlay parts stay click-through unless they need a click. The character's body never catches clicks: hovering shows a grip to move it and a corner to resize it, in a 3:4 portrait frame.
 - The overlay must not take keyboard focus from the game. The window stays `focusable: false` until the player chooses to type, and goes back when it loses focus.
 - The pointer sits beside its target, never on it, because its masked rectangle would hide the target from the next vision call. It always fades on its own, using `ttl_ms`.
-- Convert coordinates in one tested function. Gemini boxes are `[ymin, xmin, ymax, xmax]` on a 0-1000 scale relative to the image sent, dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
+- Convert coordinates in one tested function. Vision boxes come back as `[x_min, y_min, x_max, y_max]` in pixels of the image sent, which is kept at 1280 px or less so Claude sees it unshrunk; `pixel_box_to_normalized` turns them into the 0-1000 `NormalizedBox`. Claude places 0-1000 boxes badly, so don't ask it for them. dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
 
 **Tools**
 - Tools run only on turns the player started, never on game events. That's what keeps `page_url` player-requested and vision calls bounded. One exception: a tip may call `point_at`, at most once per tip, and never opens a page. See [docs/DECISIONS.md](docs/DECISIONS.md).
