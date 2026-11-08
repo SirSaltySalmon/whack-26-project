@@ -1,45 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
 import { Notice, Pill, Section, Toggle } from "../../components/ui.tsx";
 import { useControl } from "../../ControlContext.tsx";
-import { ago, groupFacts, SOURCE_LABEL } from "../../logic/memory.ts";
+import { groupFacts, SOURCE_LABEL } from "../../logic/memory.ts";
 import { FactGroupCard } from "./FactGroupCard.tsx";
 import { GamePicker } from "./GamePicker.tsx";
 import { useMemoryGames } from "./useMemoryGames.ts";
 import { useMemoryQuery } from "./useMemoryQuery.ts";
 
-import { MemoryManager } from "./MemoryManager.tsx";
+import { MemoryMenuProvider } from "./MemoryMenuContext.tsx";
+import { MemoryCreateControls } from "./MemoryCreateControls.tsx";
+import { SessionNoteCard } from "./SessionNoteCard.tsx";
+import { useMemoryChanges } from "./useMemoryChanges.ts";
 import { InstructionsEditor } from "./InstructionsEditor.tsx";
 
 export function MemoryTab() {
-  const { connected, process, stop, external } = useControl();
-  const stopped = !connected && ["stopped", "crashed"].includes(process.state);
-  const [revision, setRevision] = useState(0);
-  const onUpdated = useCallback(() => setRevision((value) => value + 1), []);
   return (
     <div className="cc-page mem-page">
       <InstructionsEditor />
-      <ReviewMemory key={revision} />
-      <details>
-        <summary>Add, edit or clear saved memory</summary>
-        {stopped ? (
-          <MemoryManager onUpdated={onUpdated} />
-        ) : (
-          <Section
-            title="Edit or clear memory"
-            hint="Stop the brain before editing so a running turn cannot restore old memories. Managing saved memory uses no API tokens."
-          >
-            {external ? (
-              <Notice>
-                Stop the brain in its terminal to manage saved memory here.
-              </Notice>
-            ) : (
-              <button className="cc-button" type="button" onClick={stop}>
-                Stop brain to manage memory
-              </button>
-            )}
-          </Section>
-        )}
-      </details>
+      <MemoryMenuProvider>
+        <ReviewMemory />
+      </MemoryMenuProvider>
     </div>
   );
 }
@@ -48,16 +28,19 @@ const count = (n: number, noun: string): string =>
   `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 function ReviewMemory() {
-  const { connected } = useControl();
+  const { connected, config } = useControl();
+  const [revision, setRevision] = useState(0);
+  const onUpdated = useCallback(() => setRevision((value) => value + 1), []);
+  const changes = useMemoryChanges(onUpdated);
   const [text, setText] = useState("");
   const [history, setHistory] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
-  const games = useMemoryGames();
+  const games = useMemoryGames(revision);
   // Starting or stopping the partner moves the view to the game it's filing memory under.
   useEffect(() => setPicked(null), [connected]);
   const game = picked ?? games.list?.current ?? null;
   const playing = connected && games.list?.live ? games.list.current : null;
-  const memory = useMemoryQuery(text, history, game);
+  const memory = useMemoryQuery(text, history, game, revision);
   const results = memory.results;
   const groups = groupFacts(results?.facts ?? []);
   const error = memory.error ?? games.error;
@@ -94,6 +77,27 @@ function ReviewMemory() {
         </button>
       </div>
 
+      <MemoryCreateControls
+        game={game ?? config.gameTitle}
+        disabled={!changes.allowed || changes.busy}
+        onChange={async (request) => {
+          const ok = await changes.run(request);
+          if (ok && request.operation === "seed") {
+            setPicked("Memory test (sample)");
+            setText("");
+            setHistory(false);
+          }
+          return ok;
+        }}
+      />
+      {!changes.allowed && (
+        <Notice>
+          Stop the partner to edit or delete memory. You can keep reviewing it
+          while it runs.
+        </Notice>
+      )}
+      {changes.error && <Notice tone="warn">{changes.error}</Notice>}
+      {changes.message && <Notice>{changes.message}</Notice>}
       {results && (
         <p className="cc-hint mem-stats">
           {count(results.facts.length, "fact")} ·{" "}
@@ -129,7 +133,12 @@ function ReviewMemory() {
               </p>
             )}
             {groups.map((group) => (
-              <FactGroupCard key={group.key} group={group} />
+              <FactGroupCard
+                key={group.key}
+                group={group}
+                disabled={!changes.allowed || changes.busy}
+                onChange={changes.run}
+              />
             ))}
           </div>
         </Section>
@@ -188,13 +197,12 @@ function ReviewMemory() {
           <Section title="Session notes">
             {results?.notes.length ? (
               results.notes.map((note) => (
-                <details key={note.id} className="mem-note">
-                  <summary>
-                    {note.kind === "recap" ? "Recap" : "Rolling note"}
-                    <span className="mem-meta">{ago(note.created_at)}</span>
-                  </summary>
-                  <pre>{note.body}</pre>
-                </details>
+                <SessionNoteCard
+                  key={note.id}
+                  note={note}
+                  disabled={!changes.allowed || changes.busy}
+                  onChange={changes.run}
+                />
               ))
             ) : (
               <p className="cc-hint">Written every few minutes of play.</p>

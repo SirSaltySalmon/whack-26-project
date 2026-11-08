@@ -1,0 +1,76 @@
+.mem-current-row,
+.mem-note {
+  position: relative;
+}
+.mem-current-row {
+  padding-right: 34px;
+}
+.mem-menu-trigger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  cursor: pointer;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 24px;
+  line-height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+.mem-menu-trigger:hover,
+.mem-menu-trigger:focus-visible,
+.mem-menu-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.1);
+}
+.mem-menu-options {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  z-index: 1000;
+  min-width: 132px;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #171b24;
+  box-shadow: 0 6px 20px #0006;
+}
+.mem-inline-editor {
+  margin-block: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.mem-inline-editor textarea {
+  width: 100%;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+.mem-note-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-right: 32px;
+}
+.mem-create-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mem-admin-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.mem-admin-fields form {
+  margin-block: 16px;
+}
+.mem-admin-fields > .cc-section {
+  margin-top: 24px;
+}

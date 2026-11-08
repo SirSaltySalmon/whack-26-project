@@ -8,6 +8,7 @@ import "./sidebar.css";
 import "./form.css";
 import "./choices.css";
 import "./memory.css";
+import "./memory-actions.css";
 import "./tabs.css";
 
 const root = document.getElementById("root");

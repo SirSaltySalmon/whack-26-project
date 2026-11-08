@@ -25,6 +25,7 @@ export function useMemoryQuery(
   text: string,
   includeHistory: boolean,
   game: string | null,
+  revision = 0,
 ): MemoryQueryState {
   const { request, onPush, connected } = useControl();
   const [results, setResults] = useState<MemoryResults | null>(null);
@@ -67,7 +68,7 @@ export function useMemoryQuery(
   useEffect(() => {
     const timer = setTimeout(run, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [run, connected]);
+  }, [run, connected, revision]);
 
   useEffect(
     () =>

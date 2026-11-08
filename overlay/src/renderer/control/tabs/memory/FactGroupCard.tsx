@@ -2,6 +2,9 @@ import type { FactView } from "../../../../lib/protocol.generated.ts";
 import { Pill } from "../../components/ui.tsx";
 import { ago, SOURCE_LABEL, type FactGroup } from "../../logic/memory.ts";
 
+import { MemoryItemMenu } from "./MemoryItemMenu.tsx";
+import type { ChangeMemory } from "./useMemoryChanges.ts";
+
 const SOURCE_TITLE: Record<FactView["source"], string> = {
   player: "You said so. Beats anything else.",
   observed: "Seen on screen. Beats the wiki.",
@@ -29,20 +32,38 @@ function Confidence({ value }: { value: number }) {
 }
 
 // Source first, as a column, so a glance down the list shows where everything came from.
-function CurrentFact({ fact }: { fact: FactView }) {
+function CurrentFact({
+  fact,
+  disabled,
+  onChange,
+}: {
+  fact: FactView;
+  disabled: boolean;
+  onChange: ChangeMemory;
+}) {
   return (
-    <div className="mem-fact">
-      <Source source={fact.source} />
-      <span className="mem-value">
-        {fact.value}
-        {fact.tentative && (
-          <small className="mem-tentative">
-            Tentative until you or the screen confirm it
-          </small>
-        )}
-      </span>
-      <Confidence value={fact.confidence} />
-      <span className="mem-when">since {ago(fact.valid_from)}</span>
+    <div className="mem-current-row">
+      <div className="mem-fact">
+        <Source source={fact.source} />
+        <span className="mem-value">
+          {fact.value}
+          {fact.tentative && (
+            <small className="mem-tentative">
+              Tentative until you or the screen confirm it
+            </small>
+          )}
+        </span>
+        <Confidence value={fact.confidence} />
+        <span className="mem-when">since {ago(fact.valid_from)}</span>
+      </div>
+      <MemoryItemMenu
+        id={fact.id}
+        kind="fact"
+        text={fact.value}
+        label={`${fact.subject} / ${fact.attribute}`}
+        disabled={disabled}
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -63,7 +84,15 @@ function PastFact({ fact }: { fact: FactView }) {
   );
 }
 
-export function FactGroupCard({ group }: { group: FactGroup }) {
+export function FactGroupCard({
+  group,
+  disabled,
+  onChange,
+}: {
+  group: FactGroup;
+  disabled: boolean;
+  onChange: ChangeMemory;
+}) {
   return (
     <article
       className={`mem-group${group.conflict ? " mem-group-conflict" : ""}`}
@@ -81,7 +110,12 @@ export function FactGroupCard({ group }: { group: FactGroup }) {
         )}
       </header>
       {group.current.map((fact) => (
-        <CurrentFact key={fact.id} fact={fact} />
+        <CurrentFact
+          key={fact.id}
+          fact={fact}
+          disabled={disabled}
+          onChange={onChange}
+        />
       ))}
       {group.current.length === 0 && (
         <p className="cc-hint">
