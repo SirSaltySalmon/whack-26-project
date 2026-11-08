@@ -10,12 +10,16 @@ module only turns speech into bus events and text into speech:
 Flux does its own turn detection, so there is no Silero VAD and no user aggregator. The aggregator
 would normally own barge-in, so TurnBridge does it instead when Flux reports a start of turn.
 
-Without headphones the mic hears the speakers. Half-duplex mode (VOICE_HALF_DUPLEX=true) has
-EchoGate feed Flux silence while the partner talks, at the cost of barge-in. With the mic off in
-settings it feeds silence all the time and drops any turn Flux still reports; typed turns reach
-the bus from the overlay without passing through here.
+Without headphones the mic hears the speakers and the partner interrupts itself. Half-duplex mode
+(VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
+barge-in.
 
-Without ElevenLabs keys, or once speech fails, it still listens and replies in subtitles only.
+With the mic off in settings, EchoGate feeds Flux silence all the time, and any turn Flux still
+reports is dropped, so speech starts no turn and no barge-in. The partner still talks and reacts,
+and typed turns reach the bus from the overlay without passing through here.
+
+Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
+subtitles only.
 """
 
 import asyncio
@@ -162,6 +166,7 @@ class PipecatVoice:
     async def interrupt(self) -> None:
         """Cuts off the line playing and any queued after it, as a barge-in does."""
         await self._bridge.broadcast_interruption()
+        self.speech.interrupted()
         if self.bot_speaking:
             await self.send(AvatarState(state="idle"))
 

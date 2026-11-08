@@ -20,6 +20,7 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.llm.base import VisionLLM
 from brain.perception.closeup import encode_jpeg
 from brain.perception.masking import mask_overlay
+from brain.perception.sightings import Send, area_sighting, crop_of, show
 
 # Seconds before the player began speaking. Starting values: the 10 s buffer holds them all, and a
 # hit and what caused it usually fit in 6 s.
@@ -134,6 +135,7 @@ class Rewind:
         max_edge_px: int,
         *,
         watching: Callable[[], bool] = lambda: True,
+        debug_send: Send | None = None,
     ) -> None:
         self._buffer = buffer
         self._display_scale = display_scale
@@ -142,6 +144,8 @@ class Rewind:
         self._max_edge_px = min(max_edge_px, SHEET_MAX_EDGE_PX)
         # The player's vision setting. Blind means blind to the past few seconds as well.
         self._watching = watching
+        # Set only with --debug-regions, to draw the game area the sheet was cut from.
+        self._debug_send = debug_send
 
     def tool(self, timeout_s: float) -> Tool:
         # Not quick: the filler line plays, and the turn survives a barge-in like look_closer.
@@ -166,6 +170,7 @@ class Rewind:
         image = await asyncio.to_thread(
             _sheet_jpeg, moments, self._display_scale(), self._padding_px, self._max_edge_px
         )
+        await self._show_area(moments[-1].frame, arguments.question)
         reply = await self._vision().vision_json(
             LOOK_BACK_PROMPT.format(question=arguments.question),
             image,
@@ -175,3 +180,11 @@ class Rewind:
             detail="high",
         )
         return reply.as_result()
+
+    async def _show_area(self, newest: Frame, question: str) -> None:
+        if self._debug_send is None:
+            return
+        height, width = newest.image.shape[:2]
+        crop = crop_of(width, height, newest.region)
+        sighting = area_sighting(question, crop, self._display_scale(), "look_back")
+        await show(self._debug_send, [sighting])

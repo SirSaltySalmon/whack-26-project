@@ -7,7 +7,7 @@ show what changed, so the brain should compare consecutive observations rather t
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from brain.perception.numbers import parse_fraction
 
@@ -53,6 +53,18 @@ prompts. Not menu lists or FPS counters.
 low health, a boss, an objective or a prompt. null if nothing stands out.
 - unsure: names of the fields you were unsure about."""
 
+# Added only for the debug view, because every box costs output tokens on a call that runs about
+# once a second. Pixel boxes, because Claude places those well and 0-1000 boxes badly.
+SIGHTINGS_PROMPT = """
+- sightings: up to 4 things in the game world worth a look, such as the enemies, threats, items or \
+characters your report mentions. Never the fixed HUD: health, mana, hotbar, minimap, buttons. Each \
+has a label of at most 4 words and box_px: [x_min, y_min, x_max, y_max], tight around it, in \
+pixels of this {width} x {height} image. Empty if nothing stands out."""
+
+
+def sightings_prompt(width: int, height: int) -> str:
+    return OBSERVATION_PROMPT + SIGHTINGS_PROMPT.format(width=width, height=height)
+
 
 class Observation(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -83,3 +95,31 @@ class Observation(BaseModel):
         if numbers:
             return numbers[0] / numbers[1]
         return None if self.health_percent is None else self.health_percent / 100
+
+
+class Sighting(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    box_px: list[float]
+
+
+class SightedObservation(Observation):
+    """An observation that also says where things are, asked for only while debugging."""
+
+    # Required, so structured output always fills it in rather than skipping it.
+    sightings: list[Sighting]
+
+    @field_validator("sightings", mode="before")
+    @classmethod
+    def _drop_malformed(cls, value: object) -> object:
+        # One bad box must not cost the whole report, which drives danger and events.
+        if not isinstance(value, list):
+            return []
+        kept = []
+        for item in value:
+            try:
+                kept.append(Sighting.model_validate(item))
+            except ValueError:
+                continue
+        return kept

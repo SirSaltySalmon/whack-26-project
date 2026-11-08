@@ -11,6 +11,8 @@ import {
   endStaleSubtitle,
   type SubtitleLine,
 } from "../logic/subtitles.ts";
+import type { ShownSighting } from "../logic/debugSightings.ts";
+import { useDebugSightings } from "./useDebugSightings.ts";
 
 const SUBTITLE_LINGER_MS = 2500;
 // Spoken words arrive well under a second apart, so this long without one means the line is over.
@@ -35,6 +37,7 @@ export interface CompanionFeed {
   toasts: ShownToast[];
   settings: SettingsState | null;
   debugRegions: DebugRegion[];
+  debugSightings: ShownSighting[];
   handle(message: Brain): void;
   dismissToast(id: number): void;
 }
@@ -46,6 +49,7 @@ export function useCompanionFeed(): CompanionFeed {
   const [settings, setSettings] = useState<SettingsState | null>(null);
   const [debugRegions, setDebugRegions] = useState<DebugRegion[]>([]);
   const [danger, setDanger] = useState<DangerSignal | null>(null);
+  const sightings = useDebugSightings();
   const nextToastId = useRef(0);
 
   useEffect(() => {
@@ -94,6 +98,9 @@ export function useCompanionFeed(): CompanionFeed {
       case "debug.regions":
         setDebugRegions(message.regions);
         break;
+      case "debug.sightings":
+        sightings.add(message.sightings);
+        break;
       case "danger.state":
         setDanger((current) => ({
           level: message.level,
@@ -111,6 +118,7 @@ export function useCompanionFeed(): CompanionFeed {
     toasts,
     settings,
     debugRegions,
+    debugSightings: sightings.shown,
     handle,
     dismissToast: (id) =>
       setToasts((current) => current.filter((shown) => shown.id !== id)),

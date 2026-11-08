@@ -4,6 +4,7 @@ A rejected reader isn't a failure: the observer keeps covering that value, just 
 must never be loosened so a reader passes, and never gain handling for a particular game.
 """
 
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -89,6 +90,16 @@ def propose_color(crop: np.ndarray, fill: str | None = None) -> ColorFillParams 
         hsv_high=(high_h, 255, 255),
         axis="x" if width >= height else "y",
     )
+
+
+def fit_color(samples: Sequence[Sample], fills: Sequence[str]) -> ColorFillParams | None:
+    """A bar's colour from its fullest sample, in the fill vision named most, calibrated."""
+    if not samples:
+        return None
+    fullest = max(samples, key=lambda s: s.expected if isinstance(s.expected, float) else 0)
+    fill = Counter(fills).most_common(1)[0][0] if fills else None
+    color = propose_color(fullest.crop, fill)
+    return calibrate(color, samples) if color is not None else None
 
 
 def _hue_range(low: int, high: int) -> np.ndarray:

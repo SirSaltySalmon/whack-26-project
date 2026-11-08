@@ -65,6 +65,7 @@ def rig(
     research: FakeResearch | None = None,
     get_vision: Callable[[], VisionLLM] | None = None,
     get_deep: Callable[[], TextLLM] | None = None,
+    debug: bool = False,
 ) -> Rig:
     """`get_vision` and `get_deep` replace the fakes' getters, since a missing key raises there."""
     buffer = make_buffer(*frames, capacity=8)
@@ -85,7 +86,7 @@ def rig(
         get_deep or (lambda: deep_llm),
         memory,
         gather_context,
-        AgentLimits(padding, max_edge, max_age, pointer_ttl_ms=4000),
+        AgentLimits(padding, max_edge, max_age, pointer_ttl_ms=4000, show_sightings=debug),
     )
     tools.research = research  # type: ignore[assignment]
     return Rig(tools, buffer, overlay, vision, deep_llm, memory, context_questions)

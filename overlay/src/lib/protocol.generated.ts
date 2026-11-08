@@ -18,6 +18,7 @@ export type Brain =
   | SettingsState
   | PageRead
   | DebugRegions
+  | DebugSightings
   | DangerState;
 export type Final = boolean;
 export type Text = string;
@@ -81,28 +82,33 @@ export type Name1 = string;
 export type Status = "ok" | "masked" | "unreadable";
 export type Regions = DebugRegion[];
 export type Type11 = "debug.regions";
+export type Kind = "noticed" | "look" | "point" | "look_back";
+export type Label1 = string;
+export type TtlMs1 = number;
+export type Sightings = DebugSighting[];
+export type Type12 = "debug.sightings";
 export type Level = "none" | "medium" | "high";
-export type Type12 = "danger.state";
+export type Type13 = "danger.state";
 export type Control =
   ControlHello | MemoryQuery | ContextPreview | MemoryListGames | SettingsUpdate | VoicePreview | ControlShutdown;
 export type ProtocolVersion = number;
-export type Type13 = "control.hello";
+export type Type14 = "control.hello";
 export type Game = string | null;
 export type IncludeHistory = boolean;
 export type Limit = number;
 export type RequestId1 = string;
 export type Text3 = string;
-export type Type14 = "memory.query";
+export type Type15 = "memory.query";
 export type Game1 = string | null;
 export type RequestId2 = string;
 export type Text4 = string;
-export type Type15 = "memory.context_preview";
+export type Type16 = "memory.context_preview";
 export type RequestId3 = string;
-export type Type16 = "memory.list_games";
-export type Type17 = "settings.update";
+export type Type17 = "memory.list_games";
+export type Type18 = "settings.update";
 export type Text5 = string;
-export type Type18 = "voice.preview";
-export type Type19 = "control.shutdown";
+export type Type19 = "voice.preview";
+export type Type20 = "control.shutdown";
 export type ControlReply =
   MemoryResults | MemoryContext | MemoryGames | BrainStatus | SettingsState | MemoryToast | ControlError;
 export type ElapsedMs = number;
@@ -119,7 +125,7 @@ export type Facts = FactView[];
 export type Body2 = string;
 export type CreatedAt = number;
 export type Id2 = number;
-export type Kind = "rolling" | "recap";
+export type Kind1 = "rolling" | "recap";
 export type Notes = NoteView[];
 export type Answer = string | null;
 export type Id3 = number;
@@ -128,11 +134,11 @@ export type Status1 = "open" | "answered" | "dropped";
 export type Text6 = string;
 export type Questions = QuestionView[];
 export type RequestId4 = string;
-export type Type20 = "memory.results";
+export type Type21 = "memory.results";
 export type Context = string;
 export type ElapsedMs1 = number;
 export type RequestId5 = string;
-export type Type21 = "memory.context";
+export type Type22 = "memory.context";
 export type Current = string | null;
 export type Facts1 = number;
 export type LastPlayed = number | null;
@@ -142,7 +148,7 @@ export type Title2 = string;
 export type Games = GameView[];
 export type Live = boolean;
 export type RequestId6 = string;
-export type Type22 = "memory.games";
+export type Type23 = "memory.games";
 export type GameTitle = string;
 export type Listening = boolean;
 export type Mode = "live" | "replay";
@@ -150,12 +156,12 @@ export type SessionId = number | null;
 export type Speaking = boolean;
 export type Talking = boolean;
 export type Tools = boolean;
-export type Type23 = "brain.status";
+export type Type24 = "brain.status";
 export type Watching = boolean;
 export type WikiUrl = string | null;
 export type Message = string;
 export type RequestId7 = string | null;
-export type Type24 = "control.error";
+export type Type25 = "control.error";
 export type GameProcess = string;
 export type GameTitle1 = string;
 export type Personalities1 = string[];
@@ -190,30 +196,30 @@ export type Overlay =
 export type DisplayScale = number;
 export type Height1 = number;
 export type ProtocolVersion2 = number;
-export type Type25 = "overlay.ready";
+export type Type26 = "overlay.ready";
 export type Width1 = number;
 export type ElementId = string;
 export type Rects = ElementRect[];
-export type Type26 = "overlay.rects";
+export type Type27 = "overlay.rects";
 export type CardId3 = string;
-export type Type27 = "card.closed";
+export type Type28 = "card.closed";
 export type CardId4 = string;
 export type Title3 = string | null;
-export type Type28 = "card.navigated";
+export type Type29 = "card.navigated";
 export type Url = string;
 export type Answer1 = string;
 export type QuestionId1 = string;
-export type Type29 = "question.answer";
+export type Type30 = "question.answer";
 export type CardId5 = string;
 export type RequestId8 = string;
 export type Text7 = string;
 export type Title4 = string | null;
 export type Truncated = boolean;
-export type Type30 = "page.content";
+export type Type31 = "page.content";
 export type Url1 = string;
 export type VisibleText = string;
 export type Text8 = string;
-export type Type31 = "player.text";
+export type Type32 = "player.text";
 
 /**
  * Exists only so one JSON Schema document can describe every direction.
@@ -353,16 +359,34 @@ export interface DebugRegion {
   status: Status;
 }
 /**
+ * Adds sightings to the debug view. Each fades on its own once its ttl_ms runs out.
+ *
+ * Sent only with --debug-regions, so the overlay draws whatever arrives.
+ */
+export interface DebugSightings {
+  sightings: Sightings;
+  type?: Type12;
+}
+/**
+ * Something a model looked at or noticed, drawn over the game while debugging.
+ */
+export interface DebugSighting {
+  kind: Kind;
+  label: Label1;
+  rect: Rect;
+  ttl_ms: TtlMs1;
+}
+/**
  * How much trouble the player is in, so the overlay can show it without covering the game.
  * Sent when the level changes, and again when the overlay connects.
  */
 export interface DangerState {
   level: Level;
-  type?: Type12;
+  type?: Type13;
 }
 export interface ControlHello {
   protocol_version: ProtocolVersion;
-  type?: Type13;
+  type?: Type14;
 }
 /**
  * Empty text lists the newest facts instead of searching.
@@ -373,7 +397,7 @@ export interface MemoryQuery {
   limit?: Limit;
   request_id: RequestId1;
   text?: Text3;
-  type?: Type14;
+  type?: Type15;
 }
 /**
  * Asks for the exact context the talker would get for this query. For a game other than the
@@ -383,31 +407,31 @@ export interface ContextPreview {
   game?: Game1;
   request_id: RequestId2;
   text: Text4;
-  type?: Type15;
+  type?: Type16;
 }
 /**
  * Asks which games memory holds anything for.
  */
 export interface MemoryListGames {
   request_id: RequestId3;
-  type?: Type16;
+  type?: Type17;
 }
 export interface SettingsUpdate {
   settings: Settings;
-  type?: Type17;
+  type?: Type18;
 }
 /**
  * Speak this sample line in the current voice, if the partner isn't already talking.
  */
 export interface VoicePreview {
   text: Text5;
-  type?: Type18;
+  type?: Type19;
 }
 /**
  * Stop the brain cleanly, so the session is closed and its note written.
  */
 export interface ControlShutdown {
-  type?: Type19;
+  type?: Type20;
 }
 export interface MemoryResults {
   elapsed_ms: ElapsedMs;
@@ -415,7 +439,7 @@ export interface MemoryResults {
   notes: Notes;
   questions: Questions;
   request_id: RequestId4;
-  type?: Type20;
+  type?: Type21;
 }
 export interface FactView {
   attribute: Attribute;
@@ -432,7 +456,7 @@ export interface NoteView {
   body: Body2;
   created_at: CreatedAt;
   id: Id2;
-  kind: Kind;
+  kind: Kind1;
 }
 export interface QuestionView {
   answer?: Answer;
@@ -445,14 +469,14 @@ export interface MemoryContext {
   context: Context;
   elapsed_ms: ElapsedMs1;
   request_id: RequestId5;
-  type?: Type21;
+  type?: Type22;
 }
 export interface MemoryGames {
   current?: Current;
   games: Games;
   live: Live;
   request_id: RequestId6;
-  type?: Type22;
+  type?: Type23;
 }
 /**
  * One game memory has something filed under.
@@ -475,14 +499,14 @@ export interface BrainStatus {
   speaking: Speaking;
   talking: Talking;
   tools: Tools;
-  type?: Type23;
+  type?: Type24;
   watching: Watching;
   wiki_url?: WikiUrl;
 }
 export interface ControlError {
   message: Message;
   request_id?: RequestId7;
-  type?: Type24;
+  type?: Type25;
 }
 /**
  * Printed by `python -m brain --describe`, before anything starts. Never holds key values.
@@ -532,7 +556,7 @@ export interface OverlayReady {
   display_scale: DisplayScale;
   height: Height1;
   protocol_version: ProtocolVersion2;
-  type?: Type25;
+  type?: Type26;
   width: Width1;
 }
 /**
@@ -540,7 +564,7 @@ export interface OverlayReady {
  */
 export interface OverlayRects {
   rects: Rects;
-  type?: Type26;
+  type?: Type27;
 }
 export interface ElementRect {
   element_id: ElementId;
@@ -548,7 +572,7 @@ export interface ElementRect {
 }
 export interface CardClosed {
   card_id: CardId3;
-  type?: Type27;
+  type?: Type28;
 }
 /**
  * The wiki window's page changed. The URL and title come from a website: treat them as data.
@@ -556,13 +580,13 @@ export interface CardClosed {
 export interface CardNavigated {
   card_id: CardId4;
   title?: Title3;
-  type?: Type28;
+  type?: Type29;
   url: Url;
 }
 export interface QuestionAnswer {
   answer: Answer1;
   question_id: QuestionId1;
-  type?: Type29;
+  type?: Type30;
 }
 /**
  * The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
@@ -574,7 +598,7 @@ export interface PageContent {
   text: Text7;
   title?: Title4;
   truncated?: Truncated;
-  type?: Type30;
+  type?: Type31;
   url: Url1;
   visible_text: VisibleText;
 }
@@ -583,5 +607,5 @@ export interface PageContent {
  */
 export interface PlayerText {
   text: Text8;
-  type?: Type31;
+  type?: Type32;
 }

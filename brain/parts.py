@@ -74,6 +74,7 @@ def make_agent_tools(
             settings.closeup_max_edge_px,
             settings.look_max_frame_age_s,
             settings.pointer_ttl_ms,
+            show_sightings=settings.debug_regions,
         ),
         look_vision=factory.closeup,
     )
@@ -122,6 +123,7 @@ def make_observer(
         settings.mask_padding_px,
         on_observation,
         watching=lambda: link.settings.vision_enabled,
+        debug_send=link.send if settings.debug_regions else None,
     )
 
 

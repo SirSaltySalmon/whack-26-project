@@ -12,6 +12,7 @@ import { CardWindow } from "./components/CardWindow.tsx";
 import { ChatBox } from "./components/ChatBox.tsx";
 import { DangerAlert } from "./components/DangerAlert.tsx";
 import { DebugRegions } from "./components/DebugRegions.tsx";
+import { DebugSightings } from "./components/DebugSightings.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
 import { Subtitles } from "./components/Subtitles.tsx";
@@ -189,6 +190,7 @@ export function App() {
   return (
     <>
       <DebugRegions regions={feed.debugRegions} viewport={viewport} />
+      <DebugSightings sightings={feed.debugSightings} viewport={viewport} />
       <Avatar
         frame={avatarFrame}
         state={avatarState}

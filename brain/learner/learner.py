@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import time
-from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +18,7 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
 from brain.learner.debug_samples import save_samples
 from brain.learner.regions import AgreedRegion, RegionProposal, agree, build_spec, region_prompt
-from brain.learner.validate import Sample, calibrate, propose_color, validate
+from brain.learner.validate import Sample, fit_color, validate
 from brain.learner.zoom import Zoom, zoom_around, zoom_pass
 from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.memory.db import Database
@@ -40,6 +39,8 @@ CHECK_EVERY_S = 5.0
 PROPOSAL_MAX_TOKENS = 2000
 FRAME_WAIT_S = 60.0
 MAX_FRAME_AGE_S = 2.0
+# A grown bar reads wrong until relearned, and the player likely just grew it on purpose.
+GROWN_GAP_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ class GameLearner:
         self._image_size = (0, 0)
         self._last_pass_at: float | None = None
         self._readers_failing = False
+        self._grown = False
 
     async def run(self) -> None:
         events = self._bus.subscribe()
@@ -119,8 +121,10 @@ class GameLearner:
             event = events.get_nowait()
             if isinstance(event, ReadersFailing) and event.game == self._game:
                 self._readers_failing = True
+                self._grown = self._grown or event.grown
         now = self._clock()
-        if self._last_pass_at is not None and now - self._last_pass_at < self._config.relearn_gap_s:
+        gap = GROWN_GAP_S if self._grown else self._config.relearn_gap_s
+        if self._last_pass_at is not None and now - self._last_pass_at < gap:
             return None
         if self.vision_calls >= self._config.max_vision_calls:
             return None
@@ -130,7 +134,7 @@ class GameLearner:
             # Nothing to learn from, such as before play or while blinded. Waiting costs nothing.
             return None
         if self._readers_failing:
-            return "readers keep failing"
+            return "a bar grew past its box" if self._grown else "readers keep failing"
         data = (await self._profile()).data
         if not data.get("regions"):
             return "nothing learned yet"
@@ -144,7 +148,7 @@ class GameLearner:
     async def learn(self, reason: str) -> bool:
         """One pass. Returns whether anything was learned. Never raises for a vendor failure."""
         self._last_pass_at = self._clock()
-        self._readers_failing = False
+        self._readers_failing = self._grown = False
         calls_before = self.vision_calls
         log.info("Learning where the HUD is (%s)", reason)
         try:
@@ -260,17 +264,12 @@ class GameLearner:
             expected = proposal.fraction_seen if region.kind == "bar" else proposal.text_seen
             samples.append(Sample(crop_box(frame.image, region.box), expected))
         color = None
-        if region.kind == "bar" and samples:
-            # The fullest sample shows the most of the bar's colour.
-            fullest = max(samples, key=lambda s: s.expected if isinstance(s.expected, float) else 0)
-            names = [s.proposal.fill_color for s in agreed.sightings if s.proposal.fill_color]
-            fill = Counter(names).most_common(1)[0][0] if names else None
-            color = propose_color(fullest.crop, fill)
-            if color is not None:
-                color = calibrate(color, samples)
-                if color.full_at < 1.0:
-                    full = color.full_at * 100
-                    log.info("A full %s bar colours %.0f%% of its box", region.name, full)
+        if region.kind == "bar":
+            fills = [s.proposal.fill_color for s in agreed.sightings if s.proposal.fill_color]
+            color = fit_color(samples, fills)
+            if color is not None and color.full_at < 1.0:
+                full = color.full_at * 100
+                log.info("A full %s bar colours %.0f%% of its box", region.name, full)
         spec = build_spec(agreed, color)
         if spec is None:
             log.info("No local reader for %s: nothing to read it by", region.name)
