@@ -82,8 +82,9 @@ class PointInput(BaseModel):
 
 class WikiInput(BaseModel):
     topic: str = Field(
-        description="The page to look up, by name: an enemy, an item, a mechanic. Empty for the "
-        "wiki's main page."
+        description="The page to look up, by name: an enemy, an item, a mechanic. The page the "
+        "answer is on, not just a mode or place the question mentions. Empty for the wiki's main "
+        "page."
     )
     question: str = Field(
         description="What the player wants to know about it, such as how to craft it, what it "
