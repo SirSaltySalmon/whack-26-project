@@ -57,3 +57,31 @@ def test_an_old_line_no_longer_counts() -> None:
 
 def test_nothing_said_means_no_echo() -> None:
     assert not SelfEcho().is_echo("What do you see on the screen?")
+
+
+# Astra's review: said at t=0, heard at t=2. Each case was misjudged by the first version.
+
+
+def test_a_player_correction_isnt_dropped() -> None:
+    echo, _ = echo_after("Use the healing potion.")
+    assert not echo.is_echo("Don't use the healing potion.")
+
+
+def test_repeated_words_are_matched_in_order() -> None:
+    echo, _ = echo_after("Go left, then right, then go right.")
+    assert echo.is_echo("Go right, go right.")
+
+
+def test_an_expanded_contraction_is_still_an_echo() -> None:
+    echo, _ = echo_after("Fine, I'll look.")
+    assert echo.is_echo("Fine, I will look.")
+
+
+def test_a_short_bark_heard_back_whole_is_an_echo() -> None:
+    echo, _ = echo_after("One sec.")
+    assert echo.is_echo("One sec.")
+
+
+def test_a_short_turn_that_isnt_the_whole_line_goes_through() -> None:
+    echo, _ = echo_after("One sec.")
+    assert not echo.is_echo("sec")
