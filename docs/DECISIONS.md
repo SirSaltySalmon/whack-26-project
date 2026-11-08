@@ -360,3 +360,12 @@ The original comparison of memory stores assumed a single game. Its ranking stil
 - **Track 2 (Capture and perception):** readers remain the source of live state. Only notable moments need to become `GameEvent`s.
 - **Track 3 (Voice and director):** the talker gets its context from memory instead of building its own, and the director still owns the question budget. The exact interface will be agreed with Track 3.
 - **Track 4 (Memory and learning):** the schema is being rewritten. Local databases created from the old schema must be deleted.
+
+## 2026-11-08: Claude Haiku for every fast role
+**Change:** the talker, player turns with tools, pointing and the progress scout move from Gemini (Flash-Lite and Flash) to Claude Haiku 5.5 with thinking off, joining the screen reports and `look_closer` already on it. Sonnet 5.5 stays on deep reasoning.
+
+**Why:** one vendor and one key for everything the player waits on, without free-tier quotas.
+
+**How:** `LLMFactory` picks the vendor from the model name: `claude-*` runs on Anthropic, anything else on Gemini, so going back is a change to `talker_model` or `vision_model`. All Haiku roles share one rate limiter, raised to 240 a minute.
+
+**Unproven:** whether Haiku's `box_2d` boxes (0-1000, `[ymin, xmin, ymax, xmax]`) are as accurate as Gemini's. Check with `scripts/check_pointing.py`.

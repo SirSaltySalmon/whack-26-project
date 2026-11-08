@@ -23,8 +23,10 @@ class Settings(BaseSettings):
 
     brain_port: int = 8765
 
-    talker_model: str = "gemini-3.5-flash-lite"
-    vision_model: str = "gemini-3.6-flash"
+    # Talker, player turns with tools, pointing and the progress scout. A model name starting with
+    # "claude" runs on Anthropic, anything else on Gemini (brain/llm/factory.py).
+    talker_model: str = "claude-haiku-5-5"
+    vision_model: str = "claude-haiku-5-5"
     # think_hard and session notes. Paid; falls back to deep_fallback_model without
     # ANTHROPIC_API_KEY. Effort is low, medium or high: medium keeps think_hard to a few seconds.
     deep_model: str = "claude-sonnet-5-5"
@@ -50,9 +52,9 @@ class Settings(BaseSettings):
         default_factory=lambda: {
             "gemini-3.5-flash-lite": 10,
             "gemini-3.6-flash": 6,
-            # One frame per 0.6 s at high focus is 100 a minute, plus look_closer. This is our
-            # own spending cap, not a quota.
-            "claude-haiku-5-5": 120,
+            # One frame per 0.6 s at high focus is 100 a minute, and the talker, tool turns,
+            # pointing and look_closer share this limiter. Our own spending cap, not a quota.
+            "claude-haiku-5-5": 240,
             # Only player-asked think_hard and a note every few minutes; a spending cap.
             "claude-sonnet-5-5": 10,
         }

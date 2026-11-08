@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, progress scout). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY` |
+| LLMs | Claude Haiku 5.5 (paid, thinking off): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
 | Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 

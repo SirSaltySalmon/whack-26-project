@@ -15,6 +15,7 @@ from brain.events import EventBus
 from brain.learner.progress import ProgressScout
 from brain.learner.questions import planned_progress_question
 from brain.llm.base import LLMUnavailableError
+from brain.llm.claude import ClaudeClient
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
 from brain.memory.db import Database
@@ -31,7 +32,7 @@ from brain.voice.barks import BarkBank, ElevenLabsSynth
 log = logging.getLogger(__name__)
 
 
-def make_talker(factory: LLMFactory) -> GeminiClient | None:
+def make_talker(factory: LLMFactory) -> ClaudeClient | GeminiClient | None:
     try:
         return factory.talker()
     except LLMUnavailableError as exc:
