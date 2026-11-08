@@ -1,4 +1,6 @@
-# AI Gamer Partner
+# Purrtner
+
+Team: WHACKing my meat proxies
 
 A game-agnostic AI companion that watches you play, talks in short natural phrases, remembers your game, looks things up, and points at things on screen. It tracks where each fact came from, and asks you when it isn't sure instead of guessing.
 
@@ -87,7 +89,7 @@ With the brain stopped, use the **three-dot menu** next to each fact to **Edit**
 
 **Clear all memory** requires typing `CLEAR`. It saves a database backup first, then clears all games' facts and history, questions, session notes, conversations/events, rejection records and derived vector indexes. Learned game profiles, dashboard settings and custom instructions are kept. Existing exported files, replay recordings and the backup still contain their original data; they are not used as live memory.
 
-**Custom instructions** are saved separately and apply to the next reply, including when changed during play. Examples: “Avoid spoilers” or “Focus on building.” They do not change source/confidence rules. Stop a brain launched from another terminal there before editing memory.
+**Custom instructions** are saved separately and apply to the next reply, including when changed during play. Examples: ï¿½Avoid spoilersï¿½ or ï¿½Focus on building.ï¿½ They do not change source/confidence rules. Stop a brain launched from another terminal there before editing memory.
 
 ### From the terminal
 
