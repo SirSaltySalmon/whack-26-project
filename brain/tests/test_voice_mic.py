@@ -17,6 +17,7 @@ from shared.protocol.messages import AvatarState, Settings
 
 pytest.importorskip("pyaudio")
 from brain.voice.pipecat_voice import PipecatVoice  # noqa: E402
+from brain.voice.self_echo import SelfEcho  # noqa: E402
 
 Handler = Callable[[Any, str], Awaitable[None]]
 
@@ -60,6 +61,7 @@ class Harness:
         voice._bus = self.bus
         voice._link = self.overlay  # type: ignore[assignment]
         voice._mood = MoodTracker()
+        voice._echo = SelfEcho()
         voice._last_partial = ""
         voice._last_partial_logged = 0.0
         voice.user_speaking = False

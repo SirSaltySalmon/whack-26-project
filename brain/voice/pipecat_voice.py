@@ -33,7 +33,6 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.workers.runner import WorkerRunner
 
 from brain.config import Settings
@@ -50,7 +49,9 @@ from brain.server import OverlayLink
 from brain.voice.barks import Bark
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
+from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
+from brain.voice.services import elevenlabs_tts, flux_stt, local_audio
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
@@ -69,6 +70,7 @@ class PipecatVoice:
         self._link = link
         self._subtitles = SubtitleOnlyVoice(link)
         self._mood = MoodTracker()
+        self._echo = SelfEcho()
         self._last_partial = ""
         self._last_partial_logged = 0.0
         self.bot_speaking = False
@@ -90,23 +92,8 @@ class PipecatVoice:
         self._style: str = link.settings.voice_style
         # Subscribed now, so a style the Control Center sends on connect isn't missed.
         self._settings_events = bus.subscribe()
-        transport = LocalAudioTransport(
-            LocalAudioTransportParams(
-                audio_in_enabled=True,
-                audio_out_enabled=speaks,
-                input_device_index=settings.mic_device_index,
-                output_device_index=settings.speaker_device_index,
-            )
-        )
-        stt = DeepgramFluxSTTService(
-            api_key=settings.deepgram_api_key.get_secret_value(),
-            settings=DeepgramFluxSTTService.Settings(
-                model=settings.stt_model,
-                eot_threshold=settings.stt_eot_threshold,
-                eot_timeout_ms=settings.stt_eot_timeout_ms,
-                keyterm=list(settings.stt_keyterms),
-            ),
-        )
+        transport = local_audio(settings, speaks)
+        stt = flux_stt(settings, settings.deepgram_api_key.get_secret_value())
         self._bridge = TurnBridge(self)
         self._register_turn_events(stt)
 
@@ -117,14 +104,8 @@ class PipecatVoice:
             self._bridge,
         ]
         if settings.elevenlabs_api_key is not None and voice_id:
-            tts = ElevenLabsTTSService(
-                api_key=settings.elevenlabs_api_key.get_secret_value(),
-                settings=ElevenLabsTTSService.Settings(
-                    model=settings.tts_model,
-                    voice=voice_id,
-                    **style_values(self._style),
-                ),
-            )
+            api_key = settings.elevenlabs_api_key.get_secret_value()
+            tts = elevenlabs_tts(settings, api_key, voice_id, self._style)
             processors += [tts, transport.output(), SpokenOutputTap(self)]
         pipeline = Pipeline(processors)
         self._worker = PipelineWorker(
@@ -143,6 +124,7 @@ class PipecatVoice:
         if not self._speaks:
             return await self._subtitles.say(text)
         log.info("Say: %s", text)
+        self._echo.said(text)
         self._first_audio.queued(origin, self.bot_speaking)
         await self._worker.queue_frame(TTSSpeakFrame(text))
         return True
@@ -154,6 +136,7 @@ class PipecatVoice:
         if not self._speaks:
             return await self._subtitles.say(bark.text)
         log.info("Bark: %s", bark.text)
+        self._echo.said(bark.text)
         # One chunk, because SpokenOutputTap only sees TTS text and a line this short needs no
         # word timing. It goes out as the audio is queued, which is within a chunk of it playing.
         await self.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=bark.text, final=True))
@@ -280,18 +263,24 @@ class PipecatVoice:
 
         @stt.event_handler("on_end_of_turn")
         async def _on_end(_service: DeepgramFluxSTTService, transcript: str) -> None:
-            self.user_speaking = False
-            if not self.mic_on():
-                # They turned the mic off mid-sentence, so the half they said isn't a turn. No
-                # avatar change either: check_mic already reset it, and it may be talking now.
-                log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
-                return
-            await self.send(AvatarState(state="idle"))
-            transcript = transcript.strip()
-            if not transcript:
-                return
-            self._first_audio.turn_ended()
-            mood = self._mood.add_text(transcript, final=True)
-            log.info("Player (%s): %s", mood.label if mood else "unknown", transcript)
-            self._publish_mood(mood)
-            self._bus.publish(PlayerSpeech(transcript=transcript))
+            await self.on_end_of_turn(transcript)
+
+    async def on_end_of_turn(self, transcript: str) -> None:
+        self.user_speaking = False
+        if not self.mic_on():
+            # They turned the mic off mid-sentence, so the half they said isn't a turn. No
+            # avatar change either: check_mic already reset it, and it may be talking now.
+            log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
+            return
+        await self.send(AvatarState(state="idle"))
+        transcript = transcript.strip()
+        if not transcript:
+            return
+        if self._echo.is_echo(transcript):
+            log.warning("Ignoring the partner's own voice, heard by the mic: %s", transcript)
+            return
+        self._first_audio.turn_ended()
+        mood = self._mood.add_text(transcript, final=True)
+        log.info("Player (%s): %s", mood.label if mood else "unknown", transcript)
+        self._publish_mood(mood)
+        self._bus.publish(PlayerSpeech(transcript=transcript))

@@ -51,6 +51,9 @@ class Closeup:
     image: bytes
     # What the image covers, in physical screen pixels. A model's box converts through this.
     region: CropRegion
+    # The image's own size after fitting, for models that answer in its pixels.
+    width: int = 0
+    height: int = 0
 
 
 def encode_jpeg(image: np.ndarray) -> bytes:
@@ -60,7 +63,8 @@ def encode_jpeg(image: np.ndarray) -> bytes:
     return encoded.tobytes()
 
 
-def _fit(image: np.ndarray, max_edge_px: int) -> np.ndarray:
+def fit_image(image: np.ndarray, max_edge_px: int) -> np.ndarray:
+    """Shrinks to fit, or enlarges small images by whole multiples to keep pixel fonts crisp."""
     height, width = image.shape[:2]
     longest = max(height, width)
     if longest > max_edge_px:
@@ -87,7 +91,10 @@ def make_closeup(
     left, top = round(width * left_f), round(height * top_f)
     right, bottom = round(width * right_f), round(height * bottom_f)
     offset_x, offset_y = (frame.region.x, frame.region.y) if frame.region else (0, 0)
+    fitted = fit_image(masked[top:bottom, left:right], max_edge_px)
     return Closeup(
-        image=encode_jpeg(_fit(masked[top:bottom, left:right], max_edge_px)),
+        image=encode_jpeg(fitted),
         region=CropRegion(offset_x + left, offset_y + top, right - left, bottom - top),
+        width=fitted.shape[1],
+        height=fitted.shape[0],
     )

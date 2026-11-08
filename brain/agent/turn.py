@@ -9,7 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from brain.agent.tools import ToolRegistry, TurnContext
-from brain.director.talker import build_system, cap_words
+from brain.director.talker import build_system, cap_words, drop_narration
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, ToolLLM
 
 log = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ async def run_turn(
         except (LLMUnavailableError, LLMEmptyResponseError) as exc:
             log.warning("Couldn't get a reply after running tools: %s", exc)
             return after_tools_line
-    text = cap_words(step.text, max_words)
+    text = cap_words(drop_narration(step.text), max_words)
     if text:
         return text
     if ran_tools:

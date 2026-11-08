@@ -6,12 +6,18 @@ import cv2
 import numpy as np
 import pytest
 
-from brain.agent.rewind import LABEL_STRIP_PX, make_sheet, pick_moments
-from brain.agent.schemas import CANT_SEE
+from brain.agent.rewind import (
+    LABEL_STRIP_PX,
+    SHEET_MAX_EDGE_PX,
+    Rewind,
+    make_sheet,
+    pick_moments,
+)
+from brain.agent.schemas import CANT_SEE, LookBackInput
 from brain.agent.tools import TurnContext
 from brain.capture.ring_buffer import Frame
 from brain.tests.agent_rig import rig
-from brain.tests.fakes import VisionCall, make_buffer, make_frame
+from brain.tests.fakes import FakeVision, VisionCall, make_buffer, make_frame
 from shared.protocol.messages import Rect
 
 ASK = {"question": "what hit me?"}
@@ -121,3 +127,16 @@ async def test_fewer_than_two_usable_frames_means_it_cant_see_and_calls_nothing(
     r = rig(*(make_frame(ts=now - age) for age in ages))
     assert await r.run("look_back", TurnContext(started_at=now), **ASK) == CANT_SEE
     assert r.vision.calls == []
+
+
+async def test_a_full_hd_game_is_sent_no_wider_than_claude_takes_unshrunk() -> None:
+    # The live closeup edge is 1920, past what Claude takes unshrunk, so the sheet is capped.
+    now = time.monotonic()
+    vision = FakeVision({"answer": "A slime.", "sure": True})
+    big = [make_frame(1920, 1080, ts=now - age) for age in EVERY_MOMENT]
+    tool = Rewind(make_buffer(*big), lambda: 1.0, lambda: vision, 0, 1920).tool(5.0)
+    await tool.handler(LookBackInput(question="what hit me?"), TurnContext(started_at=now))
+    height, width = sent_image(vision.calls[0]).shape[:2]
+    # Uses the room it has, and stays under Claude's resize threshold.
+    assert SHEET_MAX_EDGE_PX - 10 < max(height, width) <= SHEET_MAX_EDGE_PX
+    assert height * width < 1_150_000

@@ -1,0 +1,54 @@
+{
+  "brief": "Terraria is a 2D sandbox action-adventure about digging, crafting, building, and fighting. Players mine ores, craft better gear, build housing for NPCs, and defeat bosses like the Eye of Cthulhu and Wall of Flesh. Progress moves from Pre-Hardmode to Hardmode. Common terms: biomes, hotbar, Expert mode, events, and the Guide.",
+  "regions": [
+    {
+      "name": "health",
+      "kind": "bar",
+      "box": {
+        "x": 0.8296875,
+        "y": 0.011111111111111112,
+        "w": 0.0755208333333333,
+        "h": 0.03888888888888889
+      },
+      "confidence": 1.0
+    }
+  ],
+  "readers": [
+    {
+      "name": "health",
+      "region": "health",
+      "type": "color_fill",
+      "color": {
+        "hsv_low": [
+          166,
+          110,
+          65
+        ],
+        "hsv_high": [
+          6,
+          255,
+          255
+        ],
+        "axis": "x",
+        "reverse": false,
+        "full_at": 0.308
+      },
+      "ocr": null,
+      "rules": [
+        {
+          "when": "below",
+          "value": 0.25,
+          "clear_at": 0.4,
+          "event": "health_low",
+          "confirm_reads": 2
+        }
+      ],
+      "live_key": "health",
+      "interval_s": 0.2
+    }
+  ],
+  "learned_for": {
+    "width": 1920,
+    "height": 1080
+  }
+}

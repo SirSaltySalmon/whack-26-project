@@ -36,6 +36,9 @@ GAP_PX = 4
 BACKGROUND = 235
 LABEL_COLOR = (0, 0, 0)
 MAX_TOKENS = 1000  # The same room as look_closer's answer.
+# Claude shrinks an image past about 1.15 megapixels. A 2x2 sheet of 16:9 frames 1280 px wide
+# stays under that, so a wider one would only cost upload time, not show more.
+SHEET_MAX_EDGE_PX = 1280
 
 
 @dataclass(frozen=True)
@@ -134,7 +137,7 @@ class Rewind:
         self._display_scale = display_scale
         self._vision = vision
         self._padding_px = padding_px
-        self._max_edge_px = max_edge_px
+        self._max_edge_px = min(max_edge_px, SHEET_MAX_EDGE_PX)
 
     def tool(self, timeout_s: float) -> Tool:
         # Not quick: the filler line plays, and the turn survives a barge-in like look_closer.

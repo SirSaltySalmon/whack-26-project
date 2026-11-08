@@ -63,7 +63,7 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 - The game aims with the mouse, so overlay parts stay click-through unless they need a click. The character's body never catches clicks: hovering shows a grip to move it and a corner to resize it, in a 3:4 portrait frame.
 - The overlay must not take keyboard focus from the game. The window stays `focusable: false` until the player chooses to type, and goes back when it loses focus.
 - The pointer sits beside its target, never on it, because its masked rectangle would hide the target from the next vision call. It always fades on its own, using `ttl_ms`.
-- Convert coordinates in one tested function. Gemini boxes are `[ymin, xmin, ymax, xmax]` on a 0-1000 scale relative to the image sent, dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
+- Convert coordinates in one tested function. Vision boxes come back as `[x_min, y_min, x_max, y_max]` in pixels of the image sent, which is kept at 1280 px or less so Claude sees it unshrunk; `pixel_box_to_normalized` turns them into the 0-1000 `NormalizedBox`. Claude places 0-1000 boxes badly, so don't ask it for them. dxcam uses physical pixels, and Electron uses DIPs. Test at 100% and 150% Windows scaling.
 
 **Tools**
 - Tools run only on turns the player started, never on game events. That's what keeps `page_url` player-requested and vision calls bounded. One exception: a tip may call `point_at`, at most once per tip, and never opens a page. See [docs/DECISIONS.md](docs/DECISIONS.md).
@@ -97,11 +97,13 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
+.\run.cmd --live --type                    # overlay and brain together, from one terminal; arguments go to the brain. Elsewhere: python scripts/run_all.py
 python -m brain --live                     # run against the live game; finds its window if GAME_PROCESS is unset
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
-python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
 python -m brain --live --debug-regions     # also draw the learned HUD regions over the game
+python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
+python -m brain --live --off observer,tts   # turn parts off to save quota; `--help` lists them. DISABLE in .env does the same
 python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
@@ -120,6 +122,7 @@ npm --prefix overlay test
 npm --prefix overlay run format
 npm --prefix overlay run gen:protocol      # after any change in shared/protocol/, with the venv active
 python scripts/overlay_demo.py             # drives the overlay with no game, mic or API keys
+.\run.cmd scripts/debug_regions_demo.py    # overlay plus fixed HUD-region boxes: proves the debug view works without the learner
 ```
 
 ## Testing
@@ -138,6 +141,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
 - `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` finds the game itself (`brain/game_detect.py`): a game picked before is taken at once if it's open, otherwise the brain takes the first window the player switches to that isn't a terminal, browser, launcher or the like. The pick is kept in `data/games.json`. Without a terminal, as when the Control Center starts the brain, it waits `game_detect_timeout_s` (60 s) for the switch, then falls back to the last pick. Live capture stays off until there's a game.
 - `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
+- Optional for testing: `DISABLE`, parts to turn off, such as `observer,tts` (see `brain/switches.py`). A blank key, such as `ANTHROPIC_API_KEY=`, counts as unset.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 
@@ -168,9 +172,9 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 **Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers, learned regions, WP9 and memory search are merged. From `perf/voice-path-stalls`, only the vault-export fix was kept: every role runs on Claude now, so sharing SDK clients no longer matters. Next, run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
-- [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. After the WP4 merge, reader events need `frame_ts`
+- [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. Observer and reader events both carry `frame_ts`
 - [ ] WP11: the latency report (`scripts/latency_report.py`), the event-loop stall watch (`brain/loop_watch.py`) and the Control Center's Latency tab are built. Observer, tool-choice and pointer evals aren't. Results go in the test plan's Benchmarks table
-- [ ] WP10, if there's time before freeze: `look_back` answers "what just hit me?" from the last few seconds of frames
+- [ ] WP10, built and not yet run live: `look_back` answers "what just hit me?" from the last few seconds of frames
 
 **Wired, not yet run live**
 - [ ] Player turns use tools: look closer, point, wiki, note a question, think hard
@@ -197,6 +201,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 
 **Not yet run live**
 - [ ] The learner and readers over a real game. Until a profile is learned, live state still comes from the Haiku observer
+- [ ] `main` merged an early snapshot of the readers (`bfabbf5`). The live-tested versions are on `claude/night`: pixel boxes and fill colours from Haiku, full-bar calibration, and a closer look for small elements. Health was learned live there; mana is found but its labels aren't trusted yet
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 
 **Still unproven from hour 0-1**

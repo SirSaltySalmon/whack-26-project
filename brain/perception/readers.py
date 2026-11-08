@@ -29,9 +29,6 @@ log = logging.getLogger(__name__)
 
 Status = Literal["ok", "masked", "unreadable"]
 
-# A column (or row) of a bar counts as filled when this share of its pixels match the colour. Bars
-# often have borders, shading or text drawn over them, so it can't require every pixel.
-FILLED_SHARE = 0.3
 MAX_TEXT_CHARS = 120
 FRACTION_TYPES = ("color_fill", "ocr_fraction")
 
@@ -69,10 +66,13 @@ def _colour_mask(hsv: np.ndarray, params: ColorFillParams) -> np.ndarray:
 
 
 class ColorFillReader:
-    """How full a bar is, from how far its colour reaches along the bar.
+    """How full a bar is, from how many of its box's pixels show its colour.
 
-    It measures the furthest filled column from the start edge, not an unbroken run, so segmented
-    bars and rows of icons (such as hearts) read correctly despite the gaps between them.
+    Counted against how many show it when the bar is full (`full_at`), so it doesn't depend on
+    which way the bar drains, padding inside a loose box, a fixed end cap, the gaps in a row of
+    icons such as hearts, or how many rows of icons there are. Measuring the furthest coloured
+    column got the first four wrong, and counting coloured columns the last. Counting pixels is
+    also continuous, so an icon's edges can't flip a whole column in or out between frames.
     """
 
     uses_ocr = False
@@ -83,24 +83,22 @@ class ColorFillReader:
         self._params = spec.color
 
     def read(self, crop: np.ndarray) -> Reading:
-        if crop.size == 0:
-            return Reading(self.spec.name, "unreadable")
-        matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), self._params)
-        if self._params.axis == "x":
-            # Fills left to right unless reversed.
-            lines = matches.mean(axis=0)
-            filled = lines[::-1] if self._params.reverse else lines
-        else:
-            # Fills bottom up unless reversed, which means top down.
-            lines = matches.mean(axis=1)
-            filled = lines if self._params.reverse else lines[::-1]
-        filled_at = np.flatnonzero(filled >= FILLED_SHARE)
+        share = colour_share(crop, self._params)
         # No colour at all might mean empty, or a bar that's gone or changed colour. Those can't be
         # told apart, so it isn't read as 0: a false "health low" is worse than not knowing.
-        if filled_at.size == 0:
+        if share is None:
             return Reading(self.spec.name, "unreadable")
-        fraction = round(float(filled_at[-1] + 1) / len(filled), 3)
+        fraction = round(min(1.0, share / self._params.full_at), 3)
         return Reading(self.spec.name, "ok", fraction, f"{round(fraction * 100)}%")
+
+
+def colour_share(crop: np.ndarray, params: ColorFillParams) -> float | None:
+    """The share of the box's pixels, 0-1, that show the colour, before any full_at scaling."""
+    if crop.size == 0:
+        return None
+    matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), params)
+    share = float(matches.mean())
+    return share if share > 0 else None
 
 
 class OcrReader:

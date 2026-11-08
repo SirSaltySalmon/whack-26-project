@@ -146,3 +146,13 @@ async def test_the_debug_view_places_boxes_in_overlay_coordinates() -> None:
     (view,) = rig.engine.debug_view()
     assert (view.rect.x, view.rect.y, view.rect.width, view.rect.height) == (60, 30, 100, 10)
     assert (view.status, view.display) == ("ok", "50%")
+
+
+async def test_a_reader_event_carries_the_frame_it_read_for_latency() -> None:
+    rig = Rig()
+    await rig.engine.reload()
+    for fraction in (0.9, 0.2, 0.2):
+        await rig.show(health_frame_image(fraction))
+    (event,) = [e for e in rig.published() if isinstance(e, GameEvent)]
+    latest = rig.buffer.latest()
+    assert latest is not None and event.frame_ts == latest.ts

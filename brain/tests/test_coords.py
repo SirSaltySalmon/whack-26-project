@@ -1,6 +1,12 @@
 import pytest
 
-from brain.perception.coords import CropRegion, NormalizedBox, box_to_dip_rect, dip_to_physical
+from brain.perception.coords import (
+    CropRegion,
+    NormalizedBox,
+    box_to_dip_rect,
+    dip_to_physical,
+    pixel_box_to_normalized,
+)
 from shared.protocol.messages import Rect
 
 SCREEN = CropRegion(0, 0, 1920, 1080)
@@ -42,3 +48,39 @@ def test_dip_to_physical_scales_up() -> None:
 def test_bad_boxes_are_rejected(box: tuple[float, float, float, float]) -> None:
     with pytest.raises(ValueError):
         NormalizedBox(*box)
+
+
+def test_a_pixel_box_on_a_shrunk_image_lands_on_the_full_screen() -> None:
+    # A 1920x1080 screen sent as 1280x720: the right half of the image is the right half of it.
+    box = pixel_box_to_normalized([640, 0, 1280, 720], 1280, 720)
+    assert (box.ymin, box.xmin, box.ymax, box.xmax) == (0, 500, 1000, 1000)
+    rect = box_to_dip_rect(box, SCREEN, 1.0)
+    assert (rect.x, rect.y, rect.width, rect.height) == (960, 0, 960, 1080)
+
+
+def test_a_pixel_box_at_150_percent_scaling() -> None:
+    box = pixel_box_to_normalized([320, 180, 960, 540], 1280, 720)
+    rect = box_to_dip_rect(box, SCREEN, 1.5)
+    # The middle quarter of 1920x1080 physical pixels, in DIPs at 150%.
+    assert (rect.x, rect.y, rect.width, rect.height) == pytest.approx((320, 180, 640, 360))
+
+
+@pytest.mark.parametrize(
+    "box_px",
+    [
+        [0, 0, 100],
+        [-100, 0, 100, 100],  # Far past the edge is nonsense, not looseness
+        [0, 0, 1400, 100],
+        [100, 0, 100, 100],
+        [float("nan"), 0, 1, 1],
+    ],
+)
+def test_a_pixel_box_that_cant_be_used_is_refused(box_px: list[float]) -> None:
+    with pytest.raises(ValueError):
+        pixel_box_to_normalized(box_px, 1280, 720)
+
+
+def test_a_box_a_pixel_past_the_edge_is_clipped_not_refused() -> None:
+    # From Astra's review: a visible target at the right edge was lost to a 1-pixel overshoot.
+    box = pixel_box_to_normalized([1270, 100, 1281, 112], 1280, 720)
+    assert box.xmax == 1000 and box.xmin == pytest.approx(1270 / 1280 * 1000)

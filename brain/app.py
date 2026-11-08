@@ -143,20 +143,8 @@ async def run(
     # Replay never opens the mic, which would mix live speech into the recording, and never
     # spends TTS characters. Subtitles also keep two runs' messages comparable.
     voice = SubtitleOnlyVoice(link) if replay_dir else create_voice(settings, bus, link)
-
-    # Set below, once the agent tools that find the wiki exist.
-    tools: AgentTools | None = None
-    hud = build_hud(
-        settings,
-        factory,
-        database,
-        buffer,
-        link,
-        bus,
-        observer,
-        lambda: tools.research if tools else None,
-        live=not replay_dir,
-    )
+    # Readers run on replays too, so a reader change shows up in a replayed session.
+    hud = build_hud(settings, factory, database, buffer, link, bus, observer, live=not replay_dir)
 
     async def talker_context(query: str) -> str:
         # What the partner hears and sees now, on top of what memory knows.
@@ -175,6 +163,7 @@ async def run(
     else:
         talker = live_talker
     # Replays never spend money on vision, so they get plain replies with no tools.
+    tools = None
     open_page = None
     if live_talker is not None:
         tools = AgentTools(
@@ -258,13 +247,14 @@ async def run(
             tasks.create_task(survive("Voice", voice.run()))
             if observer:
                 tasks.create_task(survive("Observer", observer.run()))
-            if scout:
-                tasks.create_task(survive("Progress", scout.run()))
             tasks.create_task(survive("Readers", hud.readers.run()))
             if hud.learner:
                 tasks.create_task(survive("Learner", hud.learner.run()))
             if settings.debug_regions:
-                tasks.create_task(survive("Debug view", send_debug_regions(hud.readers, link.send)))
+                debug = send_debug_regions(hud.readers, link.send)
+                tasks.create_task(survive("Debug view", debug))
+            if scout:
+                tasks.create_task(survive("Progress", scout.run()))
             tasks.create_task(memory.run())
             if semantic:
                 tasks.create_task(survive("Memory search", semantic.run()))

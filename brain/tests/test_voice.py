@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from brain.config import Settings
-from brain.events import EventBus, PlayerMood, PlayerSpeechPartial
+from brain.events import EventBus, PlayerMood, PlayerSpeech, PlayerSpeechPartial
 from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.tests.fakes import FakeOverlay
@@ -15,6 +15,7 @@ from shared.protocol.messages import AvatarState, SubtitleChunk
 
 pytest.importorskip("pyaudio")
 from brain.voice.pipecat_voice import PipecatVoice  # noqa: E402
+from brain.voice.self_echo import SelfEcho  # noqa: E402
 
 
 def test_missing_voice_keys_fall_back_to_subtitles() -> None:
@@ -60,6 +61,9 @@ def _listening_voice() -> tuple["PipecatVoice", EventBus]:
     voice._mood = MoodTracker()
     voice._last_partial = ""
     voice._last_partial_logged = 0.0
+    voice._echo = SelfEcho()
+    voice._link = FakeOverlay()  # type: ignore[assignment]
+    voice._first_audio = FirstAudio()
     voice.user_speaking = True
     return voice, bus
 
@@ -152,6 +156,7 @@ def _speaking_voice(
     voice._worker = worker  # type: ignore[assignment]
     voice._link = overlay or FakeOverlay()  # type: ignore[assignment]
     voice._speaks = True
+    voice._echo = SelfEcho()
     voice.user_speaking = user_speaking
     voice.bot_speaking = False
     voice._first_audio = FirstAudio()
@@ -201,3 +206,16 @@ async def test_pipecat_voice_without_speech_shows_a_bark_as_a_subtitle() -> None
     assert await voice.play(BARK) is True
     assert worker.queued == []
     assert [m.text for m in overlay.sent if isinstance(m, SubtitleChunk)] == [BARK.text]
+
+
+async def test_the_partners_own_voice_isnt_taken_as_a_player_turn() -> None:
+    voice, bus = _listening_voice()
+    events = bus.subscribe()
+    voice._echo.said("I can't check that right now.")
+    await voice.on_end_of_turn("I can't check that right now.")
+    await voice.on_end_of_turn("What's that glowing thing over there?")
+    published = []
+    while not events.empty():
+        published.append(events.get_nowait())
+    turns = [e.transcript for e in published if isinstance(e, PlayerSpeech)]
+    assert turns == ["What's that glowing thing over there?"]
