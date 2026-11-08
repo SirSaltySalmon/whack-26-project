@@ -527,6 +527,110 @@
       "title": "DangerState",
       "type": "object"
     },
+    "DebugBrain": {
+      "description": "What the brain hears, decides and does right now, for a small panel over the game.\n\nAlways the whole snapshot, about twice a second: the overlay hides the panel when they stop.",
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision"
+        },
+        "doing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doing"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Focus"
+        },
+        "hearing": {
+          "default": "",
+          "title": "Hearing",
+          "type": "string"
+        },
+        "hearing_live": {
+          "default": false,
+          "title": "Hearing Live",
+          "type": "boolean"
+        },
+        "latency": {
+          "items": {
+            "$ref": "#/$defs/DebugLatency"
+          },
+          "title": "Latency",
+          "type": "array"
+        },
+        "mood": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mood"
+        },
+        "mood_valence": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Mood Valence",
+          "type": "number"
+        },
+        "type": {
+          "const": "debug.brain",
+          "default": "debug.brain",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "DebugBrain",
+      "type": "object"
+    },
+    "DebugLatency": {
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "ms": {
+          "minimum": 0,
+          "title": "Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "ms"
+      ],
+      "title": "DebugLatency",
+      "type": "object"
+    },
     "DebugRegion": {
       "properties": {
         "display": {
@@ -1746,6 +1850,7 @@
           "card.show": "#/$defs/CardShow",
           "card.update": "#/$defs/CardUpdate",
           "danger.state": "#/$defs/DangerState",
+          "debug.brain": "#/$defs/DebugBrain",
           "debug.regions": "#/$defs/DebugRegions",
           "debug.sightings": "#/$defs/DebugSightings",
           "page.read": "#/$defs/PageRead",
@@ -1797,6 +1902,9 @@
         },
         {
           "$ref": "#/$defs/DebugSightings"
+        },
+        {
+          "$ref": "#/$defs/DebugBrain"
         },
         {
           "$ref": "#/$defs/DangerState"

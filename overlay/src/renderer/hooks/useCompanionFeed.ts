@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   Brain,
+  DebugBrain,
   DebugRegion,
   MemoryToast,
   SettingsState,
@@ -38,6 +39,7 @@ export interface CompanionFeed {
   settings: SettingsState | null;
   debugRegions: DebugRegion[];
   debugSightings: ShownSighting[];
+  debugBrain: DebugBrain | null;
   handle(message: Brain): void;
   dismissToast(id: number): void;
 }
@@ -48,6 +50,7 @@ export function useCompanionFeed(): CompanionFeed {
   const [toasts, setToasts] = useState<ShownToast[]>([]);
   const [settings, setSettings] = useState<SettingsState | null>(null);
   const [debugRegions, setDebugRegions] = useState<DebugRegion[]>([]);
+  const [debugBrain, setDebugBrain] = useState<DebugBrain | null>(null);
   const [danger, setDanger] = useState<DangerSignal | null>(null);
   const sightings = useDebugSightings();
   const nextToastId = useRef(0);
@@ -77,6 +80,13 @@ export function useCompanionFeed(): CompanionFeed {
     return () => clearTimeout(timer);
   }, [debugRegions]);
 
+  // Snapshots come about twice a second while debugging, so silence means the brain stopped.
+  useEffect(() => {
+    if (debugBrain === null) return;
+    const timer = setTimeout(() => setDebugBrain(null), DEBUG_REGIONS_STALE_MS);
+    return () => clearTimeout(timer);
+  }, [debugBrain]);
+
   const handle = (message: Brain): void => {
     switch (message.type) {
       case "subtitle.chunk":
@@ -101,6 +111,9 @@ export function useCompanionFeed(): CompanionFeed {
       case "debug.sightings":
         sightings.add(message.sightings);
         break;
+      case "debug.brain":
+        setDebugBrain(message);
+        break;
       case "danger.state":
         setDanger((current) => ({
           level: message.level,
@@ -119,6 +132,7 @@ export function useCompanionFeed(): CompanionFeed {
     settings,
     debugRegions,
     debugSightings: sightings.shown,
+    debugBrain,
     handle,
     dismissToast: (id) =>
       setToasts((current) => current.filter((shown) => shown.id !== id)),

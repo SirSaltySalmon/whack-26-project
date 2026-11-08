@@ -1,14 +1,11 @@
-"""Runs the rules against the event bus and carries out their actions.
-Deciding stays instant because speech runs in its own task. There's one speech slot: a player turn
-replaces whatever is in it, the start of their next turn cancels it, and anything else is skipped
-while it's busy. A cancelled turn doesn't take back a pointer or card it has already shown, and if
-nothing was said for it, its words start the player's next turn (carry.py).
-
-One exception: a turn that has started a tool, such as checking the screen, isn't cancelled.
-Players talk while they wait, and cancelling meant the answer they asked for never came. It
-finishes, says its answer once they stop talking, and then their next turn runs.
-
-Pausing is the player's own choice, so it cancels the slot even mid-tool, with any turn queued.
+"""Runs the rules against the event bus and carries out their actions. Deciding stays instant
+because speech runs in its own task. There's one speech slot: a player turn replaces whatever is in
+it, the start of their next turn cancels it, and anything else is skipped while it's busy. A
+cancelled turn doesn't take back a pointer or card it has shown, and if nothing was said for it,
+its words start the player's next turn (carry.py). One exception: a turn that has started a tool,
+such as checking the screen, isn't cancelled. Players talk while they wait, and cancelling meant
+the answer they asked for never came. It finishes, says its answer once they stop talking, and
+then their next turn runs. Pausing is the player's choice, so it cancels the slot even mid-tool.
 """
 
 import asyncio
@@ -41,6 +38,7 @@ from brain.director.rules import (
 from brain.director.slot import SpeechSlot
 from brain.director.talker import event_prompt
 from brain.director.turns import TIP_QUERY, Persona, give_tip, player_reply, talker_reply
+from brain.director.why import DecisionHook, ignore_decision
 from brain.events import Event, EventBus, Tick
 from brain.latency import Origin
 from brain.llm.base import ChatLLM, TextLLM, ToolLLM
@@ -83,6 +81,7 @@ class Director:
         voice_id: Callable[[], str | None] = lambda: None,
         custom_instructions: Callable[[], str] = lambda: "",
         bark_events: Mapping[str, str] | None = None,
+        on_decision: DecisionHook = ignore_decision,  # For the debug panel
         # Stamps ticks and spoken lines, so they share a clock with the events the rules see.
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -103,6 +102,7 @@ class Director:
         self._questions = Questions(take_question, release_question)
         self._page_excerpt = page_excerpt
         self._clock = clock
+        self._on_decision = on_decision
         events = self._personalities.event_lines if bark_events is None else bark_events
         self._state = DirectorState(
             advice_after_learning_s=advice_after_learning_s, bark_events=events
@@ -134,7 +134,9 @@ class Director:
             # A tick only brings up questions and tips, which a busy slot would skip, and deciding
             # one would spend its budget on nothing. The next tick tries again.
             return
-        for action in decide(event, self._state):
+        actions = decide(event, self._state)
+        self._on_decision(event, actions, self._slot.busy(), self._state)
+        for action in actions:
             self._dispatch(action)
 
     def _dispatch(self, action: Action) -> None:

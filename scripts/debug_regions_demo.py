@@ -7,8 +7,10 @@ No game, mic, learner or API keys. It stands in for the brain on the same socket
 --debug-regions sends: five labelled boxes, twice a second, each showing a reading that ticks and a
 status that cycles ok, masked, unreadable every few seconds. It also sends what the observer and
 tools would: two moving "noticed" boxes, and a look, a point and a look back in turn, each fading
-on its own. If they appear and change, the overlay side works, and a missing box in a real run is
-the learner's or the observer's doing. Ctrl+C stops it.
+on its own. The brain panel in the corner steps through a few made-up moments: hearing a
+question, answering it with the wiki, and a danger bark then a cooldown. If they appear and
+change, the overlay side works, and a missing box in a real run is the learner's or the
+observer's doing. Ctrl+C stops it.
 """
 
 import asyncio
@@ -27,6 +29,8 @@ from brain.events import EventBus  # noqa: E402
 from brain.server import OverlayLink, create_app  # noqa: E402
 from scripts.overlay_demo import offer_settings  # noqa: E402
 from shared.protocol.messages import (  # noqa: E402
+    DebugBrain,
+    DebugLatency,
     DebugRegion,
     DebugRegions,
     DebugSighting,
@@ -102,11 +106,55 @@ def regions_at(tick: int) -> DebugRegions:
     return DebugRegions(regions=regions)
 
 
+QUESTION = "what's the best boss to beat in the early game?"
+# Made-up moments for the brain panel, each shown for SCENE_TICKS sends.
+SCENE_TICKS = 8
+
+
+def _timings(*pairs: tuple[str, int]) -> list[DebugLatency]:
+    return [DebugLatency(label=label, ms=ms) for label, ms in pairs]
+
+
+SCENES = [
+    DebugBrain(hearing=QUESTION[:24], hearing_live=True, decision="listening", focus="low"),
+    DebugBrain(
+        hearing=QUESTION,
+        mood="positive",
+        mood_valence=0.5,
+        decision="answering you",
+        doing="wiki: Eye of Cthulhu",
+        focus="low",
+        latency=_timings(("turn, with tools", 2687), ("you stopped → voice", 1125)),
+    ),
+    DebugBrain(
+        hearing=QUESTION,
+        mood="frustrated",
+        mood_valence=-0.5,
+        decision="danger started: quick line",
+        focus="high",
+        latency=_timings(("frame → bark", 182), ("event → bark", 4), ("turn, with tools", 2687)),
+    ),
+    DebugBrain(
+        hearing="that was close",
+        mood="relieved",
+        mood_valence=0.1,
+        decision="health low: quiet, cooling down",
+        focus="high",
+        latency=_timings(("frame → bark", 182), ("event → bark", 4)),
+    ),
+]
+
+
+def brain_at(tick: int) -> DebugBrain:
+    return SCENES[(tick // SCENE_TICKS) % len(SCENES)]
+
+
 async def draw(link: OverlayLink) -> None:
     tick = 0
     while True:
         await link.send(regions_at(tick))
         await link.send(sightings_at(tick))
+        await link.send(brain_at(tick))
         if tick % STATUS_EVERY_TICKS == 0:
             log.info(
                 "Drawing %d boxes (tick %d); connect the overlay to see them", len(BOXES), tick

@@ -53,3 +53,13 @@ def test_noticed_boxes_move_and_stay_on_a_1280_by_720_screen() -> None:
 def test_the_launcher_runs_a_script_in_the_brains_place() -> None:
     assert brain_command([r"scripts\debug_regions_demo.py"]) == [r"scripts\debug_regions_demo.py"]
     assert brain_command(["--live", "--type"]) == ["-m", "brain", "--live", "--type"]
+
+
+def test_the_brain_panel_steps_through_every_scene_and_each_is_a_valid_message() -> None:
+    from scripts.debug_regions_demo import SCENE_TICKS, SCENES, brain_at
+    from shared.protocol.messages import BrainMessageAdapter, DebugBrain
+
+    shown = [brain_at(tick) for tick in range(0, SCENE_TICKS * len(SCENES), SCENE_TICKS)]
+    assert shown == SCENES
+    for scene in SCENES:
+        assert isinstance(BrainMessageAdapter.validate_json(scene.model_dump_json()), DebugBrain)

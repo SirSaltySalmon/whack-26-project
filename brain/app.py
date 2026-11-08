@@ -14,8 +14,10 @@ from brain.config import WS_HOST, Settings
 from brain.control import ShutdownRequested, stop_when
 from brain.control_wiring import StatusParts, build_control
 from brain.danger_feed import forward_danger
+from brain.debug_panel import BrainPanel
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
+from brain.director.why import ignore_decision
 from brain.events import EventBus
 from brain.game_setup import ensure_brief, name_game
 from brain.hud import build_hud, live_state, send_debug_regions
@@ -173,6 +175,7 @@ async def run(
         # Matches the voice PipecatVoice picks: the player's choice, then the configured default.
         return link.settings.voice_id or settings.elevenlabs_voice_id
 
+    panel = BrainPanel() if settings.debug_regions else None
     director = Director(
         bus,
         voice,
@@ -194,6 +197,7 @@ async def run(
         page_excerpt=open_page.excerpt_for if open_page else None,
         barks=barks,
         voice_id=voice_id,
+        on_decision=panel.note_decision if panel else ignore_decision,
     )
     startup_voice = voice_id()
 
@@ -226,6 +230,8 @@ async def run(
             if settings.debug_regions:
                 debug = send_debug_regions(hud.readers, link.send)
                 tasks.create_task(survive("Debug view", debug))
+            if panel:
+                tasks.create_task(survive("Debug panel", panel.run(bus, link.send)))
             if scout:
                 tasks.create_task(survive("Progress", scout.run()))
             tasks.create_task(memory.run())
