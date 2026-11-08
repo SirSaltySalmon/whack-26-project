@@ -195,6 +195,11 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     return () => pushListeners.current.delete(listener);
   }, []);
 
+  const manageMemory = useCallback<ControlApi["manageMemory"]>(
+    (message) => bridge.manageMemory(message),
+    [bridge],
+  );
+
   const api = useMemo<ControlApi | null>(() => {
     if (!config) return null;
     const started = proc.state !== "stopped" && proc.state !== "crashed";
@@ -206,7 +211,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       if (set) available.add(name as KeyName);
     }
     return {
-      manageMemory: (request) => bridge.manageMemory(request),
+      manageMemory,
       process: proc,
       connected,
       external: connected && !started,
@@ -288,6 +293,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     send,
     request,
     onPush,
+    manageMemory,
   ]);
 
   if (!api) return <p className="cc-loading">Loading the Control Center…</p>;

@@ -1,6 +1,10 @@
 import io
+import json
+import os
 import socket
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -47,6 +51,57 @@ def test_correction_preserves_history_and_forget_rejects_old_guess(tmp_path: Pat
         assert not FactStore(conn).current("Game")
     finally:
         conn.close()
+
+
+def test_forget_is_committed_and_visible_to_an_already_open_reader(tmp_path: Path) -> None:
+    from brain.memory.reader import MemoryReader
+    from shared.protocol.control import ContextPreview, MemoryQuery
+
+    path = tmp_path / "memory.db"
+    conn = connect(path)
+    added = administer(
+        conn,
+        path,
+        MemoryAdminRequest(
+            operation="remember",
+            game="Game",
+            subject="player",
+            attribute="goal",
+            value="build a glass castle",
+        ),
+    ).facts[0]
+    conn.close()
+    reader = MemoryReader(path)
+    query = MemoryQuery(request_id="check", game="Game")
+    try:
+        assert any(f.id == added.id for f in reader.answer(query).facts)
+        # This is the same subprocess boundary the Electron dashboard uses.
+        reply = subprocess.run(
+            [sys.executable, "-m", "brain.memory.admin"],
+            input=MemoryAdminRequest(operation="forget", fact_id=added.id).model_dump_json(),
+            env={**os.environ, "DB_PATH": str(path), "BRAIN_PORT": "0"},
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=True,
+        )
+        assert json.loads(reply.stdout)["facts"] == []
+        assert reader.answer(query).facts == []
+        assert (
+            "glass castle"
+            not in reader.answer(
+                ContextPreview(request_id="preview", game="Game", text="castle")
+            ).context
+        )
+        historical = reader.answer(query.model_copy(update={"include_history": True})).facts
+        assert len(historical) == 1 and historical[0].valid_to is not None
+        reopened = connect(path)
+        try:
+            assert administer(reopened, path, MemoryAdminRequest()).facts == []
+        finally:
+            reopened.close()
+    finally:
+        reader.close()
 
 
 def test_clear_removes_personal_data_and_vectors_but_preserves_settings_and_profile(

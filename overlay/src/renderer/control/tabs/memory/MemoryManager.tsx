@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AdminFact,
   MemoryAdminRequest,
   MemoryAdminResult,
 } from "../../../../lib/protocol.generated.ts";
 import { Field, Notice, Section } from "../../components/ui.tsx";
+import { MemoryActions } from "../../logic/memoryActions.ts";
 import { useControl } from "../../ControlContext.tsx";
 
 export function MemoryManager({ onUpdated }: { onUpdated: () => void }) {
   const { manageMemory, config } = useControl();
+  const actions = useRef(new MemoryActions());
   const [data, setData] = useState<MemoryAdminResult | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -21,18 +23,22 @@ export function MemoryManager({ onUpdated }: { onUpdated: () => void }) {
   const [confirmation, setConfirmation] = useState("");
   const run = useCallback(
     async (request: MemoryAdminRequest) => {
+      if (actions.current.busy) return;
       setBusy(true);
       setError("");
       setMessage("");
       try {
-        const result = await manageMemory(request);
+        const result = await actions.current.run(request, manageMemory);
+        if (!result) return;
         setData(result);
         if (request.operation !== "list") {
           onUpdated();
           setMessage(
             result.backup
               ? `Memory cleared. Backup saved at ${result.backup}`
-              : "Memory updated.",
+              : request.operation === "forget"
+                ? "Fact forgotten. Removed from current memory; retained in History only."
+                : "Memory updated.",
           );
           setEditing(null);
           setValue("");
