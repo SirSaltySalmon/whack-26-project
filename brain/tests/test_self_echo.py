@@ -67,9 +67,11 @@ def test_a_player_correction_isnt_dropped() -> None:
     assert not echo.is_echo("Don't use the healing potion.")
 
 
-def test_repeated_words_are_matched_in_order() -> None:
+def test_an_echo_missing_most_of_a_line_is_let_through() -> None:
+    # Round 1 wanted this caught. Round 2 showed that matching words spread across a line drops
+    # real turns, so only close stretches count now: letting an echo through is the lesser harm.
     echo, _ = echo_after("Go left, then right, then go right.")
-    assert echo.is_echo("Go right, go right.")
+    assert not echo.is_echo("Go right, go right.")
 
 
 def test_an_expanded_contraction_is_still_an_echo() -> None:
@@ -85,3 +87,36 @@ def test_a_short_bark_heard_back_whole_is_an_echo() -> None:
 def test_a_short_turn_that_isnt_the_whole_line_goes_through() -> None:
     echo, _ = echo_after("One sec.")
     assert not echo.is_echo("sec")
+
+
+# Astra's second round.
+
+
+def test_a_prohibition_built_from_two_sentences_is_the_players() -> None:
+    echo, _ = echo_after("Do not open the door. Open the chest.")
+    assert not echo.is_echo("Do not open the chest.")
+
+
+def test_changing_the_target_is_the_players() -> None:
+    echo, _ = echo_after("Mark the chest on the left.")
+    assert not echo.is_echo("Mark the chest on the right.")
+
+
+def test_a_one_word_answer_goes_through() -> None:
+    echo, _ = echo_after("Ready?")
+    assert not echo.is_echo("Ready.")
+
+
+def test_digits_and_number_words_match() -> None:
+    echo, _ = echo_after("Use slot four.")
+    assert echo.is_echo("Use slot 4.")
+
+
+def test_two_lines_heard_as_one_turn_are_an_echo() -> None:
+    clock = Clock()
+    echo = SelfEcho(clock)
+    echo.said("Let me look.")
+    clock.now += 1
+    echo.said("There you go.")
+    clock.now += 1
+    assert echo.is_echo("Let me look. There you go.")
