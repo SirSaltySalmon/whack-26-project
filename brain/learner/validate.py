@@ -13,7 +13,7 @@ import numpy as np
 from brain.perception.numbers import first_number, parse_fraction
 from brain.perception.ocr import OcrWorker
 from brain.perception.profile_schema import ColorFillParams
-from brain.perception.readers import CompiledReader, OcrReader, Reading
+from brain.perception.readers import CompiledReader, OcrReader, Reading, colour_reach
 
 MIN_SAMPLES_AGREEING = 2
 FRACTION_TOLERANCE = 0.15
@@ -22,6 +22,12 @@ MIN_SATURATION = 90
 MIN_VALUE = 70
 MIN_COLOURED_SHARE = 0.05
 HUE_TOLERANCE = 10
+# Calibration only uses samples at least this full: near empty, one column either way would
+# swing where "full" lands.
+CALIBRATE_FROM = 0.2
+# A full bar whose colour covers less of its box than this is more likely something else in the
+# box, so it isn't calibrated and validation decides.
+MIN_FULL_AT = 0.4
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,28 @@ def propose_color(crop: np.ndarray) -> ColorFillParams | None:
         hsv_high=((peak + HUE_TOLERANCE) % 180, 255, 255),
         axis="x" if width >= height else "y",
     )
+
+
+def calibrate(color: ColorFillParams, samples: Sequence[Sample]) -> ColorFillParams:
+    """Sets where "full" ends inside the box, from how full vision said each sample was.
+
+    Each sample gives reach / expected, and the median is used. validate() then still checks
+    every sample against vision. When every sample was at the same level, that only shows the
+    reader is consistent, not that it follows changes: the live low-health check covers that.
+    """
+    estimates = []
+    for sample in samples:
+        if not isinstance(sample.expected, float) or sample.expected < CALIBRATE_FROM:
+            continue
+        reach = colour_reach(sample.crop, color)
+        if reach is not None:
+            estimates.append(reach / sample.expected)
+    if not estimates:
+        return color
+    full_at = min(1.0, float(np.median(estimates)))
+    if full_at < MIN_FULL_AT:
+        return color
+    return color.model_copy(update={"full_at": round(full_at, 3)})
 
 
 async def _read(reader: CompiledReader, crop: np.ndarray, ocr: OcrWorker | None) -> Reading:

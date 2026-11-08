@@ -48,6 +48,9 @@ class ColorFillParams(BaseModel):
     hsv_high: tuple[int, int, int]
     axis: Literal["x", "y"] = "x"  # The direction the bar fills
     reverse: bool = False  # True if it fills right to left or top down
+    # How far along the box the colour reaches when the bar is full. Vision's boxes are often
+    # looser than the bar itself, so the box's far edge isn't full. Learned from samples.
+    full_at: float = Field(default=1.0, gt=0, le=1)
 
     @model_validator(mode="after")
     def _in_opencv_range(self) -> Self:

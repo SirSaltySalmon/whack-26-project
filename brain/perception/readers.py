@@ -83,24 +83,32 @@ class ColorFillReader:
         self._params = spec.color
 
     def read(self, crop: np.ndarray) -> Reading:
-        if crop.size == 0:
-            return Reading(self.spec.name, "unreadable")
-        matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), self._params)
-        if self._params.axis == "x":
-            # Fills left to right unless reversed.
-            lines = matches.mean(axis=0)
-            filled = lines[::-1] if self._params.reverse else lines
-        else:
-            # Fills bottom up unless reversed, which means top down.
-            lines = matches.mean(axis=1)
-            filled = lines if self._params.reverse else lines[::-1]
-        filled_at = np.flatnonzero(filled >= FILLED_SHARE)
+        reach = colour_reach(crop, self._params)
         # No colour at all might mean empty, or a bar that's gone or changed colour. Those can't be
         # told apart, so it isn't read as 0: a false "health low" is worse than not knowing.
-        if filled_at.size == 0:
+        if reach is None:
             return Reading(self.spec.name, "unreadable")
-        fraction = round(float(filled_at[-1] + 1) / len(filled), 3)
+        fraction = round(min(1.0, reach / self._params.full_at), 3)
         return Reading(self.spec.name, "ok", fraction, f"{round(fraction * 100)}%")
+
+
+def colour_reach(crop: np.ndarray, params: ColorFillParams) -> float | None:
+    """How far along the box, 0-1, the furthest filled line is, before any full_at scaling."""
+    if crop.size == 0:
+        return None
+    matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), params)
+    if params.axis == "x":
+        # Fills left to right unless reversed.
+        lines = matches.mean(axis=0)
+        filled = lines[::-1] if params.reverse else lines
+    else:
+        # Fills bottom up unless reversed, which means top down.
+        lines = matches.mean(axis=1)
+        filled = lines if params.reverse else lines[::-1]
+    filled_at = np.flatnonzero(filled >= FILLED_SHARE)
+    if filled_at.size == 0:
+        return None
+    return float(filled_at[-1] + 1) / len(filled)
 
 
 class OcrReader:

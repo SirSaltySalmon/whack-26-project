@@ -23,7 +23,7 @@ from brain.learner.regions import (
     agree,
     build_spec,
 )
-from brain.learner.validate import Sample, propose_color, validate
+from brain.learner.validate import Sample, calibrate, propose_color, validate
 from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.memory.db import Database
 from brain.memory.models import GameProfile
@@ -232,6 +232,11 @@ class GameLearner:
             # The fullest sample shows the most of the bar's colour.
             fullest = max(samples, key=lambda s: s.expected if isinstance(s.expected, float) else 0)
             color = propose_color(fullest.crop)
+            if color is not None:
+                color = calibrate(color, samples)
+                if color.full_at < 1.0:
+                    full = color.full_at * 100
+                    log.info("Bar %s is full at %.0f%% of its box", region.name, full)
         spec = build_spec(agreed, color)
         if spec is None:
             log.info("No local reader for %s: nothing to read it by", region.name)
