@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from brain.perception.profile_schema import Box
 from shared.protocol.messages import Rect
 
+# How far past an image edge, as a share of its size, a model's box may reach and still be
+# clipped rather than refused.
+EDGE_SLACK = 0.02
+
 
 @dataclass(frozen=True)
 class NormalizedBox:
@@ -73,12 +77,25 @@ def pixel_box_to_normalized(box_px: Sequence[float], width: int, height: int) ->
     if len(box_px) != 4 or width <= 0 or height <= 0:
         raise ValueError(f"Not a box for a {width} x {height} image: {box_px}")
     x_min, y_min, x_max, y_max = (float(v) for v in box_px)
+    # A pixel or two past the edge is the model being loose about a target at the edge, so it's
+    # clipped. Further out is nonsense, and NormalizedBox refuses it.
+    x_min, x_max = (_clip_edge(v, width) for v in (x_min, x_max))
+    y_min, y_max = (_clip_edge(v, height) for v in (y_min, y_max))
     return NormalizedBox(
         ymin=y_min / height * 1000,
         xmin=x_min / width * 1000,
         ymax=y_max / height * 1000,
         xmax=x_max / width * 1000,
     )
+
+
+def _clip_edge(value: float, size: int) -> float:
+    slack = size * EDGE_SLACK
+    if -slack <= value < 0:
+        return 0.0
+    if size < value <= size + slack:
+        return float(size)
+    return value
 
 
 def box_to_dip_rect(box: NormalizedBox, crop: CropRegion, display_scale: float) -> Rect:

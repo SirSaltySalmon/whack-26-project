@@ -38,7 +38,7 @@ UNUSABLE_BOXES = {
     "too short": [0, 0, 100],
     "too long": [0, 0, 100, 100, 100],
     "empty": [],
-    "before the left edge": [-1, 0, 100, 100],
+    "far before the left edge": [-100, 0, 100, 100],
     "past the right edge": [0, 0, 5000, 100],
     "infinite": [0, 0, math.inf, 100],
     "no height": [0, 100, 100, 100],

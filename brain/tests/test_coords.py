@@ -69,8 +69,8 @@ def test_a_pixel_box_at_150_percent_scaling() -> None:
     "box_px",
     [
         [0, 0, 100],
-        [-5, 0, 100, 100],
-        [0, 0, 1281, 100],
+        [-100, 0, 100, 100],  # Far past the edge is nonsense, not looseness
+        [0, 0, 1400, 100],
         [100, 0, 100, 100],
         [float("nan"), 0, 1, 1],
     ],
@@ -78,3 +78,9 @@ def test_a_pixel_box_at_150_percent_scaling() -> None:
 def test_a_pixel_box_that_cant_be_used_is_refused(box_px: list[float]) -> None:
     with pytest.raises(ValueError):
         pixel_box_to_normalized(box_px, 1280, 720)
+
+
+def test_a_box_a_pixel_past_the_edge_is_clipped_not_refused() -> None:
+    # From Astra's review: a visible target at the right edge was lost to a 1-pixel overshoot.
+    box = pixel_box_to_normalized([1270, 100, 1281, 112], 1280, 720)
+    assert box.xmax == 1000 and box.xmin == pytest.approx(1270 / 1280 * 1000)

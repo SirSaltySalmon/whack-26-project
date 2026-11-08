@@ -5,7 +5,6 @@ put it in about the same place. Names come from a fixed generic list, so nothing
 """
 
 import math
-from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -119,19 +118,33 @@ def iou(a: Box, b: Box) -> float:
     return overlap / union if union > 0 else 0.0
 
 
+def _has_digits(text: str | None) -> bool:
+    return bool(text) and any(char.isdigit() for char in text or "")
+
+
 def _counts_as(sighting: Sighting, kind: str) -> bool:
-    """Whether a sighting backs a region of this kind. A digitless "number" still places a bar."""
+    """Whether a sighting backs a region of this kind. A digitless "number" still places a bar.
+
+    Haiku called a row of hearts a number, with no digits, in one of two frames. A number reader
+    would have nothing to read there.
+    """
     seen = sighting.proposal
-    return seen.kind == kind or (kind == "bar" and seen.kind == "number" and not seen.text_seen)
+    digitless_number = seen.kind == "number" and not _has_digits(seen.text_seen)
+    if seen.kind == "number" and kind == "number":
+        return not digitless_number
+    return seen.kind == kind or (kind == "bar" and digitless_number)
 
 
-def _majority_kind(sightings: list[Sighting]) -> str:
-    # A "number" with no digits seen can't be read by OCR, so it doesn't vote. Haiku called a
-    # row of hearts a number that way in one of two frames.
-    voters = [s for s in sightings if s.proposal.kind != "number" or s.proposal.text_seen]
-    counts = Counter(s.proposal.kind for s in voters or sightings)
-    # Numbers read more precisely than bars, so they win a tie.
-    return max(counts, key=lambda kind: (counts[kind], kind == "number"))
+def _best_kind(sightings: list[Sighting]) -> tuple[str, list[Sighting]]:
+    """The kind whose sightings agree on place in the most frames, with that group.
+
+    Counting votes alone let numbers seen in scattered places outvote a bar seen in one place.
+    Numbers read more precisely than bars, so they win a tie.
+    """
+    kinds = sorted({s.proposal.kind for s in sightings})
+    groups = {kind: _best_group([s for s in sightings if _counts_as(s, kind)]) for kind in kinds}
+    kind = max(groups, key=lambda k: (len(groups[k]), k == "number"))
+    return kind, groups[kind]
 
 
 def _best_group(sightings: list[Sighting]) -> list[Sighting]:
@@ -163,8 +176,7 @@ def agree(proposals: Sequence[RegionProposal], size: tuple[int, int]) -> list[Ag
 
     agreed: list[AgreedRegion] = []
     for name, sightings in by_name.items():
-        kind = _majority_kind(sightings)
-        group = _best_group([s for s in sightings if _counts_as(s, kind)])
+        kind, group = _best_kind(sightings)
         if len(group) < MIN_FRAMES_AGREEING:
             continue
         count = len(group)

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
@@ -186,3 +187,22 @@ def test_a_light_blue_fill_called_cyan_still_matches() -> None:
     crop[8:22, 8:22] = (255, 120, 90)  # Light blue, OpenCV hue about 107
     color = propose_color(crop, "cyan")
     assert color is not None and color.hsv_low[0] <= 107 <= color.hsv_high[0]
+
+
+# Astra's third round.
+
+
+def test_a_red_range_never_spills_into_an_orange_border() -> None:
+    def crop(red_columns: int) -> np.ndarray:
+        hsv = np.zeros((10, 100, 3), dtype=np.uint8)
+        hsv[:, :20] = (15, 255, 255)  # A fixed orange border
+        hsv[:, 20 : 20 + red_columns] = (9, 255, 255)  # The red fill
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+    color = propose_color(crop(30), "red")
+    assert color is not None
+    low, high = color.hsv_low[0], color.hsv_high[0]
+    assert not (low <= 15 <= high) and (low > high or high <= 9)  # Orange's 15 is left out
+    built = reader(calibrate(color, [Sample(crop(30), 1.0), Sample(crop(24), 0.8)]))
+    # 3 of 30 columns left is 10%, low enough for the health_low alert at 25%.
+    assert built.read(crop(3)).value == pytest.approx(0.1, abs=0.02)

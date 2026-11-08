@@ -214,3 +214,27 @@ def test_a_number_with_no_digits_doesnt_outvote_a_bar() -> None:
     digitless = {"is_gameplay": True, "regions": [{**bar_item["regions"][0], "kind": "number"}]}
     (agreed,) = agree(proposals(bar_item, digitless), IMAGE)
     assert agreed.region.kind == "bar"
+
+
+def test_numbers_seen_in_scattered_places_dont_outvote_a_steady_bar() -> None:
+    # From Astra's review: two bars in one place, two numbers that agree with nothing.
+    def number_at(box: list[float]) -> dict[str, Any]:
+        item = proposal(1.0, box)
+        item["regions"][0].update({"kind": "number", "text_seen": "90"})
+        return item
+
+    seen = proposals(
+        proposal(1.0),
+        proposal(1.0),
+        number_at([300, 200, 340, 240]),
+        number_at([600, 300, 640, 340]),
+    )
+    (agreed,) = agree(seen, IMAGE)
+    assert agreed.region.kind == "bar"
+
+
+def test_whitespace_is_not_digits() -> None:
+    blank = proposal(1.0)
+    blank["regions"][0].update({"kind": "number", "text_seen": " "})
+    (agreed,) = agree(proposals(proposal(1.0), blank), IMAGE)
+    assert agreed.region.kind == "bar" and len(agreed.sightings) == 2

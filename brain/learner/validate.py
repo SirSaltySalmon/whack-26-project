@@ -64,11 +64,9 @@ def propose_color(crop: np.ndarray, fill: str | None = None) -> ColorFillParams 
         return None
     hues = hsv[..., 0][coloured]
     histogram = np.bincount(hues, minlength=180).astype(float)
+    allowed = np.ones(180, dtype=bool)
     if fill in FILL_HUES:
-        low, high = FILL_HUES[fill]
-        hue = np.arange(180)
-        # Red's range wraps past 0, so it's the two ends rather than a middle stretch.
-        allowed = (hue >= low) & (hue <= high) if low <= high else (hue >= low) | (hue <= high)
+        allowed = _hue_range(*FILL_HUES[fill])
         if histogram[allowed].sum() == 0:
             # Vision named a colour the crop doesn't have, so the box or the name is wrong.
             return None
@@ -77,16 +75,36 @@ def propose_color(crop: np.ndarray, fill: str | None = None) -> ColorFillParams 
     window = np.ones(2 * 3 + 1)
     padded = np.concatenate([histogram[-3:], histogram, histogram[:3]])
     peak = int(np.argmax(np.convolve(padded, window, mode="valid")))
-    near = np.minimum(np.abs(hues.astype(int) - peak), 180 - np.abs(hues.astype(int) - peak))
-    matching = hsv[coloured][near <= HUE_TOLERANCE]
+    # The reader's hues: near the peak, and inside the named colour. Without the second part a
+    # red peak at 9 reached orange at 16 and counted a fixed orange border as health.
+    window_hues = _hue_range((peak - HUE_TOLERANCE) % 180, (peak + HUE_TOLERANCE) % 180) & allowed
+    low_h, high_h = _bounds(window_hues, peak)
+    keep = window_hues[hues]
+    matching = hsv[coloured][keep]
     low_s = max(40, int(np.percentile(matching[:, 1], 5)) - 20)
     low_v = max(40, int(np.percentile(matching[:, 2], 5)) - 20)
     height, width = crop.shape[:2]
     return ColorFillParams(
-        hsv_low=((peak - HUE_TOLERANCE) % 180, low_s, low_v),
-        hsv_high=((peak + HUE_TOLERANCE) % 180, 255, 255),
+        hsv_low=(low_h, low_s, low_v),
+        hsv_high=(high_h, 255, 255),
         axis="x" if width >= height else "y",
     )
+
+
+def _hue_range(low: int, high: int) -> np.ndarray:
+    """Which of the 180 hues fall in [low, high]. A low above high wraps past 0, as red does."""
+    hue = np.arange(180)
+    return (hue >= low) & (hue <= high) if low <= high else (hue >= low) | (hue <= high)
+
+
+def _bounds(hues: np.ndarray, peak: int) -> tuple[int, int]:
+    """The ends of the unbroken run of allowed hues around the peak, going round the circle."""
+    low = high = peak
+    while hues[(low - 1) % 180] and (low - 1) % 180 != peak:
+        low = (low - 1) % 180
+    while hues[(high + 1) % 180] and (high + 1) % 180 != peak:
+        high = (high + 1) % 180
+    return low, high
 
 
 def calibrate(color: ColorFillParams, samples: Sequence[Sample]) -> ColorFillParams:
