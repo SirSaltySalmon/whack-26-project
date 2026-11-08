@@ -1,5 +1,7 @@
 """Bars in boxes looser than the bar: vision's boxes rarely end exactly where a full bar does."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -59,8 +61,8 @@ def test_near_empty_samples_are_left_out() -> None:
 
 
 async def test_colour_covering_too_little_of_the_box_isnt_calibrated() -> None:
-    # Vision says full, but the colour covers 15% of the box: more likely something else.
-    samples = [Sample(bar(0.15), 1.0), Sample(bar(0.15), 1.0)]
+    # Vision says full, but the colour covers 5% of the box: more likely something else.
+    samples = [Sample(bar(0.05), 1.0), Sample(bar(0.05), 1.0)]
     color = calibrate(red(), samples)
     assert color.full_at == 1.0
     accepted, _ = await validate(reader(color), samples, None)
@@ -116,3 +118,45 @@ async def test_a_fixed_end_cap_doesnt_hide_damage() -> None:
     built = await calibrated_on(columns((0, 100)))
     # 10 of 99 fillable columns, plus the permanent cap: reads 11%, close to the true 10%.
     assert built.read(columns((0, 10), (99, 100))).value == pytest.approx(0.1, abs=0.02)
+
+
+# Astra's second round.
+
+
+async def test_losing_a_whole_row_of_icons_halves_the_reading() -> None:
+    def icons(count: int) -> np.ndarray:
+        crop = np.zeros((20, 100, 3), dtype=np.uint8)
+        for i in range(count):
+            x, y = 20 * (i % 5), 12 * (i // 5)
+            crop[y : y + 8, x : x + 16] = (0, 0, 255)
+        return crop
+
+    built = await calibrated_on(icons(10))
+    assert built.read(icons(5)).value == pytest.approx(0.5, abs=0.02)
+
+
+async def test_only_near_empty_samples_cant_vouch_for_a_bar() -> None:
+    samples = [Sample(columns((0, 4)), 0.08), Sample(columns((0, 8)), 0.16)]
+    accepted, why = await validate(reader(calibrate(red(), samples)), samples, None)
+    assert not accepted
+    assert "scale is unknown" in why
+
+
+async def test_a_rejection_lists_every_samples_reading() -> None:
+    samples = [Sample(columns((0, 100)), 1.0), Sample(columns((0, 50)), 1.0)]
+    accepted, why = await validate(reader(red()), samples, None)
+    assert not accepted
+    assert "100% vs 1.0" in why and "50% vs 1.0" in why
+
+
+def test_debug_samples_are_saved_with_what_vision_said(tmp_path: Path) -> None:
+    from brain.learner.debug_samples import save_samples
+
+    samples = [Sample(columns((0, 100)), 1.0), Sample(columns((0, 50)), 1.0)]
+    save_samples(tmp_path / "learner", "health", samples, False, "read '50%'")
+    saved = sorted(path.name for path in (tmp_path / "learner").iterdir())
+    assert saved == ["health-0.png", "health-1.png", "health.json"]
+    assert (
+        '"expected": [\n    1.0,\n    1.0\n  ]'
+        in (tmp_path / "learner" / "health.json").read_text()
+    )

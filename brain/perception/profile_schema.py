@@ -49,7 +49,7 @@ class ColorFillParams(BaseModel):
     axis: Literal["x", "y"] = "x"  # The direction the bar fills
     # Which end it fills from. Kept so saved profiles still load: readings no longer depend on it.
     reverse: bool = False
-    # The share of the box's lines that show the colour when the bar is full. Vision's boxes are
+    # The share of the box's pixels that show the colour when the bar is full. Vision's boxes are
     # often looser than the bar, and icons have gaps, so it's rarely 1. Learned from samples.
     full_at: float = Field(default=1.0, gt=0, le=1)
 

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
+from brain.learner.debug_samples import save_samples
 from brain.learner.regions import (
     REGION_PROMPT,
     AgreedRegion,
@@ -54,6 +55,8 @@ class LearnerConfig:
     closeup_max_edge_px: int
     mask_padding_px: int
     profile_fixture: Path | None = None
+    # Where to save each region's samples for a look later, with --debug-regions only.
+    debug_dir: Path | None = None
 
 
 class GameLearner:
@@ -242,6 +245,9 @@ class GameLearner:
             log.info("No local reader for %s: nothing to read it by", region.name)
             return None
         accepted, why = await validate(compile_reader(spec), samples, self._ocr)
+        if self._config.debug_dir is not None:
+            folder = self._config.debug_dir
+            await asyncio.to_thread(save_samples, folder, region.name, samples, accepted, why)
         log.info(
             "Reader %s (%s) %s: %s", spec.name, spec.type, "kept" if accepted else "rejected", why
         )

@@ -7,6 +7,7 @@ it calls a vision model.
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -88,6 +89,11 @@ def build_hud(
             closeup_max_edge_px=settings.closeup_max_edge_px,
             mask_padding_px=settings.mask_padding_px,
             profile_fixture=settings.profile_fixture,
+            debug_dir=(
+                settings.sessions_dir / f"learner-{time.strftime('%Y%m%d-%H%M%S')}"
+                if settings.debug_regions
+                else None
+            ),
         )
         learner = GameLearner(
             database,

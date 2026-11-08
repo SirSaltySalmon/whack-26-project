@@ -25,9 +25,10 @@ HUE_TOLERANCE = 10
 # Calibration only uses samples at least this full: near empty, one column either way would
 # swing where "full" lands.
 CALIBRATE_FROM = 0.2
-# A full bar whose colour shows in fewer of its box's lines than this is more likely something
-# else in the box, so it isn't calibrated and validation decides.
-MIN_FULL_AT = 0.25
+# A full bar whose colour covers less of its box than this is more likely something else in the
+# box, so it isn't calibrated and validation decides. Icons such as hearts leave gaps, and
+# vision's boxes are loose, so a real bar can cover well under half.
+MIN_FULL_AT = 0.1
 
 
 @dataclass(frozen=True)
@@ -113,18 +114,33 @@ async def validate(
 ) -> tuple[bool, str]:
     """Accepts when at least 2 samples read ok and agree with vision, and none disagree.
 
-    Numbers agree within 0.15, text exactly after trimming. Returns the reason, for the log.
+    Numbers agree within 0.15, text exactly after trimming. A bar also needs a sample at least
+    CALIBRATE_FROM full: near-empty samples agree with almost any scale, so they prove nothing.
+    Returns the reason for the log, with every sample's reading so a rejection can be diagnosed.
     """
+    if reader.spec.type == "color_fill" and not any(
+        isinstance(s.expected, float) and s.expected >= CALIBRATE_FROM for s in samples
+    ):
+        return False, f"no sample was at least {CALIBRATE_FROM:.0%} full, so its scale is unknown"
     agreeing = 0
+    seen: list[str] = []
+    wrong: str | None = None
     for sample in samples:
         if sample.expected is None:
+            seen.append("no label")
             continue
         reading = await _read(reader, sample.crop, ocr)
         if reading.status != "ok":
+            seen.append(reading.status)
             continue
+        seen.append(f"{reading.display} vs {sample.expected!r}")
         if not _agrees(reader, reading, sample.expected):
-            return False, f"read {reading.display!r} where vision saw {sample.expected!r}"
-        agreeing += 1
+            wrong = wrong or f"read {reading.display!r} where vision saw {sample.expected!r}"
+        else:
+            agreeing += 1
+    readings = f" (samples: {'; '.join(seen)})"
+    if wrong:
+        return False, wrong + readings
     if agreeing < MIN_SAMPLES_AGREEING:
-        return False, f"only {agreeing} of {len(samples)} samples could be checked"
-    return True, f"{agreeing} samples agreed with vision"
+        return False, f"only {agreeing} of {len(samples)} samples could be checked" + readings
+    return True, f"{agreeing} samples agreed with vision" + readings

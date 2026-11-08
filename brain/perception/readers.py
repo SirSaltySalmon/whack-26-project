@@ -29,9 +29,6 @@ log = logging.getLogger(__name__)
 
 Status = Literal["ok", "masked", "unreadable"]
 
-# A column (or row) of a bar counts as filled when this share of its pixels match the colour. Bars
-# often have borders, shading or text drawn over them, so it can't require every pixel.
-FILLED_SHARE = 0.3
 MAX_TEXT_CHARS = 120
 FRACTION_TYPES = ("color_fill", "ocr_fraction")
 
@@ -69,11 +66,13 @@ def _colour_mask(hsv: np.ndarray, params: ColorFillParams) -> np.ndarray:
 
 
 class ColorFillReader:
-    """How full a bar is, from how many of its box's columns (rows on axis y) show its colour.
+    """How full a bar is, from how many of its box's pixels show its colour.
 
     Counted against how many show it when the bar is full (`full_at`), so it doesn't depend on
-    which way the bar drains, padding inside a loose box, a fixed end cap, or the gaps in a row
-    of icons such as hearts. Measuring the furthest coloured column got all four wrong.
+    which way the bar drains, padding inside a loose box, a fixed end cap, the gaps in a row of
+    icons such as hearts, or how many rows of icons there are. Measuring the furthest coloured
+    column got the first four wrong, and counting coloured columns the last. Counting pixels is
+    also continuous, so an icon's edges can't flip a whole column in or out between frames.
     """
 
     uses_ocr = False
@@ -94,13 +93,12 @@ class ColorFillReader:
 
 
 def colour_share(crop: np.ndarray, params: ColorFillParams) -> float | None:
-    """The share of the box's lines, 0-1, that show the colour, before any full_at scaling."""
+    """The share of the box's pixels, 0-1, that show the colour, before any full_at scaling."""
     if crop.size == 0:
         return None
     matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), params)
-    lines = matches.mean(axis=0 if params.axis == "x" else 1)
-    filled = int(np.count_nonzero(lines >= FILLED_SHARE))
-    return filled / len(lines) if filled else None
+    share = float(matches.mean())
+    return share if share > 0 else None
 
 
 class OcrReader:
