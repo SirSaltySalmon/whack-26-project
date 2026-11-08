@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from brain.agent.memory_tools import PlayerMemory, memory_tools
+from brain.agent.rewind import look_back_tool
 from brain.agent.schemas import (
     DEEP_SYSTEM,
     LOOK_PROMPT,
@@ -153,6 +154,14 @@ class AgentTools:
                     ThinkInput,
                     self._think_hard,
                     DEEP_TIMEOUT_S,
+                ),
+                look_back_tool(
+                    self._buffer,
+                    self._look_vision,
+                    lambda: self._overlay.display_scale,
+                    self._limits.mask_padding_px,
+                    self._limits.max_frame_age_s,
+                    time.monotonic,
                 ),
                 *memory_tools(self._memory),
             ]

@@ -19,6 +19,7 @@ EXPECTED_ARGUMENTS = {
     "read_open_page": {"question"},
     "note_unknown": {"subject", "attribute", "question"},
     "think_hard": {"question"},
+    "look_back": {"question"},
     "answer_question": {"question_id", "answer", "correction"},
     "remember_fact": {"subject", "attribute", "value"},
     "forget_fact": {"subject", "attribute"},
