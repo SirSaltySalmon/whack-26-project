@@ -27,6 +27,9 @@ class Settings(BaseModel):
     proactive: bool = True
     personality: str = "supportive"
     voice_id: str | None = None
+    # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
+    # kept so the two can be compared by ear.
+    voice_style: Literal["expressive", "classic"] = "expressive"
 
 
 # --- Brain to overlay ---

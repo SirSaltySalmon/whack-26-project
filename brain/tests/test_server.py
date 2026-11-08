@@ -101,13 +101,19 @@ def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
         "proactive": False,
         "personality": "protective",
         "voice_id": "voice-2",
+        "voice_style": "expressive",
     }
 
 
 def test_settings_state_after_an_update_still_offers_them_and_shows_the_change() -> None:
     client, link, bus = offering_options()
     events = bus.subscribe()
-    chosen = {"proactive": False, "personality": "protective", "voice_id": "voice-2"}
+    chosen = {
+        "proactive": False,
+        "personality": "protective",
+        "voice_id": "voice-2",
+        "voice_style": "classic",
+    }
     with client.websocket_connect("/ws") as socket:
         socket.send_text(ready())
         socket.receive_json()
