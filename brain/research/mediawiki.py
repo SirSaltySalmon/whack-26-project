@@ -37,6 +37,8 @@ class SiteInfo:
     name: str
     server: str  # Always absolute: protocol-relative servers ("//host") get https.
     article_path: str  # For example "/wiki/$1".
+    # Often not "Main Page": Terraria's is "Terraria Wiki". Empty if the wiki didn't say.
+    main_page: str = ""
 
     def page_url(self, title: str) -> str:
         return self.server + self.article_path.replace("$1", quote(title.replace(" ", "_")))
@@ -86,7 +88,9 @@ class MediaWikiClient:
         server = general["server"]
         if server.startswith("//"):
             server = "https:" + server
-        return SiteInfo(general["sitename"], server, general["articlepath"])
+        return SiteInfo(
+            general["sitename"], server, general["articlepath"], general.get("mainpage", "")
+        )
 
     async def parse_page(self, page: str, intro_only: bool = False) -> WikiPage:
         """Intro-only fetches section 0, which holds the lead text and infobox at a fraction of
