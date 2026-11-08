@@ -47,6 +47,8 @@ class ReadersFailing(Event):
 
     game: str
     readers: tuple[str, ...]
+    # A bar grew past its box, so a reader reads fine but no longer sees all of it.
+    grown: bool = False
 
 
 @dataclass(frozen=True)

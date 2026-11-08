@@ -166,7 +166,8 @@ class Settings(BaseSettings):
     # Learning a game's HUD by vision.
     learner_frames: int = 3  # Frames sampled per learning pass
     learner_frame_gap_s: float = 5.0
-    learner_max_vision_calls: int = 6  # Per session. Shares Gemini's free-tier quota
+    # Per session. A pass with its closer look takes up to 6, so this allows two relearns.
+    learner_max_vision_calls: int = 18
     learner_relearn_gap_s: float = 300.0
     # Guessing the player's progress from their gear, when memory doesn't know it.
     progress_max_vision_calls: int = 3  # Per session. Shares Gemini's free-tier quota

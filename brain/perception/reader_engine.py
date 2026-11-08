@@ -18,6 +18,7 @@ from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, GameEvent, ProfileUpdated, ReadersFailing
 from brain.memory.models import GameProfile
 from brain.perception.coords import fraction_box_to_dip_rect
+from brain.perception.growth import GrowthWatch, spill
 from brain.perception.masking import box_is_masked
 from brain.perception.observer import OverlayScale
 from brain.perception.ocr import OcrWorker
@@ -54,11 +55,12 @@ class RegionView:
     display: str | None
 
 
-def _read_colours(image: np.ndarray, readers: list[PlacedReader]) -> list[Reading]:
+def _read_colours(image: np.ndarray, readers: list[PlacedReader]) -> list[tuple[Reading, float]]:
+    """Each colour reader's reading, and how much its colour spills past its box."""
     return [
-        placed.reader.read(crop_box(image, placed.box))
+        (placed.reader.read(crop_box(image, placed.box)), spill(image, placed.box, colour))
         for placed in readers
-        if isinstance(placed.reader, ColorFillReader)
+        if isinstance(placed.reader, ColorFillReader) and (colour := placed.spec.color)
     ]
 
 
@@ -100,6 +102,7 @@ class ReaderEngine:
         self._wrong_size_reported = False
         self._failing_reported: frozenset[str] = frozenset()
         self._ocr_task: asyncio.Task[None] | None = None
+        self._growth = GrowthWatch()
 
     @property
     def readers(self) -> list[PlacedReader]:
@@ -114,6 +117,7 @@ class ReaderEngine:
         self._next_due = {}
         self._wrong_size_reported = False
         self._failing_reported = frozenset()
+        self._growth = GrowthWatch()
         if self._placed:
             log.info("Readers loaded: %s", ", ".join(self._states))
 
@@ -161,8 +165,11 @@ class ReaderEngine:
                 colour.append(placed)
 
         if colour:
-            for reading in await asyncio.to_thread(_read_colours, frame.image, colour):
+            for reading, spilled in await asyncio.to_thread(_read_colours, frame.image, colour):
                 self._apply(reading, now, frame.ts)
+                if self._growth.update(reading.reader, spilled, now):
+                    log.warning("Reader %s: its colour spread past its box", reading.reader)
+                    self._bus.publish(ReadersFailing(self._game, (reading.reader,), grown=True))
         ocr_idle = self._ocr_task is None or self._ocr_task.done()
         if ocr and self._ocr is not None and ocr_idle:
             reading = self._read_ocr(self._ocr, frame.image, ocr, frame.ts)
