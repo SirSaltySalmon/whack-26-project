@@ -16,7 +16,7 @@ from brain.events import (
 from brain.server import OverlayLink, create_app
 from brain.tests.fakes import drain
 from shared.protocol import PROTOCOL_VERSION, BrainMessage
-from shared.protocol.messages import AvatarState, Settings, VoiceOption
+from shared.protocol.messages import AvatarState, Pacing, Settings, VoiceOption
 
 
 def make() -> tuple[TestClient, OverlayLink, EventBus]:
@@ -104,6 +104,7 @@ def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
         "mic_enabled": True,
         "voice_style": "expressive",
         "memory_search": "keyword",
+        "pacing": Pacing().model_dump(),
     }
 
 
@@ -117,6 +118,7 @@ def test_settings_state_after_an_update_still_offers_them_and_shows_the_change()
         "mic_enabled": True,
         "voice_style": "classic",
         "memory_search": "hybrid",
+        "pacing": Pacing(event_gap_s=2.0, question_gap_s=20.0).model_dump(),
     }
     with client.websocket_connect("/ws") as socket:
         socket.send_text(ready())

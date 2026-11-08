@@ -171,3 +171,23 @@ async def test_a_spoken_tip_restarts_the_quiet_stretch() -> None:
         await rig.publish(Tick(ts=FIRST_S + 20.0))
     assert rig.voice.said == [GREETING, TIP, TIP]
     assert talker.prompts == [ADVICE_PROMPT, ADVICE_PROMPT]
+
+
+async def test_a_tip_comes_from_the_thinking_model_when_there_is_one() -> None:
+    agent = ScriptedToolLLM([])
+    tip_llm = ScriptedToolLLM([ToolStep(TIP)])
+    rig = tip_rig(agent=agent, tip_llm=tip_llm, tools=Tools().all())
+    async with rig.running():
+        await due_tip(rig)
+    assert agent.model_calls == 0 and tip_llm.model_calls == 1
+    assert rig.voice.said == [GREETING, TIP]
+
+
+async def test_a_tip_that_cant_point_comes_from_the_thinking_model_too() -> None:
+    talker = FakeTextLLM(["Not this one."])
+    tip_llm = FakeTextLLM([TIP])
+    rig = tip_rig(talker=talker, tip_llm=tip_llm)
+    async with rig.running():
+        await due_tip(rig)
+    assert talker.prompts == [] and tip_llm.prompts == [ADVICE_PROMPT]
+    assert rig.voice.said == [GREETING, TIP]

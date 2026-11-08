@@ -2,7 +2,8 @@
 
 Add `--type` to take player turns typed on stdin as well, which needs no mic or Deepgram key.
 Add `--record` to a live run to save a session for replay. It stores screen data, so it's never on
-by default. `--describe` prints what the Control Center can offer, as JSON, and exits.
+by default. `--describe` prints what the Control Center can offer, as JSON, and exits. `--memory`
+answers the Control Center's memory requests on stdin, so memory can be read with the partner off.
 Add `--off observer,tts` to turn parts off while testing; DISABLE in .env does the same.
 """
 
@@ -43,6 +44,11 @@ def _parser() -> argparse.ArgumentParser:
         "--describe",
         action="store_true",
         help="print personalities, voices and which keys are set, as JSON, then exit",
+    )
+    mode.add_argument(
+        "--memory",
+        action="store_true",
+        help="answer Control Center memory requests, one JSON line each on stdin, read-only",
     )
     parser.add_argument(
         "--type",
@@ -104,6 +110,13 @@ def main() -> None:
 
         # Stdout is the interface here: the Control Center reads this one JSON line.
         sys.stdout.write(describe(settings).model_dump_json() + "\n")
+        return
+    if args.memory:
+        from brain.memory.reader import run_reader
+
+        # Logs go to stderr: stdout carries only replies.
+        configure_logging(args.verbose)
+        run_reader(settings.db_path)
         return
     if args.record and args.replay:
         parser.error("--record only works with --live")

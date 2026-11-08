@@ -49,6 +49,8 @@ async def test_a_tool_call_then_its_result_then_words() -> None:
     step = await chat.send("what's a slime")
     assert step.calls[0].name == "wiki" and step.calls[0].args == {"q": "slime"}
     assert messages.calls[0]["tool_choice"] == {"type": "auto"}
+    assert messages.calls[0]["thinking"] == {"type": "disabled"}
+    assert messages.calls[0]["max_tokens"] == 200
     assert messages.calls[0]["tools"][0]["input_schema"] == {"type": "object", "properties": {}}
 
     step = await chat.send_results([(step.calls[0], "A weak enemy.")], allow_tools=False)
@@ -69,3 +71,22 @@ async def test_empty_content_is_an_error() -> None:
 async def test_a_refusal_is_an_error() -> None:
     with pytest.raises(LLMEmptyResponseError):
         await chat_with(ScriptedMessages(reply(text("no"), stop_reason="refusal"))).send("hi")
+
+
+async def test_a_thinking_client_thinks_in_tool_turns_and_sends_its_thinking_back() -> None:
+    thought = SimpleNamespace(type="thinking", thinking="", signature="sig")
+    messages = ScriptedMessages(
+        reply(thought, tool_use("wiki", "t1", {}), stop_reason="tool_use"),
+        reply(text("Done.")),
+    )
+    built = ClaudeClient("test-model", "test-key", RateLimiter(10), fallback=False)
+    built._client = SimpleNamespace(messages=messages)  # type: ignore[assignment]
+    chat = built.tool_chat("Be brief.", TOOLS, 200)
+    step = await chat.send("hi")
+    assert messages.calls[0]["thinking"] == {"type": "adaptive"}
+    assert messages.calls[0]["max_tokens"] > 200
+    assert step.text == "" and step.calls[0].name == "wiki"
+    step = await chat.send_results([(step.calls[0], "x")], allow_tools=False)
+    # Thinking goes back unchanged within a tool loop, and never into what's said.
+    assert messages.calls[1]["messages"][1]["content"][0] is thought
+    assert step.text == "Done."

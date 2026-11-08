@@ -17,12 +17,16 @@ export interface MemoryQueryState {
   refresh(): void;
 }
 
-/** Searches as the player types, and again whenever the partner remembers something. */
+/**
+ * Searches as the player types, and again whenever the partner remembers something. `game` null
+ * reads the game being played, or the one played last when the partner is off.
+ */
 export function useMemoryQuery(
   text: string,
   includeHistory: boolean,
+  game: string | null,
 ): MemoryQueryState {
-  const { request, onPush } = useControl();
+  const { request, onPush, connected } = useControl();
   const [results, setResults] = useState<MemoryResults | null>(null);
   const [recall, setRecall] = useState<MemoryContext | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +45,11 @@ export function useMemoryQuery(
           text,
           include_history: includeHistory,
           limit: 100,
+          game,
         },
         "memory.results",
       ),
-      request({ type: "memory.context_preview", text }, "memory.context"),
+      request({ type: "memory.context_preview", text, game }, "memory.context"),
     ])
       .then(([found, context]) => {
         if (!fresh()) return;
@@ -56,12 +61,13 @@ export function useMemoryQuery(
         if (fresh())
           setError(reason instanceof Error ? reason.message : String(reason));
       });
-  }, [request, text, includeHistory]);
+  }, [request, text, includeHistory, game]);
 
+  // Again when the partner starts or stops: the recall preview only has live state while it runs.
   useEffect(() => {
     const timer = setTimeout(run, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [run]);
+  }, [run, connected]);
 
   useEffect(
     () =>

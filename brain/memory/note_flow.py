@@ -1,7 +1,8 @@
 """Writes session notes on the slow loop, and applies what each note learned through memory's rules.
 
 A note is also the backup path for a spoken answer the talker didn't record itself, so a reply to a
-question brings the next note forward.
+question brings the next note forward. It reads the same conversation the talker's tools wrote
+from, so its drafted facts are checked against what they just recorded (see note_keys.py).
 """
 
 import asyncio
@@ -13,6 +14,7 @@ from brain.memory.db import Database
 from brain.memory.export import export_quietly
 from brain.memory.facts import FactStore
 from brain.memory.models import Fact, NoteKind, Question, RememberResult, Session, Source
+from brain.memory.note_keys import Key, existing_key, restates
 from brain.memory.notes import NoteDraft, NoteWriter
 from brain.memory.profile import ProfileStore
 from brain.memory.sessions import SessionStore
@@ -22,6 +24,12 @@ log = logging.getLogger(__name__)
 
 # Enough for the model to reuse an exact key when the player corrects one.
 MAX_FACTS_IN_PROMPT = 20
+# Every key a drafted fact could land beside. Read from the database, so it costs no tokens.
+MAX_KNOWN_KEYS = 200
+# The talker usually records a reply within about 2 s of the turn ending. A note brought forward
+# by that reply waits this long first, so it backs the talker up instead of racing it to file the
+# same reply twice.
+REPLY_GRACE_S = 5.0
 
 
 class DraftSink(Protocol):
@@ -60,8 +68,10 @@ class NoteFlow:
         sessions: SessionStore,
         profile: ProfileStore,
         unknowns: UnknownStore,
+        reply_grace_s: float = REPLY_GRACE_S,
     ) -> None:
         self._database = database
+        self._reply_grace_s = reply_grace_s
         self._game = game
         self._writer = writer
         self._sink = sink
@@ -80,11 +90,14 @@ class NoteFlow:
 
     async def loop(self, session: Session) -> None:
         while True:
+            min_events: int | None
             try:
                 await asyncio.wait_for(self._due.wait(), self._interval_s)
-                min_events: int | None = 1
             except TimeoutError:
                 min_events = None
+            else:
+                min_events = 1
+                await asyncio.sleep(self._reply_grace_s)
             self._due.clear()
             try:
                 await self.flush(session, min_events=min_events)
@@ -116,7 +129,7 @@ class NoteFlow:
             lambda _: self._sessions.add_note(session.id, kind, draft.body, from_ts, to_ts)
         )
         self._last_note_ts = to_ts
-        await self._apply(draft, {question.id for question in questions})
+        await self._apply(draft, session, questions, since=from_ts)
         await self.export(session.id)
         return True
 
@@ -125,26 +138,58 @@ class NoteFlow:
         if self._vault_dir is not None:
             await export_quietly(self._database, self._vault_dir, self._game, live_session)
 
-    async def _apply(self, draft: NoteDraft, shown_ids: set[int]) -> None:
-        # Answers go first so a matching drafted fact confirms the answer rather than disputing it.
+    async def _apply(
+        self, draft: NoteDraft, session: Session, shown: list[Question], since: float
+    ) -> None:
+        # Answers go first, so a drafted fact restating one is recognised below and skipped.
+        shown_ids = {question.id for question in shown}
         for answer in draft.answers:
             # Model output is untrusted, so it can only settle questions it was actually shown.
             if answer.question_id not in shown_ids:
                 log.warning("Ignoring drafted answer to question %s", answer.question_id)
                 continue
             await self._sink.answer_question(answer.question_id, answer.answer, answer.correction)
+
+        # Read after the answers, so what they filed and what the talker wrote meanwhile both count.
+        recorded, known = await self._database.run(lambda _: self._keys(session, since))
         for fact in draft.facts:
-            try:
-                await self._sink.remember(
-                    fact.subject, fact.attribute, fact.value, "player", fact.confidence
+            drafted = Key(fact.subject, fact.attribute)
+            said = next((key for key in recorded if restates(drafted, key)), None)
+            if said is not None:
+                log.info(
+                    "Skipping drafted fact %s / %s: %s / %s already records it",
+                    *drafted,
+                    *said,
                 )
+                continue
+            key = existing_key(drafted, known)
+            try:
+                await self._sink.remember(*key, fact.value, "player", fact.confidence)
             except ValueError:
                 # Model output is untrusted, so one bad fact shouldn't discard the rest of the note.
-                log.warning(
-                    "Rejected a drafted fact: %r %r", fact.subject, fact.attribute, exc_info=True
-                )
+                log.warning("Rejected a drafted fact: %r %r", *key, exc_info=True)
+                continue
+            recorded.append(key)
+            known.append(key)
         for unknown in draft.unknowns:
+            # On a known key, wonder() sees it's known or already asked and opens nothing.
+            key = existing_key(Key(unknown.subject, unknown.attribute), known)
             try:
-                await self._sink.wonder(unknown.subject, unknown.attribute, unknown.question)
+                await self._sink.wonder(*key, unknown.question)
             except ValueError:
                 log.warning("Rejected a drafted question: %r", unknown.question)
+
+    def _keys(self, session: Session, since: float) -> tuple[list[Key], list[Key]]:
+        """What the player said since the note's first event, and every key memory knows."""
+        facts = self._facts.current(self._game, limit=MAX_KNOWN_KEYS)
+        questions = self._unknowns.answerable_questions(
+            self._game, session.started_at, limit=MAX_KNOWN_KEYS
+        )
+        recorded = [
+            Key(fact.subject, fact.attribute)
+            for fact in facts
+            if fact.source == "player" and fact.valid_from >= since
+        ]
+        known = [Key(fact.subject, fact.attribute) for fact in facts]
+        known += [Key(q.subject, q.attribute) for q in questions if q.subject and q.attribute]
+        return recorded, known

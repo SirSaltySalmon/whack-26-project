@@ -3,11 +3,9 @@
 import asyncio
 import logging
 from pathlib import Path
-from urllib.parse import urlparse
 
 import uvicorn
 
-from brain.agent.handlers import AgentLimits, AgentTools
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import default_live_source, live_frame_scale
@@ -32,10 +30,12 @@ from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
 from brain.parts import (
     find_wiki,
+    make_agent_tools,
     make_bark_bank,
     make_observer,
     make_progress_scout,
     make_talker,
+    make_tips,
     survive,
     tool_registry,
 )
@@ -47,7 +47,6 @@ from brain.replay.wiring import (
     no_note_model,
     replay_talker,
 )
-from brain.research.open_page import OpenPage
 from brain.server import OverlayLink, create_app
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
@@ -163,33 +162,11 @@ async def run(
     else:
         talker = live_talker
     # Replays never spend money on vision, so they get plain replies with no tools.
-    tools = None
-    open_page = None
-    if live_talker is not None:
-        tools = AgentTools(
-            buffer,
-            link,
-            factory.vision,
-            factory.deep,
-            memory,
-            talker_context,
-            AgentLimits(
-                settings.mask_padding_px,
-                settings.closeup_max_edge_px,
-                settings.look_max_frame_age_s,
-                settings.pointer_ttl_ms,
-            ),
-            look_vision=factory.closeup,
-        )
-        live_tools = tools
-
-        def wiki_host() -> str | None:
-            # None until the wiki is found in the background, and then no page is read.
-            research = live_tools.research
-            return urlparse(research.site.info.server).hostname if research else None
-
-        open_page = OpenPage(bus, link.send, wiki_host)
-        tools.open_page = open_page
+    tools, open_page = (
+        make_agent_tools(settings, factory, buffer, link, bus, memory, talker_context)
+        if live_talker is not None
+        else (None, None)
+    )
 
     # Replays get no barks: they'd spend TTS, and a cached one would replace a recorded line.
     barks = None if replay_dir else make_bark_bank(settings, personalities)
@@ -208,15 +185,12 @@ async def run(
         context=talker_context,
         on_spoken=on_spoken,
         agent=live_talker if tools else None,
+        tip_llm=make_tips(factory) if live_talker else None,
         tools=tool_registry(tools, observer),
         personalities=personalities,
         take_question=memory.take_question,
         release_question=memory.release_question,
-        question_gap_s=settings.question_gap_s,
-        question_quiet_s=settings.question_quiet_s,
-        advice_gap_s=settings.advice_gap_s,
-        advice_quiet_s=settings.advice_quiet_s,
-        advice_first_s=settings.advice_first_s,
+        pacing=link.settings.pacing,
         advice_after_learning_s=settings.advice_after_learning_s,
         page_excerpt=open_page.excerpt_for if open_page else None,
         barks=barks,

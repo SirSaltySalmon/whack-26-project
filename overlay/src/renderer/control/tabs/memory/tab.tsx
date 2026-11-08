@@ -6,6 +6,6 @@ export const tab: ControlTab = {
   title: "Memory",
   order: 30,
   icon: "◈",
-  needsBrain: true,
+  // Memory is read from disk with the partner off, so the tab always works.
   Component: MemoryTab,
 };

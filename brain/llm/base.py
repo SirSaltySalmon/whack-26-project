@@ -76,6 +76,10 @@ class ToolLLM(Protocol):
     ) -> ToolChat: ...
 
 
+class ChatLLM(TextLLM, ToolLLM, Protocol):
+    """Replies with or without tools, for a role such as tips that may need either."""
+
+
 class PointTarget(BaseModel):
     """Ask vision models for boxes in this form; convert with brain.perception.coords."""
 

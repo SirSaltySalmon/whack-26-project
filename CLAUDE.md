@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Claude Haiku 5.5 (paid, thinking off): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
+| LLMs | Claude Haiku 5.5 (paid, thinking off except tips, which think briefly; `talker_thinking` turns it on everywhere): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
 | Memory | SQLite (WAL, JSON1, FTS5). Optional meaning-based recall: sqlite-vec with fastembed's all-MiniLM-L6-v2, chosen in settings |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
@@ -106,6 +106,7 @@ python -m brain --live --record            # also save a session to sessions/ fo
 python -m brain --live --off observer,tts   # turn parts off to save quota; `--help` lists them. DISABLE in .env does the same
 python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
+python -m brain --memory                   # read-only memory for the Control Center with the partner off: one JSON request per stdin line, such as {"type":"memory.list_games","request_id":"1"}
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
 python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
 python -m brain --live --record 2>&1 | Tee-Object run.log   # keep the log for the latency report
@@ -186,7 +187,8 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as a tentative observed `playthrough / progress` fact. It asks the game's planned progress question if there is one. Check the guesses on real Terraria hotbars
 - [ ] Planned questions (`brain/learner/questions.py`): once per game, the deep model drafts up to 6 questions in the game's own terms from the brief and keeps them in the profile. Each session queues the ones memory doesn't know. Check them on Terraria
 - [ ] Mic off (`Settings.mic_enabled`) and the overlay's text box (`player.text`). Check that the game gets the keyboard back after Enter
-- [ ] Advice: with hints on, the first tip is after `advice_first_s` (90 s), then every `advice_gap_s` (180 s), and 15 s after the partner learns where the player is. Quiet means no player turn and no partner line. The talker can answer SKIP to stay quiet. A tip may call `point_at`
+- [ ] Pacing (`Settings.pacing`, the Control Center's Pacing tab): the gaps between event reactions (8 s), questions (45 s, with no quiet stretch) and tips, editable live, with Lively, Default and Calm presets. Calm is the old pacing
+- [ ] Advice: with hints on, the first tip is after 45 s, then every 90 s (both in Pacing), and 15 s after the partner learns where the player is. Quiet means no player turn and no partner line. The talker can answer SKIP to stay quiet. A tip may call `point_at`
 - [ ] Barks (WP6): pre-generated per voice into `data/barks/`, played for mapped events and the looking filler, else the talker. Check event-to-bark under 300 ms and that barge-in stops one
 - [ ] Open wiki page (WP8): the partner can answer from the page the player has open, on the game's wiki only. Stage 1's page checks are not run
 

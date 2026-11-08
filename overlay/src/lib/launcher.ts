@@ -6,6 +6,7 @@ import type {
   VoiceOption,
   VoiceStyle,
 } from "./protocol.generated.ts";
+import { DEFAULT_PACING, fullPacing, type FullPacing } from "./pacing.ts";
 
 /** The only environment variables the Control Center will store or pass on as keys. */
 export const KEY_NAMES = [
@@ -31,6 +32,7 @@ export interface PartnerSettings {
   mic_enabled: boolean;
   voice_style: VoiceStyle;
   memory_search: MemorySearch;
+  pacing: FullPacing;
 }
 
 export function partnerSettings(settings: Settings): PartnerSettings {
@@ -41,6 +43,7 @@ export function partnerSettings(settings: Settings): PartnerSettings {
     mic_enabled: settings.mic_enabled ?? true,
     voice_style: settings.voice_style ?? DEFAULT_VOICE_STYLE,
     memory_search: settings.memory_search ?? DEFAULT_MEMORY_SEARCH,
+    pacing: fullPacing(settings.pacing),
   };
 }
 
@@ -103,6 +106,7 @@ export const DEFAULT_CONFIG: LauncherConfig = {
     mic_enabled: true,
     voice_style: DEFAULT_VOICE_STYLE,
     memory_search: DEFAULT_MEMORY_SEARCH,
+    pacing: DEFAULT_PACING,
   },
 };
 
@@ -167,6 +171,7 @@ export function sanitizeConfig(raw: unknown): LauncherConfig {
       memory_search:
         MEMORY_SEARCHES.find((mode) => mode === settings.memory_search) ??
         DEFAULT_MEMORY_SEARCH,
+      pacing: fullPacing(settings.pacing),
     },
   };
 }

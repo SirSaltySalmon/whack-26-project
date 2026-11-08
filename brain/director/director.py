@@ -2,7 +2,8 @@
 
 Deciding stays instant because speech runs in its own task. There's one speech slot: a player turn
 replaces whatever is in it, the start of their next turn cancels it, and anything else is skipped
-while it's busy. A cancelled turn doesn't take back a pointer or card it has already shown.
+while it's busy. A cancelled turn doesn't take back a pointer or card it has already shown, and if
+nothing was said for it, its words start the player's next turn (carry.py).
 
 One exception: a turn that has started a tool, such as checking the screen, isn't cancelled.
 Players talk while they wait, and cancelling meant the answer they asked for never came. It
@@ -15,6 +16,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 
 from brain.agent.tools import ToolRegistry, TurnContext
+from brain.director.carry import Carry
 from brain.director.context import gather_context, player_context
 from brain.director.lines import Lines, play_bark
 from brain.director.personalities import PersonalityBook, load_personalities
@@ -31,23 +33,17 @@ from brain.director.rules import (
     ReactToEvent,
     Say,
     SetVoice,
+    apply_pacing,
     decide,
 )
-from brain.director.talker import ADVICE_PROMPT, event_prompt
-from brain.director.turns import (
-    TIP_QUERY,
-    Persona,
-    player_reply,
-    talker_reply,
-    tip_reply,
-    tip_tools,
-)
+from brain.director.talker import event_prompt
+from brain.director.turns import TIP_QUERY, Persona, give_tip, player_reply, talker_reply
 from brain.events import Event, EventBus, Tick
 from brain.latency import Origin
-from brain.llm.base import TextLLM, ToolLLM
+from brain.llm.base import ChatLLM, TextLLM, ToolLLM
 from brain.voice.barks import BarkBank
 from brain.voice.pipeline import Voice
-from shared.protocol.messages import QuestionAsk
+from shared.protocol.messages import Pacing, QuestionAsk
 
 log = logging.getLogger(__name__)
 
@@ -70,15 +66,14 @@ class Director:
         on_spoken: Callable[[str], Awaitable[None]] | None = None,
         *,
         agent: ToolLLM | None = None,
+        # Nobody waits on a tip, so it may come from a model that thinks first. Replays have none.
+        tip_llm: ChatLLM | None = None,
         tools: ToolRegistry | None = None,
         personalities: PersonalityBook | None = None,
         take_question: Callable[[], Awaitable[QuestionAsk | None]] | None = None,
         release_question: Callable[[str], Awaitable[None]] | None = None,
-        question_gap_s: float = 90.0,
-        question_quiet_s: float = 20.0,
-        advice_gap_s: float = 180.0,
-        advice_quiet_s: float = 20.0,
-        advice_first_s: float = 90.0,
+        # The player's pacing settings at startup. Later changes arrive as SettingsChanged.
+        pacing: Pacing | None = None,
         advice_after_learning_s: float = 15.0,
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
@@ -96,6 +91,7 @@ class Director:
         self._context = context
         self._on_spoken = on_spoken
         self._agent = agent
+        self._tip_llm = tip_llm
         self._tools = tools
         self._personalities = personalities or load_personalities()
         self._lines = Lines(self._personalities, personality, voice_id, barks)
@@ -104,15 +100,11 @@ class Director:
         self._clock = clock
         events = self._personalities.event_lines if bark_events is None else bark_events
         self._state = DirectorState(
-            question_gap_s=question_gap_s,
-            question_quiet_s=question_quiet_s,
-            advice_gap_s=advice_gap_s,
-            advice_quiet_s=advice_quiet_s,
-            advice_first_s=advice_first_s,
-            advice_after_learning_s=advice_after_learning_s,
-            bark_events=events,
+            advice_after_learning_s=advice_after_learning_s, bark_events=events
         )
+        apply_pacing(self._state, pacing or Pacing())
         self._slot: asyncio.Task[None] | None = None
+        self._carry = Carry(clock)
         self._background: set[asyncio.Task[None]] = set()
         # True while the turn in the slot is running a tool, so it isn't cancelled.
         self.checking = False
@@ -155,7 +147,7 @@ class Director:
                     self._slot = asyncio.create_task(self._after(self._slot, action))
                     return
                 self._cancel_slot()
-                self._slot = asyncio.create_task(self._perform_safely(action))
+                self._slot = asyncio.create_task(self._perform_safely(self._carry.into(action)))
             case SetVoice():
                 # Separate from speech, because a setting shouldn't wait for or cancel a reply.
                 task = asyncio.create_task(self._perform_safely(action))
@@ -170,6 +162,7 @@ class Director:
     def _cancel_slot(self) -> None:
         if self._slot is not None and not self._slot.done():
             log.debug("Cancelling speech in progress")
+            self._carry.cut_off()
             self._slot.cancel()
 
     async def _after(self, previous: asyncio.Task[None], action: Action) -> None:
@@ -190,10 +183,11 @@ class Director:
                 if await self._voice.say(action.text):
                     self._note_line()
             case AskTalker():
-                if self._agent is not None and self._tools is not None:
-                    await self._player_turn(action, self._agent, self._tools)
-                else:
-                    await self._talk(action.transcript, query=action.transcript)
+                with self._carry.answering(action):
+                    if self._agent is not None and self._tools is not None:
+                        await self._player_turn(action, self._agent, self._tools)
+                    else:
+                        await self._talk(action.transcript, query=action.transcript)
             case ReactToEvent():
                 await self._talk(event_prompt(action.name, action.data), action.name, action.origin)
             case PlayBark():
@@ -214,6 +208,7 @@ class Director:
 
     def _note_line(self) -> None:
         # The quiet stretch before a question or tip counts from lines really said, not attempted.
+        self._carry.spoke()
         self._handle(PartnerSpoke(ts=self._clock()))
 
     async def _said(self, text: str) -> None:
@@ -277,12 +272,10 @@ class Director:
             self.checking = False
 
     async def _advise(self) -> None:
-        tools = tip_tools(self._tools)
-        if self._agent is None or tools is None:
-            # Replays have no agent, and a tip that can't point is still worth saying.
-            return await self._talk(ADVICE_PROMPT, query=TIP_QUERY)
+        tip = self._tip_llm
+        agent, talker = (tip, tip) if tip else (self._agent, self._talker)
         context = await gather_context(self._context, TIP_QUERY)
-        text = await tip_reply(self._agent, tools, self._persona(), context)
+        text = await give_tip(agent, talker, self._tools, self._persona(), context)
         if text:
             await self._speak(text)
 

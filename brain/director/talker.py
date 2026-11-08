@@ -66,20 +66,28 @@ USUAL_WORDS = 12
 MAX_TOKENS = 200
 
 
-# The partner speaks to the player, so a sentence about "the player" is its reasoning leaking.
-# A live advice line began "The player's on the character select screen, so there's no progress
-# to build on yet." before getting to the tip.
-_NARRATION = re.compile(r"\bthe player\b", re.IGNORECASE)
+# A safety net for replies made with thinking off, where reasoning can leak into the reply: a live
+# tip began "The player's on the character select screen, so there's no progress to build on
+# yet." Tips now think first, so this is rarely needed. It matches only a sentence that opens on
+# the player's state or intent, so a wiki fact such as "The player can craft it at an anvil" stays.
+_NARRATION = re.compile(
+    r"^the player(?:['’]s|\s+(?:is|isn't|was|wasn't|has|hasn't|had|seems|appears|wants|just|"
+    r"asked|asks|said|says|might|may|probably|doesn't|didn't))\b",
+    re.IGNORECASE,
+)
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 def drop_narration(text: str) -> str:
-    """Removes sentences that talk about the player instead of to them."""
+    """Drops the sentences a reply opens with that describe the player instead of talking to
+    them. Only the opening, where reasoning leaks: anything after the first real line stays."""
     sentences = [s for s in _SENTENCE_END.split(text.strip()) if s]
-    kept = [s for s in sentences if not _NARRATION.search(s)]
-    if len(kept) < len(sentences):
-        log.info("Dropped narration from a reply: %s", " ".join(set(sentences) - set(kept)))
-    return " ".join(kept)
+    start = 0
+    while start < len(sentences) and _NARRATION.match(sentences[start]):
+        start += 1
+    if start:
+        log.info("Dropped narration from a reply: %s", " ".join(sentences[:start]))
+    return " ".join(sentences[start:])
 
 
 def cap_words(text: str, max_words: int) -> str:

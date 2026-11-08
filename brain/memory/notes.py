@@ -73,6 +73,10 @@ such as "plays summoner" or "base is east of spawn".
 - Never include enemy stats, item stats or other details a wiki would cover.
 - Never include current values such as health, position or time of day.
 - Use an empty list when the player stated nothing lasting. Don't guess.
+- Never repeat what one of your answers records, or what "What memory holds" already says, even \
+in other words or under another subject or attribute. Memory already has it.
+- When a fact fits a key under "What memory holds" or a question's "files under" key, use that \
+exact subject and attribute rather than a near match, such as player for playthrough.
 - When the player corrects something under "What memory holds", reuse its exact subject and \
 attribute, so the new value replaces the wrong one instead of sitting beside it.
 
@@ -139,6 +143,16 @@ def fallback_note(events: list[LoggedEvent]) -> str:
     return "\n\n".join(sections)
 
 
+def _question_line(question: Question) -> str:
+    line = f"{question.id}: {_one_line(question.text)}"
+    # An answer is filed under this key, so naming it keeps the model from filing it again as a
+    # fact under a key of its own. A question about a guess has none: its fact is under memory.
+    if question.subject and question.attribute:
+        key = f"{_one_line(question.subject)} / {_one_line(question.attribute)}"
+        line += f" (files under {key})"
+    return line
+
+
 def _strip_delimiters(text: str) -> str:
     # Data that could close the block could then pose as instructions to the model. Removing one
     # marker can join its neighbours into a new one, so repeat until none are left.
@@ -162,7 +176,7 @@ def _build_prompt(
         lines = "\n".join(format_fact(fact) for fact in facts)
         sections.append(f"What memory holds (subject / attribute: value (source)):\n{lines}")
     if open_questions:
-        lines = "\n".join(f"{q.id}: {_one_line(q.text)}" for q in open_questions)
+        lines = "\n".join(_question_line(q) for q in open_questions)
         sections.append(f"Questions the player may answer (id: question):\n{lines}")
     sections.append(f"Events and conversation, oldest first:\n{render_events(events)}")
     data = _strip_delimiters("\n\n".join(sections))

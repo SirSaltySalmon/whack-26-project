@@ -45,6 +45,16 @@ class NoteView(BaseModel):
     created_at: float
 
 
+class GameView(BaseModel):
+    """One game memory has something filed under."""
+
+    title: str  # Can be empty: with GAME_TITLE blank, every game shares an empty title.
+    facts: int  # Current facts only.
+    questions: int  # Still open.
+    sessions: int
+    last_played: float | None = None  # Unix seconds the newest session started.
+
+
 # --- Control Center to brain ---
 class ControlHello(BaseModel):
     type: Literal["control.hello"] = "control.hello"
@@ -60,14 +70,25 @@ class MemoryQuery(BaseModel):
     # Also return facts whose validity window has closed, and settled questions.
     include_history: bool = False
     limit: int = Field(default=50, ge=1, le=200)
+    # Which game's memory. None means the game the brain is playing, or the one played last.
+    game: str | None = Field(default=None, max_length=200)
 
 
 class ContextPreview(BaseModel):
-    """Asks for the exact context the talker would get for this query."""
+    """Asks for the exact context the talker would get for this query. For a game other than the
+    one being played, that's the context the next session of it would start with."""
 
     type: Literal["memory.context_preview"] = "memory.context_preview"
     request_id: str
     text: str = Field(max_length=500)
+    game: str | None = Field(default=None, max_length=200)
+
+
+class MemoryListGames(BaseModel):
+    """Asks which games memory holds anything for."""
+
+    type: Literal["memory.list_games"] = "memory.list_games"
+    request_id: str
 
 
 class VoicePreview(BaseModel):
@@ -98,6 +119,16 @@ class MemoryContext(BaseModel):
     request_id: str
     context: str
     elapsed_ms: float
+
+
+class MemoryGames(BaseModel):
+    type: Literal["memory.games"] = "memory.games"
+    request_id: str
+    games: list[GameView]  # Most recently played first.
+    # What a query without a game reads: the game being played, else the one played last.
+    current: str | None = None
+    # False when memory is read without the partner running, so nothing new is being written.
+    live: bool
 
 
 class BrainStatus(BaseModel):
@@ -134,11 +165,23 @@ class BrainDescription(BaseModel):
 
 
 ControlRequest = Annotated[
-    ControlHello | MemoryQuery | ContextPreview | SettingsUpdate | VoicePreview | ControlShutdown,
+    ControlHello
+    | MemoryQuery
+    | ContextPreview
+    | MemoryListGames
+    | SettingsUpdate
+    | VoicePreview
+    | ControlShutdown,
     Field(discriminator="type"),
 ]
 ControlReply = Annotated[
-    MemoryResults | MemoryContext | BrainStatus | SettingsState | MemoryToast | ControlError,
+    MemoryResults
+    | MemoryContext
+    | MemoryGames
+    | BrainStatus
+    | SettingsState
+    | MemoryToast
+    | ControlError,
     Field(discriminator="type"),
 ]
 
