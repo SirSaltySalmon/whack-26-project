@@ -16,7 +16,7 @@ EXPECTED_ARGUMENTS = {
     "look_closer": {"question", "area"},
     "look_back": {"question"},
     "point_at": {"target"},
-    "lookup_wiki": {"topic", "question", "open_page"},
+    "lookup_wiki": {"topic", "question", "open_page", "also"},
     "read_open_page": {"question"},
     "note_unknown": {"subject", "attribute", "question"},
     "think_hard": {"question"},

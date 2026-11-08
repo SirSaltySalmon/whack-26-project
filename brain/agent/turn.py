@@ -37,8 +37,12 @@ what to do or where to go and the thing is likely on screen, such as a crafting 
 an item in the hotbar or inventory, ore, a door or an enemy, in the same round as any other tool.
 - The player asks a game fact, such as a recipe, a drop, a stat, where to find something, or how \
 to summon or beat something: lookup_wiki, even if you think you know, because your memory of games \
-is often wrong. If the result doesn't answer it, say the wiki didn't say rather than guess. Also \
-lookup_wiki when they ask for the wiki or a page.
+is often wrong. Look up the page the answer depends on, such as what raises a stat, not only the \
+mode or place they mention. When it takes two pages, such as how to raise a stat in some mode, \
+give the second as `also` and put what they say together, such as a mode that copies items and \
+an item that raises the stat. Never name a menu, setting or button the results don't name. If \
+the results still don't answer it, say the wiki didn't say rather than guess. Also lookup_wiki \
+when they ask for the wiki or a page.
 - Their words answer the question under ASKED: answer_question.
 - They tell you something lasting about themselves or this playthrough: remember_fact. When they \
 contradict something you remember or see, they're right: record it with remember_fact, reusing \

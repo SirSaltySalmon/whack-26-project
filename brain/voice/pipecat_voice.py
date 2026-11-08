@@ -51,6 +51,7 @@ from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
+from brain.voice.speech_fallback import SpeechFallback
 from brain.voice.services import elevenlabs_tts, flux_stt, local_audio
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
@@ -69,6 +70,7 @@ class PipecatVoice:
         self._bus = bus
         self._link = link
         self._subtitles = SubtitleOnlyVoice(link)
+        self.speech = SpeechFallback(self._subtitles)
         self._mood = MoodTracker()
         self._echo = SelfEcho()
         self._last_partial = ""
@@ -121,10 +123,11 @@ class PipecatVoice:
             # Debug, because the director retries results it still owes the player.
             log.debug("Player is talking; not saying: %s", text)
             return False
-        if not self._speaks:
+        if not self._speaks or self.speech.given_up:
             return await self._subtitles.say(text)
         log.info("Say: %s", text)
         self._echo.said(text)
+        self.speech.queued(text)
         self._first_audio.queued(origin, self.bot_speaking)
         await self._worker.queue_frame(TTSSpeakFrame(text))
         return True
@@ -163,6 +166,7 @@ class PipecatVoice:
     async def interrupt(self) -> None:
         """Cuts off the line playing and any queued after it, as a barge-in does."""
         await self._bridge.broadcast_interruption()
+        self.speech.interrupted()
         if self.bot_speaking:
             await self.send(AvatarState(state="idle"))
 
@@ -214,6 +218,7 @@ class PipecatVoice:
     def on_bot_stopped(self) -> None:
         self.bot_speaking = False
         self._bot_stopped_at = time.monotonic()
+        self.speech.played()
 
     def mic_on(self) -> bool:
         """The player's setting, read live so turning it off takes effect on the next frame."""
@@ -257,6 +262,7 @@ class PipecatVoice:
                 log.info("Barge-in: player started speaking")
             # Also clears speech that's queued but not yet playing.
             await self._bridge.broadcast_interruption()
+            self.speech.interrupted()
             self._bus.publish(PlayerStartedSpeaking())
             await self.send(AvatarState(state="listening"))
 

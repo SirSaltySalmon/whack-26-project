@@ -12,7 +12,9 @@ import pytest
 from brain.events import EventBus, PlayerSpeech, PlayerSpeechPartial, PlayerStartedSpeaking
 from brain.latency import FirstAudio
 from brain.tests.fakes import FakeOverlay, drain
+from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.sentiment import MoodTracker
+from brain.voice.speech_fallback import SpeechFallback
 from shared.protocol.messages import AvatarState, Settings
 
 pytest.importorskip("pyaudio")
@@ -67,6 +69,7 @@ class Harness:
         voice.user_speaking = False
         voice.bot_speaking = False
         voice._first_audio = FirstAudio()
+        voice.speech = SpeechFallback(SubtitleOnlyVoice(None))  # type: ignore[arg-type]
         voice._half_duplex = False
         voice._echo_tail_s = 0.4
         voice._bot_stopped_at = None
