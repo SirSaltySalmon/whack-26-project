@@ -2,6 +2,20 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: Avatars are a gallery the overlay and Control Center share, without the brain
+
+**Status:** built on `main`, for the team to review. Applies to `overlay/src/renderer/` only. Replaces the suggestion under "What other tracks need to know" below to send avatar choices through `Settings`.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **The circle is the default again; the cat stays as a built-in choice** | The player asked for it. Uploads sit after the two built-ins |
+| 2 | **Uploads live in IndexedDB, the choice in localStorage** | Both windows load from the same origin, so they share both. A 512 px PNG is a few hundred KB, too many for localStorage's few MB |
+| 3 | **A BroadcastChannel tells the other window to reload** | A pick or edit in either window shows in the other at once, with or without the brain. Through `Settings` it would only work while the brain runs, and images would cross the socket |
+| 4 | **Each upload keeps its scaled original, and edits re-cut from it** | Remove background and mirror can be turned off again. Renaming doesn't re-cut |
+| 5 | **The single picture saved before this moves into the gallery once**, as "My avatar", still chosen | Nobody loses their upload |
+
+The overlay card picks and uploads. Editing is in the Control Center's Avatar tab (order 50), because a text field there can take the keyboard.
+
 ## 2026-11-07: A Control Center window configures, starts and inspects the brain
 
 **Status:** built on `frontend`, for the team to review. Applies to `overlay/src/main/`, `overlay/src/renderer/control/`, `shared/protocol/control.py`, `brain/control.py`, `brain/describe.py`, `brain/server.py`, `brain/app.py` and `brain/__main__.py`, plus small additions in Track 3's and Track 4's directories listed below.

@@ -69,7 +69,7 @@ Record demos with OBS Display Capture. Check this in the first hour: some OBS us
 
 | Element | Behavior |
 |---|---|
-| **Character** | A 3:4 portrait frame, with a placeholder circle until there's art. Its body stays click-through. Hovering shows a grip to move it, a corner to resize it, and a button to reopen the wiki. Position and size are saved locally, and the brain only sees them through `overlay.rects` |
+| **Character** | A 3:4 portrait frame showing the chosen avatar: the plain circle by default, the bundled cat, or a picture the player uploaded. Uploads are picked and added in the settings card or the Control Center's Avatar tab, and renamed, mirrored, cut out or deleted there. Its body stays click-through. Hovering shows a grip to move it, a corner to resize it, and a button to reopen the wiki. Position and size are saved locally, and the brain only sees them through `overlay.rects` |
 | **Pointer** | Launches from the character, flies to sit beside the target, shows its label, fades after `ttl_ms` and returns. It doesn't track moving targets, so it points at what it can find on screen |
 | **Wiki window** | The real site in a sandboxed `<webview>`, with back, forward, reload, minimize and close. It can be moved and resized. Minimizing shrinks it to a tab near the character and keeps the page and scroll position. There is one wiki window: a new lookup reuses it |
 | **Text card** | Sanitized plain text in the same movable, resizable, closable frame |

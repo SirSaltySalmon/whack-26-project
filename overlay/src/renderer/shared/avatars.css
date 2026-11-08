@@ -1,0 +1,92 @@
+/* The avatar gallery, shared by the overlay's settings card and the Control Center. Both windows
+   define these colour variables; the fallbacks cover the ones only the overlay has. */
+.avatar-gallery {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--avatar-tile, 62px), 1fr)
+  );
+  gap: 6px;
+}
+
+.avatar-gallery-large {
+  --avatar-tile: 108px;
+  gap: 10px;
+}
+
+.avatar-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  padding: 5px 5px 4px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.avatar-tile:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.avatar-tile:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.avatar-tile-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* A dark backdrop, like most game scenes, in the avatar's own 3:4 frame. */
+.avatar-tile-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.avatar-tile-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.avatar-tile-circle {
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--idle, #7c8db5);
+}
+
+.avatar-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.avatar-tile-on .avatar-tile-name {
+  color: var(--accent);
+}
+
+.avatar-tile-add .avatar-tile-art {
+  border: 1px dashed var(--border-strong, var(--border));
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+}
+
+.avatar-gallery + .settings-row {
+  margin-top: 8px;
+}

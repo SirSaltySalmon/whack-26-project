@@ -3,7 +3,7 @@
  *
  * Only background reachable from the image's edges is removed, by flood fill. Deleting every white
  * pixel would punch holes in white fur, eyes and highlights inside the character. Pure, so it runs
- * the same on uploads in the renderer and on the bundled default image.
+ * the same on uploads in the renderer and on the bundled cat.
  */
 
 export interface BackgroundOptions {

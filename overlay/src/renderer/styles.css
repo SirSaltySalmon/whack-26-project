@@ -135,11 +135,6 @@ button {
   }
 }
 
-/* Opened from the "Choose image" button instead, which matches the other settings. */
-.avatar-picker {
-  display: none;
-}
-
 .option:disabled {
   cursor: default;
   opacity: 0.55;
