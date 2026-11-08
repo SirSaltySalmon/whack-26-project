@@ -22,6 +22,7 @@ from brain.perception.observer import Observer
 from brain.perception.ocr import OcrWorker
 from brain.perception.reader_engine import ReaderEngine
 from brain.server import OverlayLink
+from brain.switches import is_off
 from shared.protocol import BrainMessage
 from shared.protocol.messages import DebugRegion, DebugRegions
 
@@ -76,7 +77,9 @@ def build_hud(
         observer.suppressed_events = readers.provides
 
     learner = None
-    if live:
+    if live and is_off(settings, "learner"):
+        log.warning("Not learning where the HUD is: turned off for this run")
+    elif live:
         config = LearnerConfig(
             frames=settings.learner_frames,
             frame_gap_s=settings.learner_frame_gap_s,

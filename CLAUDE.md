@@ -102,6 +102,7 @@ python -m brain --live --type              # also take turns typed on stdin; `5:
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --debug-regions     # also draw the learned HUD regions over the game
 python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
+python -m brain --live --off observer,tts   # turn parts off to save quota; `--help` lists them. DISABLE in .env does the same
 python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
@@ -136,6 +137,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
 - `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` lists open app windows in the terminal and the player picks the game; the pick is kept in `data/games.json` and reused when there's no terminal, as when the Control Center starts the brain. Live capture stays off until there's a game.
 - `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
+- Optional for testing: `DISABLE`, parts to turn off, such as `observer,tts` (see `brain/switches.py`). A blank key, such as `ANTHROPIC_API_KEY=`, counts as unset.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 

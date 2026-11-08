@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from shared.protocol.messages import VoiceOption
@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     elevenlabs_api_key: SecretStr | None = None
     exa_api_key: SecretStr | None = None
     cartesia_api_key: SecretStr | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _blank_key_is_unset(cls, value: object, info: ValidationInfo) -> object:
+        # `KEY=` in .env or the shell should mean no key, not a key that fails every call.
+        blank = isinstance(value, str) and not value.strip()
+        return None if blank and (info.field_name or "").endswith("_api_key") else value
+
+    # Parts turned off for testing, such as `observer,tts`. See brain/switches.py, and --off.
+    disable: str = ""
 
     brain_port: int = 8765
 

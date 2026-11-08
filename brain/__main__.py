@@ -3,6 +3,7 @@
 Add `--type` to take player turns typed on stdin as well, which needs no mic or Deepgram key.
 Add `--record` to a live run to save a session for replay. It stores screen data, so it's never on
 by default. `--describe` prints what the Control Center can offer, as JSON, and exits.
+Add `--off observer,tts` to turn parts off while testing; DISABLE in .env does the same.
 """
 
 import argparse
@@ -14,6 +15,7 @@ from typing import Any
 
 from brain.config import Settings
 from brain.logging_setup import configure_logging
+from brain.switches import PARTS, apply_off, parse_off
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,13 @@ async def run(settings: Settings, **options: Any) -> None:
     from brain.app import run as run_brain
 
     await run_brain(settings, **options)
+
+
+def _off_parts(text: str) -> set[str]:
+    try:
+        return parse_off(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -69,6 +78,14 @@ def _parser() -> argparse.ArgumentParser:
         help="replay only: save every message sent to the overlay, for scripts/compare_replay.py",
     )
     parser.add_argument(
+        "--off",
+        type=_off_parts,
+        default=set(),
+        metavar="PARTS",
+        help="turn parts off for this run, comma-separated: "
+        + "; ".join(f"{name} ({what})" for name, what in PARTS.items()),
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="show debug and library log lines"
     )
     return parser
@@ -77,11 +94,16 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = _parser()
     args = parser.parse_args()
+    try:
+        settings = apply_off(Settings(), args.off)
+    except ValueError as exc:
+        # A bad DISABLE in .env, since --off is checked by the parser.
+        parser.error(f"DISABLE: {exc}")
     if args.describe:
         from brain.describe import describe
 
         # Stdout is the interface here: the Control Center reads this one JSON line.
-        sys.stdout.write(describe(Settings()).model_dump_json() + "\n")
+        sys.stdout.write(describe(settings).model_dump_json() + "\n")
         return
     if args.record and args.replay:
         parser.error("--record only works with --live")
@@ -92,8 +114,10 @@ def main() -> None:
         parser.error("--speed must be above 0")
 
     configure_logging(args.verbose)
+    if settings.disable:
+        log.info("Turned off for this run: %s", settings.disable.replace(",", ", "))
     try:
-        settings, game_hint = Settings(), ""
+        game_hint = ""
         if args.live:
             from brain.game_setup import pick_game
 
