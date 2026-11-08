@@ -34,7 +34,12 @@ test("keys, game and voice choices reach the environment", () => {
         micIndex: 2,
         speakerIndex: null,
       },
-      settings: { proactive: true, personality: "supportive", voice_id: "v2" },
+      settings: {
+        proactive: true,
+        personality: "supportive",
+        voice_id: "v2",
+        voice_style: "classic",
+      },
     }),
     { GEMINI_API_KEY: "g-key", ANTHROPIC_API_KEY: "a-key" },
     [{ name: "Ava", id: "v1" }],
@@ -85,7 +90,7 @@ test("saved files are repaired field by field", () => {
     typed: "yes",
     customVoices: [{ name: "Ok", id: "v" }, { name: 3 }],
     tuning: { micIndex: -1, speakerIndex: 1, keyterms: ["a", 2] },
-    settings: { personality: "protective", voice_id: 5 },
+    settings: { personality: "protective", voice_id: 5, voice_style: "loud" },
   });
   assert.equal(repaired.mode, "live");
   assert.equal(repaired.gameTitle, "Terraria");
@@ -101,6 +106,7 @@ test("saved files are repaired field by field", () => {
     proactive: true,
     personality: "protective",
     voice_id: null,
+    voice_style: "expressive",
   });
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
 });

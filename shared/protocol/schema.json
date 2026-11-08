@@ -1030,6 +1030,15 @@
           ],
           "default": null,
           "title": "Voice Id"
+        },
+        "voice_style": {
+          "default": "expressive",
+          "enum": [
+            "expressive",
+            "classic"
+          ],
+          "title": "Voice Style",
+          "type": "string"
         }
       },
       "title": "Settings",
