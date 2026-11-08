@@ -8,6 +8,7 @@ from brain.agent.handlers import AgentLimits, AgentTools
 from brain.agent.tools import TurnContext
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.llm.base import TextLLM, ToolCall, VisionLLM
+from brain.memory.layers import TalkerContext
 from brain.research import WikiCard
 from brain.tests.fakes import (
     FakeMemory,
@@ -61,7 +62,7 @@ def rig(
     max_age: float = 15.0,
     deep: FakeTextLLM | None = None,
     memory: FakeMemory | None = None,
-    context: str = "",
+    context: TalkerContext | None = None,
     research: FakeResearch | None = None,
     get_vision: Callable[[], VisionLLM] | None = None,
     get_deep: Callable[[], TextLLM] | None = None,
@@ -75,9 +76,9 @@ def rig(
     memory = memory or FakeMemory()
     context_questions: list[str] = []
 
-    async def gather_context(question: str) -> str:
+    async def gather_context(question: str, current: str | None) -> TalkerContext:
         context_questions.append(question)
-        return context
+        return context or TalkerContext()
 
     tools = AgentTools(
         buffer,

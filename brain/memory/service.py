@@ -1,8 +1,9 @@
 """Connects memory to the rest of the brain. This is the only async entry point other tracks need.
 
 Other tracks call:
-- `context()` for the talker's small block, with `CONTEXT_PREAMBLE` in its system prompt
-- `record_partner_turn()` whenever the partner finishes speaking
+- `talker_context()` for what every spoken reply knows, laid out in brain/memory/layers.py, with
+  `CONTEXT_PREAMBLE` in the system prompt saying how to treat it
+- `record_partner_turn()` whenever the partner finishes speaking, `record_tool()` after a tool
 - `take_question()` when the director's question budget allows asking one, and
   `release_question()` if it then couldn't say it
 - `answer_question()`, `remember()` and `forget()` from player-turn tools
@@ -32,10 +33,10 @@ from brain.events import (
     SettingsChanged,
 )
 from brain.memory.asking import AnswerWatch, Asking
-from brain.memory.context import render_context
+from brain.memory.assemble import ContextAssembler
 from brain.memory.db import Database
 from brain.memory.facts import FactStore
-from brain.memory.gather import gather_context
+from brain.memory.layers import TalkerContext
 from brain.memory.models import Fact, NoteKind, Question, RememberResult, Session, Source
 from brain.memory.note_flow import NoteFlow
 from brain.memory.notes import NoteWriter
@@ -51,7 +52,6 @@ log = logging.getLogger(__name__)
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
-SLOW_CONTEXT_MS = 50.0
 _LEARNED = frozenset({"stored", "replaced", "confirmed"})
 
 
@@ -77,6 +77,7 @@ class MemoryService:
     ) -> None:
         self._database = database
         self._semantic = semantic
+        self._assembler = ContextAssembler(database, game, semantic, clock)
         self._bus = bus
         self._events = bus.subscribe()
         self._send = send
@@ -131,25 +132,25 @@ class MemoryService:
             await asyncio.shield(self.finish())
 
     # --- Called by other tracks ---
-    async def context(self, live_state: Mapping[str, str], query: str | None = None) -> str:
-        started = time.perf_counter()
+    async def talker_context(
+        self, live_state: Mapping[str, str], query: str | None = None, current: str | None = None
+    ) -> TalkerContext:
+        """`query` is what to recall by. `current` is the words being answered: the transcript on
+        player turns, None for game events, tips and think_hard."""
         session_id, asked = self.session.id, self._watch.pending
-        vector = await self._semantic.query(query) if self._semantic else None
-        text = await self._database.run(
-            lambda conn: render_context(
-                gather_context(
-                    conn, self._game, session_id, live_state, query, asked_id=asked, vector=vector
-                )
-            )
-        )
-        elapsed_ms = (time.perf_counter() - started) * 1000
-        if elapsed_ms > SLOW_CONTEXT_MS:
-            log.warning("Memory context took %.1f ms", elapsed_ms)
-        return text
+        return await self._assembler.build(session_id, asked, live_state, query, current)
+
+    async def context(self, live_state: Mapping[str, str], query: str | None = None) -> str:
+        """The same as one string, as the Control Center's preview shows it."""
+        return (await self.talker_context(live_state, query)).render()
 
     async def record_partner_turn(self, text: str) -> None:
         session_id = self.session.id
         await self._database.run(lambda _: self._sessions.log_turn(session_id, "partner", text))
+
+    async def record_tool(self, tool: str, note: str, ok: bool) -> None:
+        session_id = self.session.id
+        await self._database.run(lambda _: self._sessions.log_tool(session_id, tool, note, ok))
 
     async def take_question(self) -> QuestionAsk | None:
         """Marks it asked and starts waiting for the answer. None while one is still waited on."""

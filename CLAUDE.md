@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Claude Haiku 5.5 (paid, thinking off except tips, which think briefly; `talker_thinking` turns it on everywhere): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
+| LLMs | Claude Haiku 5.5 (paid; replies, player turns and tips think briefly at low effort, and `TALKER_THINKING=false` turns it off for replies and player turns): talker, player turns with tools, pointing, progress scout, screen reports and `look_closer`. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY`. A model name not starting with `claude` runs on Gemini, so switching back is a config change |
 | Memory | SQLite (WAL, JSON1, FTS5). Optional meaning-based recall: sqlite-vec with fastembed's all-MiniLM-L6-v2, chosen in settings |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
@@ -52,7 +52,8 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 - SQLite is the source of truth, including Markdown session notes. The Obsidian vault is a one-way export.
 
 **Speech**
-- Talker replies are short by default, about one 12-word sentence. They only run longer when the player asks for detail, with a hard cap of 100 words (`talker_max_words`).
+- Talker replies are short by default, about one 12-word sentence, and cut to 30 words in code. They only run longer when the player's words ask for detail, with a hard cap of 100 words (`talker_max_words`).
+- A bare "okay" or "thanks" isn't answered unless the partner just asked something or the player's previous turn is still unanswered (`brain/director/acks.py`).
 - Send each subtitle chunk to the overlay at the same moment as its audio.
 - Personalities are swappable data, never branches in the code.
 

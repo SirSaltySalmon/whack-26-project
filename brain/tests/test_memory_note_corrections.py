@@ -3,9 +3,10 @@
 import asyncio
 import contextlib
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 from brain.events import EventBus, PlayerSpeech
+from brain.llm.base import ChatTurn, System
 from brain.memory.db import Database, connect
 from brain.memory.models import Fact, LoggedEvent
 from brain.memory.notes import DraftAnswer, NoteWriter, parse_note_reply
@@ -21,7 +22,9 @@ class ScriptedLLM:
         self.system = ""
         self.prompts: list[str] = []
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         self.system = system
         self.prompts.append(prompt)
         reply = self.reply(self) if callable(self.reply) else self.reply

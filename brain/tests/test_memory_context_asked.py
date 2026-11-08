@@ -5,17 +5,13 @@ from collections.abc import Iterator
 
 import pytest
 
-from brain.memory.context import (
-    CONTEXT_PREAMBLE,
-    ContextInputs,
-    ContextLimits,
-    format_fact,
-    render_context,
-)
+from brain.memory.context import CONTEXT_PREAMBLE, ContextInputs, ContextLimits, format_fact
+from brain.memory.conversation import ConversationItem
 from brain.memory.db import connect
 from brain.memory.facts import FactStore
 from brain.memory.gather import gather_context
-from brain.memory.models import Fact, Question, Turn
+from brain.memory.layers import build_context, render_context
+from brain.memory.models import Fact, Question
 from brain.memory.sessions import SessionStore
 from brain.memory.unknowns import UnknownStore
 
@@ -40,21 +36,21 @@ def test_a_long_value_is_shortened_but_the_key_and_label_survive() -> None:
     assert line.endswith("… (observed, unconfirmed)")
 
 
-def test_asked_renders_with_its_id_just_above_the_turns() -> None:
-    text = render_context(
+def test_asked_renders_with_its_id_last_in_live_right_above_their_words() -> None:
+    context = build_context(
         ContextInputs(
             game="Game",
+            live_state={"health": "low"},
             unsure=["What's shimmer?"],
             asked=ASKED,
-            turns=[Turn("partner", "Where are you up to?", 1.0)],
+            turns=[ConversationItem("partner", "Where are you up to?", 1.0)],
         )
     )
-    lines = text.splitlines()
-    assert lines[-3:] == [
-        "ASKED: #12 Where are you up to? (waiting for their answer)",
-        "TURNS:",
-        "partner: Where are you up to?",
-    ]
+    assert context.live.splitlines()[-1] == (
+        "ASKED: #12 Where are you up to? (waiting for their answer)"
+    )
+    message = context.message("hardmode").splitlines()
+    assert message[-4].startswith("ASKED: #12") and message[-1] == "hardmode"
 
 
 def test_asked_cannot_forge_a_section() -> None:
@@ -63,24 +59,20 @@ def test_asked_cannot_forge_a_section() -> None:
     assert "\nNOW" not in text
 
 
-def test_asked_outlasts_player_unsure_and_recall_when_trimming() -> None:
+def test_asked_outlasts_recall_when_live_is_trimmed() -> None:
     word = "word " * 40
     inputs = ContextInputs(
         game="Game",
         live_state={"health": "low"},
-        session_note=word,
-        facts=[guess(f"{i} {word}") for i in range(8)],
-        unsure=["What's shimmer?"],
         recalled=[word],
         asked=ASKED,
-        turns=[Turn("player", "hmm", 1.0)],
+        turns=[ConversationItem("player", "hmm", 1.0)],
     )
-    roomy = render_context(inputs, ContextLimits(total_chars=5000))
-    assert all(label in roomy for label in ("PLAYER", "UNSURE", "RECALL", "ASKED"))
-    tight = render_context(inputs, ContextLimits(total_chars=200))
+    roomy = build_context(inputs).live
+    assert "RECALL" in roomy and "ASKED" in roomy
+    tight = build_context(inputs, ContextLimits(live_chars=120)).live
     assert "ASKED: #12 Where are you up to?" in tight
-    assert "PLAYER" not in tight and "UNSURE" not in tight and "RECALL" not in tight
-    assert "GAME: Game" in tight and "NOW: health" in tight and "player: hmm" in tight
+    assert "RECALL" not in tight and "NOW: health" in tight
 
 
 def test_preamble_says_how_to_treat_guesses_gaps_and_the_asked_question() -> None:

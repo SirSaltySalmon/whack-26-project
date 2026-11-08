@@ -7,6 +7,7 @@ from pathlib import Path
 
 import uvicorn
 
+from brain.agent.tool_notes import note_hook
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import default_live_source, live_frame_scale
@@ -27,6 +28,7 @@ from brain.llm.factory import LLMFactory
 from brain.loop_watch import watch_loop
 from brain.memory.db import Database, connect
 from brain.memory.embeddings import FastEmbedder
+from brain.memory.layers import TalkerContext
 from brain.memory.notes import NoteWriter
 from brain.memory.semantic import SemanticRecall
 from brain.memory.service import MemoryService
@@ -148,11 +150,14 @@ async def run(
     # Readers run on replays too, so a reader change shows up in a replayed session.
     hud = build_hud(settings, factory, database, buffer, link, bus, observer, live=not replay_dir)
 
-    async def talker_context(query: str) -> str:
+    async def talker_context(query: str, current: str | None = None) -> TalkerContext:
         # What the partner hears and sees now, on top of what memory knows.
         observed = observer.live_state() if observer else {}
         live = live_state(voice.live_state(), hud.readers.live_state(), observed)
-        return await memory.context(live, query)
+        return await memory.talker_context(live, query, current)
+
+    async def context_preview(query: str) -> str:
+        return (await talker_context(query)).render()
 
     async def on_spoken(text: str) -> None:
         if recorder:
@@ -170,6 +175,9 @@ async def run(
         if live_talker is not None
         else (None, None)
     )
+    # Every call leaves a one-line note in the conversation, so later turns know what was found.
+    registry = tool_registry(tools, observer)
+    registry = registry.reporting(note_hook(memory.record_tool)) if registry else None
 
     # Replays get no barks: they'd spend TTS, and a cached one would replace a recorded line.
     barks = None if replay_dir else make_bark_bank(settings, personalities)
@@ -191,7 +199,7 @@ async def run(
         on_spoken=on_spoken,
         agent=live_talker if tools else None,
         tip_llm=make_tips(factory) if live_talker else None,
-        tools=tool_registry(tools, observer),
+        tools=registry,
         personalities=personalities,
         take_question=memory.take_question,
         release_question=memory.release_question,
@@ -205,7 +213,7 @@ async def run(
     startup_voice = voice_id()
 
     parts = StatusParts(replay_dir is not None, voice, observer, talker, tools, voice_id)
-    control, stop = build_control(settings, link, bus, database, memory, parts, talker_context)
+    control, stop = build_control(settings, link, bus, database, memory, parts, context_preview)
 
     config = uvicorn.Config(
         create_app(link, control), host=WS_HOST, port=settings.brain_port, log_level="warning"

@@ -15,8 +15,9 @@ from collections.abc import Awaitable, Callable, Mapping
 
 from brain.agent.tools import ToolRegistry, TurnContext
 from brain.director.carry import Carry
-from brain.director.context import gather_context, player_context
-from brain.director.lines import Lines, play_bark
+from brain.director.context import ContextSource, gather_context, player_context, with_partner
+from brain.director.lines import Lines, play_bark, say_when_free
+from brain.director.partner_state import PartnerState
 from brain.director.personalities import PersonalityBook, load_personalities
 from brain.director.questions import Questions
 from brain.director.rules import (
@@ -36,7 +37,7 @@ from brain.director.rules import (
     decide,
 )
 from brain.director.slot import SpeechSlot
-from brain.director.talker import event_prompt
+from brain.director.talker import event_prompt, wants_detail
 from brain.director.turns import TIP_QUERY, Persona, give_tip, player_reply, talker_reply
 from brain.director.why import DecisionHook, ignore_decision
 from brain.events import Event, EventBus, Tick
@@ -63,7 +64,7 @@ class Director:
         talker: TextLLM | None = None,
         personality: Callable[[], str] = lambda: "supportive",
         max_words: int = 100,
-        context: Callable[[str], Awaitable[str]] | None = None,
+        context: ContextSource | None = None,
         on_spoken: Callable[[str], Awaitable[None]] | None = None,
         *,
         agent: ToolLLM | None = None,
@@ -90,7 +91,9 @@ class Director:
         self._custom_instructions = custom_instructions
         self._personality = personality
         self._max_words = max_words
-        self._context = context
+        # What it said lately, which every reply's context shows it as YOU (partner_state.py).
+        self._partner = PartnerState(clock)
+        self._context = with_partner(context, self._partner)
         self._on_spoken = on_spoken
         self._agent = agent
         self._tip_llm = tip_llm
@@ -184,13 +187,14 @@ class Director:
         match action:
             case Say():
                 if await self._voice.say(action.text):
-                    self._note_line()
+                    self._note_line(action.text)
             case AskTalker():
-                with self._carry.answering(action):
+                with self._carry.answering(action), self._partner.replying():
                     if self._agent is not None and self._tools is not None:
                         await self._player_turn(action, self._agent, self._tools)
                     else:
-                        await self._talk(action.transcript, query=action.transcript)
+                        words = action.transcript
+                        await self._talk(words, words, current=words)
             case ReactToEvent():
                 await self._talk(event_prompt(action.name, action.data), action.name, action.origin)
             case PlayBark():
@@ -206,29 +210,23 @@ class Director:
                 await self._voice.set_voice(action.voice_id)
                 # This task is already off the speech slot, so generating can take its time.
                 await self._lines.prepare(action.voice_id)
-            case CancelSpeech():
-                self._cancel_slot()
-            case StopSpeaking():
-                self._slot.cancel()
 
-    def _note_line(self) -> None:
+    def _note_line(self, text: str) -> None:
         # The quiet stretch before a question or tip counts from lines really said, not attempted.
         self._carry.spoke()
-        self._handle(PartnerSpoke(ts=self._clock()))
+        self._partner.spoke(text)
+        self._handle(PartnerSpoke(asked=text.rstrip().endswith("?"), ts=self._clock()))
 
     async def _said(self, text: str) -> None:
-        self._note_line()
+        self._note_line(text)
         # Only what was really accepted goes into memory, or the partner would remember saying it.
         if self._on_spoken:
             await self._on_spoken(text)
 
     def _persona(self) -> Persona:
-        name = self._personality()
+        name, instructions = self._personality(), self._custom_instructions()
         tone = self._personalities.tone(name)
-        instructions = self._custom_instructions().strip()
-        if instructions:
-            tone += f"\nPlayer custom instructions (keep truth and trust rules): {instructions}"
-        return Persona(name, tone, self._max_words, self._proactive())
+        return Persona.of(name, tone, instructions, self._max_words, self._proactive())
 
     async def _play_bark(self, action: PlayBark) -> None:
         bark = self._lines.bark(action.kind)
@@ -240,13 +238,8 @@ class Director:
 
     async def _speak(self, text: str, wait_s: float = 0.0, origin: Origin | None = None) -> bool:
         """Says it, waiting up to wait_s for the player to stop talking first. True if said."""
-        deadline = time.monotonic() + wait_s
-        while not await self._voice.say(text, origin=origin):
-            if time.monotonic() >= deadline:
-                if wait_s:
-                    log.info("Player kept talking; dropped: %s", text)
-                return False
-            await asyncio.sleep(SPEAK_RETRY_S)
+        if not await say_when_free(self._voice, text, wait_s, SPEAK_RETRY_S, origin):
+            return False
         await self._said(text)
         return True
 
@@ -259,7 +252,7 @@ class Director:
             # The result takes seconds, and silence would read as not having heard them.
             text, bark = self._lines.next("looking")
             if await (self._voice.play(bark) if bark else self._voice.say(text)):
-                self._note_line()
+                self._note_line(text)
 
         try:
             text = await player_reply(
@@ -287,14 +280,17 @@ class Director:
         tools = None if self._state.blind else self._tools
         context = await gather_context(self._context, TIP_QUERY)
         text = await give_tip(agent, talker, tools, self._persona(), context)
-        if text:
-            await self._speak(text)
+        if text and await self._speak(text):
+            self._partner.tipped(text)
 
-    async def _talk(self, prompt: str, query: str, origin: Origin | None = None) -> None:
+    async def _talk(
+        self, prompt: str, query: str, origin: Origin | None = None, current: str | None = None
+    ) -> None:
         if self._talker is None:
             log.warning("No talker LLM configured; ignoring: %s", prompt)
             return
-        context = await gather_context(self._context, query)
-        text = await talker_reply(self._talker, prompt, self._persona(), context)
+        context = await gather_context(self._context, query, current)
+        detail = current is not None and wants_detail(current)
+        text = await talker_reply(self._talker, prompt, self._persona(), context, detail)
         if text:
             await self._speak(text, origin=origin)

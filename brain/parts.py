@@ -1,7 +1,7 @@
 """Builds a run's optional parts. Each can be missing, such as with no key, so each logs why."""
 
 import logging
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any
 from urllib.parse import urlparse
 
@@ -20,6 +20,7 @@ from brain.llm.claude import ClaudeClient
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
 from brain.memory.db import Database
+from brain.memory.layers import ContextSource
 from brain.memory.service import MemoryService
 from brain.perception.focus import Focus, FocusIntervals
 from brain.perception.observation import Observation
@@ -60,7 +61,7 @@ def make_agent_tools(
     link: OverlayLink,
     bus: EventBus,
     memory: AgentMemory,
-    context: Callable[[str], Awaitable[str]],
+    context: ContextSource,
 ) -> tuple[AgentTools, OpenPage]:
     """The player-turn tools, and the open wiki page they may read, on the game's wiki only."""
     tools = AgentTools(

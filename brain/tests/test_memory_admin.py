@@ -183,6 +183,8 @@ async def test_instructions_reach_both_plain_and_tool_model_prompts() -> None:
     from brain.agent.turn import run_turn
     from brain.director.turns import talker_reply
     from brain.llm.base import ToolStep
+    from brain.memory.context import MEMORY_HEADER
+    from brain.memory.layers import TalkerContext
     from brain.tests.fakes import FakeTextLLM, ScriptedToolLLM
 
     director = Director(
@@ -193,9 +195,9 @@ async def test_instructions_reach_both_plain_and_tool_model_prompts() -> None:
     )
     persona = director._persona()
     plain = FakeTextLLM(["Let's build."])
-    await talker_reply(plain, "hello", persona, "Untrusted memory")
+    await talker_reply(plain, "hello", persona, TalkerContext(memory="Untrusted memory"))
     assert "Focus on building" in plain.system
-    assert "Focus on building" in plain.system.split("reference data")[0]
+    assert "Focus on building" in plain.system.split(MEMORY_HEADER)[0]
 
     async def no_filler() -> None:
         pass
@@ -208,7 +210,7 @@ async def test_instructions_reach_both_plain_and_tool_model_prompts() -> None:
         persona.name,
         persona.tone,
         persona.max_words,
-        "",
+        TalkerContext(),
         TurnContext(),
         no_filler,
         "Done.",

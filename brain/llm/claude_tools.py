@@ -1,12 +1,49 @@
-"""Claude's side of player turns with tools (ToolChat), kept apart so claude.py stays short."""
+"""Claude's side of player turns with tools (ToolChat), and the earlier conversation as messages.
+Kept apart so claude.py stays short."""
 
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from brain.llm.base import LLMEmptyResponseError, ToolCall, ToolDeclaration, ToolStep
+from brain.llm.base import (
+    ChatTurn,
+    LLMEmptyResponseError,
+    System,
+    ToolCall,
+    ToolDeclaration,
+    ToolStep,
+    merged_turns,
+)
 
 if TYPE_CHECKING:
     from brain.llm.claude import ClaudeClient
+
+
+def history_messages(history: Sequence[ChatTurn]) -> list[dict[str, Any]]:
+    """Earlier turns as plain text, with a cache breakpoint on the last one. The conversation
+    only grows at its end, so the next call reads everything up to here from the cache and only
+    its own latest message is new."""
+    messages: list[dict[str, Any]] = [
+        {"role": turn.role, "content": [{"type": "text", "text": turn.text}]}
+        for turn in merged_turns(history)
+    ]
+    if messages:
+        messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
+    return messages
+
+
+def add_user(messages: list[dict[str, Any]], text: str) -> None:
+    """Appends their message, joining the last one when that's theirs too, such as a line nobody
+    answered, so turns still alternate."""
+    if messages and messages[-1]["role"] == "user" and isinstance(messages[-1]["content"], list):
+        messages[-1]["content"].append({"type": "text", "text": text})
+    else:
+        messages.append({"role": "user", "content": text})
+
+
+def chat_messages(history: Sequence[ChatTurn], prompt: str) -> list[dict[str, Any]]:
+    messages = history_messages(history)
+    add_user(messages, prompt)
+    return messages
 
 
 class ClaudeToolChat:
@@ -15,9 +52,10 @@ class ClaudeToolChat:
     def __init__(
         self,
         client: "ClaudeClient",
-        system: str,
+        system: System,
         tools: Sequence[ToolDeclaration],
         max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> None:
         self._client = client
         self._system = system
@@ -26,10 +64,10 @@ class ClaudeToolChat:
             for tool in tools
         ]
         self._max_tokens = max_tokens
-        self._messages: list[dict[str, Any]] = []
+        self._messages: list[dict[str, Any]] = history_messages(history)
 
     async def send(self, text: str) -> ToolStep:
-        self._messages.append({"role": "user", "content": text})
+        add_user(self._messages, text)
         return await self._generate(allow_tools=True)
 
     async def send_results(

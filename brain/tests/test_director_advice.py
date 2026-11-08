@@ -9,6 +9,7 @@ from brain.director.talker import ADVICE_PROMPT
 from brain.director.turns import TIP_QUERY
 from brain.events import OverlayConnected, SettingsChanged, Tick
 from brain.llm.base import LLMUnavailableError, ToolCall, ToolStep
+from brain.memory.layers import TalkerContext
 from brain.tests.director_rig import LOOKING, Rig
 from brain.tests.fakes import FakeTextLLM, ScriptedToolLLM
 from shared.protocol.messages import Pacing, Settings
@@ -97,9 +98,11 @@ async def test_a_tip_that_needs_no_pointer_takes_one_model_call() -> None:
 async def test_a_tip_gets_context_for_progress_and_goals() -> None:
     queries: list[str] = []
 
-    async def context(query: str) -> str:
+    async def context(query: str, current: str | None) -> TalkerContext:
         queries.append(query)
-        return "PLAYER: playthrough / progress: early game (observed)"
+        # A tip answers nobody's words, so the player's newest line stays in the conversation.
+        assert current is None
+        return TalkerContext(memory="PLAYER: playthrough / progress: early game (observed)")
 
     agent = ScriptedToolLLM([ToolStep(TIP)])
     rig = tip_rig(agent=agent, tools=Tools().all(), context=context)
@@ -187,7 +190,9 @@ async def test_a_spoken_tip_restarts_the_quiet_stretch() -> None:
         await rig.publish(Tick(ts=FIRST_S + 5.0))
         await rig.publish(Tick(ts=FIRST_S + 20.0))
     assert rig.voice.said == [GREETING, TIP, TIP]
-    assert talker.prompts == [ADVICE_PROMPT, ADVICE_PROMPT]
+    assert talker.prompts[0] == ADVICE_PROMPT
+    # The second tip is told about the first under YOU, so it can choose a different one.
+    assert talker.prompts[1].endswith(ADVICE_PROMPT) and f'"{TIP}" (20 s ago)' in talker.prompts[1]
 
 
 async def test_a_tip_comes_from_the_thinking_model_when_there_is_one() -> None:

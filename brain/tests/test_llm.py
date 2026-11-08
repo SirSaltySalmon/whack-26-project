@@ -33,12 +33,22 @@ def test_a_gemini_model_name_still_builds_a_gemini_client() -> None:
     assert not isinstance(LLMFactory(settings).talker(), ClaudeClient)
 
 
-def test_talker_and_vision_run_on_claude_without_thinking_by_default() -> None:
+def test_talker_and_vision_run_on_claude_and_the_talker_thinks_by_default() -> None:
+    # Thinking keeps the talker's reasoning out of what's said (docs/DECISIONS.md).
     settings = Settings(_env_file=None, anthropic_api_key=SecretStr("test"))  # type: ignore[call-arg]
     factory = LLMFactory(settings)
     talker, vision = factory.talker(), factory.vision()
     assert isinstance(talker, ClaudeClient) and isinstance(vision, ClaudeClient)
-    assert talker._model == "claude-haiku-5-5" and not talker._think
+    assert talker._model == "claude-haiku-5-5" and talker._think
+    assert not vision._think
+
+
+def test_talker_thinking_can_be_turned_off_for_speed() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        _env_file=None, anthropic_api_key=SecretStr("test"), talker_thinking=False
+    )
+    talker = LLMFactory(settings).talker()
+    assert isinstance(talker, ClaudeClient) and not talker._think
 
 
 def test_roles_on_the_same_model_share_one_quota() -> None:

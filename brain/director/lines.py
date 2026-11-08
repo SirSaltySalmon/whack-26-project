@@ -3,6 +3,7 @@
 Kept out of director.py so the director stays about when to speak, not what the lines are.
 """
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
@@ -10,11 +11,28 @@ from typing import cast
 
 from brain.director.personalities import LineKind, PersonalityBook
 from brain.director.rules import PlayBark
-from brain.latency import log_frame_latency
+from brain.latency import Origin, log_frame_latency
 from brain.voice.barks import Bark, BarkBank
 from brain.voice.pipeline import Voice
 
 log = logging.getLogger(__name__)
+
+
+async def say_when_free(
+    voice: Voice, text: str, wait_s: float, retry_s: float, origin: Origin | None = None
+) -> bool:
+    """Says it, waiting up to wait_s for the player to stop talking first. True if said.
+
+    The voice refuses a line while the player talks, so this retries every retry_s until then.
+    """
+    deadline = time.monotonic() + wait_s
+    while not await voice.say(text, origin=origin):
+        if time.monotonic() >= deadline:
+            if wait_s:
+                log.info("Player kept talking; dropped: %s", text)
+            return False
+        await asyncio.sleep(retry_s)
+    return True
 
 
 async def play_bark(voice: Voice, bark: Bark, action: PlayBark) -> bool:

@@ -47,10 +47,13 @@ class LLMFactory:
         self,
         model: str,
         thinking: types.ThinkingLevel,
+        role: str,
         think: bool = False,
         background: bool = False,
+        tools_role: str | None = None,
     ) -> ClaudeClient | GeminiClient:
-        """The vendor follows the model's name, so switching back is a config change."""
+        """The vendor follows the model's name, so switching back is a config change. `role`
+        labels the client's usage lines for scripts/latency_report.py."""
         if not model.startswith("claude"):
             return self._build(model, thinking, background)
         key = self._settings.anthropic_api_key
@@ -65,25 +68,28 @@ class LLMFactory:
             think=think,
             fallback=False,
             http_client=self._http_client(),
+            role=role,
+            tools_role=tools_role,
         )
 
     def talker(self) -> ClaudeClient | GeminiClient:
         # Thinking costs time on the voice path, so it's off unless talker_thinking turns it on.
         think = self._settings.talker_thinking
         level = types.ThinkingLevel.LOW if think else types.ThinkingLevel.MINIMAL
-        return self._fast(self._settings.talker_model, level, think)
+        # The same client answers event reactions and runs player turns, which use tools.
+        return self._fast(self._settings.talker_model, level, "talker", think, tools_role="agent")
 
     def tips(self) -> ClaudeClient | GeminiClient:
         """The talker's model, thinking briefly first. Nobody waits on a tip, and with thinking
         off a tip once opened by describing the player's screen."""
         return self._fast(
-            self._settings.talker_model, types.ThinkingLevel.LOW, think=True, background=True
+            self._settings.talker_model, types.ThinkingLevel.LOW, "tip", think=True, background=True
         )
 
     def vision(self, background: bool = False) -> ClaudeClient | GeminiClient:
         """Background for the learner and the progress scout; player-facing for pointing."""
         return self._fast(
-            self._settings.vision_model, types.ThinkingLevel.LOW, background=background
+            self._settings.vision_model, types.ThinkingLevel.LOW, "vision", background=background
         )
 
     def observer(self) -> ClaudeClient:
@@ -97,6 +103,7 @@ class LLMFactory:
             key.get_secret_value(),
             self._limiter(model, background=True),
             http_client=self._http_client(),
+            role="observer",
         )
 
     def closeup(self) -> VisionLLM:
@@ -106,7 +113,11 @@ class LLMFactory:
             return self.vision()
         model = self._settings.closeup_model
         return ClaudeClient(
-            model, key.get_secret_value(), self._limiter(model), http_client=self._http_client()
+            model,
+            key.get_secret_value(),
+            self._limiter(model),
+            http_client=self._http_client(),
+            role="closeup",
         )
 
     def deep(self, background: bool = False) -> TextLLM:
@@ -124,4 +135,5 @@ class LLMFactory:
             effort=self._settings.deep_effort,
             timeout_s=self._settings.deep_timeout_s,
             http_client=self._http_client(),
+            role="deep",
         )

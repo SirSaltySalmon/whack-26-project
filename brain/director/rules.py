@@ -2,6 +2,9 @@
 
 An LLM never decides this. Models only choose what to do inside a turn these rules started.
 
+A turn that only acknowledges, such as "okay" or "thanks", isn't answered unless the partner's
+last line asked something or the player's previous turn is still waiting for a reply (acks.py).
+
 Tips, and questions if the player's pacing asks for it, wait for a quiet stretch, measured from
 the player's last turn and the partner's last spoken line. Game events don't count by themselves:
 the observer reports them all through active play, so counting them meant the partner almost never
@@ -16,8 +19,22 @@ next one: unpausing is the player saying they're ready to talk again.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
 
+from brain.director.acks import only_acknowledges
+
+# Re-exported, so modules that import actions from here keep working.
+from brain.director.actions import (
+    Action,
+    AskQuestion,
+    AskTalker,
+    CancelSpeech,
+    GiveAdvice,
+    PlayBark,
+    ReactToEvent,
+    Say,
+    SetVoice,
+    StopSpeaking,
+)
 from brain.events import (
     Event,
     FactLearned,
@@ -48,81 +65,8 @@ class PartnerSpoke(Event):
     Kept off the bus like Tick: only the rules care, and every subscriber would have to skip it.
     """
 
-
-@dataclass(frozen=True)
-class Say:
-    """Speak fixed text, such as a cached bark."""
-
-    text: str
-
-
-@dataclass(frozen=True)
-class AskTalker:
-    """Answer the player. Their turn replaces whatever the partner was about to say."""
-
-    transcript: str
-    # When they began speaking (monotonic), so tools can look at what they were seeing then.
-    started_at: float | None = None
-
-
-@dataclass(frozen=True)
-class ReactToEvent:
-    """Have the fast LLM comment on something seen in the game."""
-
-    name: str
-    data: dict[str, Any] = field(default_factory=dict)
-    # Where it was first seen, for the frame-to-voice latency log. Not part of what was decided.
-    origin: Origin | None = field(default=None, compare=False)
-
-
-@dataclass(frozen=True)
-class PlayBark:
-    """React with a pre-generated line, which skips the model and TTS."""
-
-    kind: str  # A LineKind
-    event: str  # The GameEvent name, for logs
-    data: dict[str, Any]  # Passed on, in case there's no bark and it falls back
-    # When the event happened, for the event-to-bark latency log. Not part of what was decided.
-    ts: float | None = field(default=None, compare=False)
-    origin: Origin | None = field(default=None, compare=False)
-
-
-@dataclass(frozen=True)
-class AskQuestion:
-    """Ask the player the next open question, if memory has one."""
-
-
-@dataclass(frozen=True)
-class GiveAdvice:
-    """Offer a short tip on what to do next. Skipped when the player turned hints off."""
-
-
-@dataclass(frozen=True)
-class CancelSpeech:
-    """The player started talking, so drop any reply still being prepared."""
-
-
-@dataclass(frozen=True)
-class StopSpeaking:
-    """The player paused the partner. Unlike CancelSpeech, this also stops a turn running a tool."""
-
-
-@dataclass(frozen=True)
-class SetVoice:
-    voice_id: str | None
-
-
-Action = (
-    Say
-    | AskTalker
-    | ReactToEvent
-    | PlayBark
-    | AskQuestion
-    | GiveAdvice
-    | CancelSpeech
-    | StopSpeaking
-    | SetVoice
-)
+    # The line asked something, so the player's "okay" may be their answer.
+    asked: bool = False
 
 
 _PACING = Pacing()
@@ -161,6 +105,10 @@ class DirectorState:
     blind: bool = False
     # Set by unpausing, and cleared once a question is asked.
     ask_on_resume: bool = False
+    # A player turn nothing has been said for yet, and whether the partner's last line asked
+    # something. Either means a bare "okay" may still need answering (acks.py).
+    answering: bool = False
+    partner_asked: bool = False
 
 
 def _quiet(ts: float, state: DirectorState, needed_s: float) -> bool:
@@ -231,9 +179,15 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             if state.paused:
                 # Heard and noted by memory, which reads the bus itself, but not answered.
                 return []
+            if only_acknowledges(event.transcript) and not (state.answering or state.partner_asked):
+                # A teammate lets "okay" or "thanks" be. Memory still hears it from the bus.
+                return []
+            state.answering = True
             return [AskTalker(event.transcript, started_at)]
         case PartnerSpoke():
             state.last_talk_at = event.ts
+            state.answering = False
+            state.partner_asked = event.asked
             return []
         case FactLearned():
             if state.next_advice_at is not None and _learned_where_they_stand(event):

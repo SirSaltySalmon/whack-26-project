@@ -8,6 +8,7 @@ from collections.abc import Iterator
 import pytest
 
 from brain.memory import vectors
+from brain.memory.context import ContextLimits
 from brain.memory.db import connect
 from brain.memory.gather import gather_context
 from brain.memory.models import Hit
@@ -68,9 +69,9 @@ def add_note(conn: sqlite3.Connection, session_id: int, body: str) -> int:
 
 
 def add_filler(conn: sqlite3.Connection) -> None:
-    """The talker always gets the newest 8 facts and recall skips those, so these push the
-    facts under test out of that list and into recall's reach."""
-    for i in range(8):
+    """The talker always gets the newest player facts up to a cap and recall skips those, so
+    these push the facts under test out of that list and into recall's reach."""
+    for i in range(ContextLimits().max_player_facts):
         add_fact(conn, "filler", f"slot {i}", f"value {i}", at=10.0 + i)
 
 

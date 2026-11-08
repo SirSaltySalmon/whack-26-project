@@ -3,7 +3,7 @@
 import asyncio
 import contextlib
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from contextlib import asynccontextmanager
 
 from brain.agent.tools import Tool, ToolRegistry
@@ -11,6 +11,7 @@ from brain.director.director import Director
 from brain.director.personalities import Personality, PersonalityBook
 from brain.events import Event, EventBus, OverlayConnected, Tick
 from brain.llm.base import ToolStep
+from brain.memory.layers import ContextSource
 from brain.tests.fakes import FakeMemory, FakeOverlay, FakeTextLLM, FakeVoice, ScriptedToolLLM
 from brain.voice.barks import BarkBank
 from shared.protocol.messages import Pacing
@@ -79,7 +80,7 @@ class Rig:
         tip_llm: object | None = None,
         tools: Iterable[Tool] = (),
         memory: FakeMemory | None = None,
-        context: Callable[[str], Awaitable[str]] | None = None,
+        context: ContextSource | None = None,
         proactive: bool = True,
         quiet_s: float = QUIET_S,
         gap_s: float = GAP_S,

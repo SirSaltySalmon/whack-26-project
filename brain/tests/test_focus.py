@@ -11,7 +11,8 @@ from brain.agent.tools import Tool, ToolRegistry, TurnContext
 from brain.agent.turn import run_turn
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import EventBus
-from brain.llm.base import SchemaT, ToolCall, ToolDeclaration, ToolStep
+from brain.llm.base import ChatTurn, SchemaT, System, ToolCall, ToolDeclaration, ToolStep
+from brain.memory.layers import TalkerContext
 from brain.perception.focus import ENDED_NOTICE_S, Focus, FocusIntervals
 from brain.perception.observer import Observer
 from brain.perception.tracker import ObservationTracker
@@ -167,7 +168,11 @@ class ScriptedLLM:
         self.steps = steps
 
     def tool_chat(
-        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+        self,
+        system: System,
+        tools: Sequence[ToolDeclaration],
+        max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> ScriptedChat:
         return ScriptedChat(self.steps)
 
@@ -181,7 +186,16 @@ async def turn_with(call: str, registry: ToolRegistry) -> int:
 
     steps = [ToolStep("", (ToolCall(call, {"level": "medium"}),)), ToolStep("On it.")]
     await run_turn(
-        ScriptedLLM(steps), registry, "watch this", "", "", 100, "", TurnContext(), looking, "Ok."
+        ScriptedLLM(steps),
+        registry,
+        "watch this",
+        "",
+        "",
+        100,
+        TalkerContext(),
+        TurnContext(),
+        looking,
+        "Ok.",
     )
     return announced
 

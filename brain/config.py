@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     # Talker, player turns with tools, pointing and the progress scout. A model name starting with
     # "claude" runs on Anthropic, anything else on Gemini (brain/llm/factory.py).
     talker_model: str = "claude-haiku-5-5"
-    # Tips always think briefly first. This turns it on for replies and player turns too, which
-    # keeps reasoning out of what's said but costs time before the first word: measure it with
-    # scripts/latency_report.py before the demo.
-    talker_thinking: bool = False
+    # Replies and player turns think briefly first, as tips always do. It keeps reasoning out of
+    # what's said, and kept replies shorter, for about 0.2 s more before the first word (median of
+    # 12 turns, 2026-11-08). TALKER_THINKING=false is the faster fallback if the demo needs it.
+    talker_thinking: bool = True
     vision_model: str = "claude-haiku-5-5"
     # think_hard and session notes. Paid; falls back to deep_fallback_model without
     # ANTHROPIC_API_KEY. Effort is low, medium or high: medium keeps think_hard to a few seconds.

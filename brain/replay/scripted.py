@@ -5,7 +5,7 @@ from collections import Counter, deque
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
-from brain.llm.base import LLMUnavailableError
+from brain.llm.base import ChatTurn, LLMUnavailableError, System
 from brain.replay.format import (
     EVENTS,
     MESSAGES,
@@ -32,7 +32,9 @@ class ScriptedTalker:
     def remaining(self) -> int:
         return len(self._lines)
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         if not self._lines:
             raise LLMUnavailableError("No more recorded lines")
         yield self._lines.popleft()

@@ -11,6 +11,7 @@ import pytest
 from brain.events import EventBus, FactLearned, SettingsChanged
 from brain.llm.base import LLMUnavailableError, TextLLM
 from brain.memory import vectors
+from brain.memory.context import ContextLimits
 from brain.memory.db import Database, connect
 from brain.memory.embeddings import Embedder
 from brain.memory.notes import NoteWriter
@@ -98,7 +99,8 @@ async def test_turning_it_on_loads_indexes_and_embeds_queries(rig: Rig) -> None:
 
 async def test_context_recalls_by_meaning_once_switched_on(rig: Rig) -> None:
     await rig.memory.remember("base", "location", "left of spawn", "player", 0.9)
-    for i in range(8):
+    # Enough newer facts to push it out of PLAYER, so only recall can bring it back.
+    for i in range(ContextLimits().max_player_facts):
         await rig.memory.remember("filler", f"slot {i}", f"value {i}", "player", 0.9)
     before = await rig.memory.context({}, "where's my house")
     rig.semantic.follow(Settings(memory_search="semantic"))

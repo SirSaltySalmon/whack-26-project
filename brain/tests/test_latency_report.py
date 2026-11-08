@@ -233,3 +233,36 @@ def test_empty_input_says_so_and_exits_1(
 
 def test_a_missing_file_is_a_usage_error(tmp_path: Path) -> None:
     assert main([str(tmp_path / "missing.log")]) == UNREADABLE
+
+
+USAGE_LOG = [
+    VERBOSE + "LLM usage: role=agent model=claude-haiku-5-5 ttft_ms=1200 input=300 "
+    "cache_read=2700 cache_write=0 output=40",
+    QUIET + "LLM usage: role=agent model=claude-haiku-5-5 ttft_ms=900 input=300 "
+    "cache_read=0 cache_write=2700 output=35",
+    QUIET + "LLM usage: role=observer model=claude-haiku-5-5 ttft_ms=1800 input=0 "
+    "cache_read=0 cache_write=0 output=90",
+]
+
+
+def test_usage_lines_give_each_role_its_first_token_times_and_cache_hit_rate() -> None:
+    samples = parse_lines(USAGE_LOG)
+    agent = samples.usage["agent"]
+    assert agent.ttft_ms == [1200.0, 900.0]
+    assert (agent.uncached, agent.cache_read, agent.cache_write) == (600, 2700, 2700)
+    report = render(samples)
+    assert "| Role | Calls | TTFT p50 ms | TTFT p95 ms | Cache hit |" in report
+    # 2700 read of 6000 in all; a role with no input tokens has no rate rather than 0%.
+    assert "| agent | 2 | 900 | 1200 | 45% |" in report
+    assert "| observer | 1 | 1800 | 1800 | - |" in report
+
+
+def test_a_usage_line_the_console_wrapped_still_counts() -> None:
+    wrapped = USAGE_LOG[0].replace(" cache_read=", "\ncache_read=")
+    assert parse_lines(wrapped.splitlines()).usage["agent"].cache_read == 2700
+
+
+def test_usage_alone_is_a_report_and_follows_the_latency_table() -> None:
+    assert not parse_lines(USAGE_LOG).empty()
+    report = render(parse_lines([MESSAGES[0], *USAGE_LOG]))
+    assert report.index("| player turn |") < report.index("| Role |")

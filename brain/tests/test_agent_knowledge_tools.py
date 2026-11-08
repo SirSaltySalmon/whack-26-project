@@ -2,8 +2,10 @@
 
 import pytest
 
-from brain.agent.handlers import MAX_DEEP_CHARS_FOR_TALKER
-from brain.memory.context import CONTEXT_PREAMBLE
+from brain.agent.deep_think import MAX_DEEP_CHARS_FOR_TALKER
+from brain.llm.base import ChatTurn
+from brain.memory.context import CONTEXT_PREAMBLE, LIVE_END
+from brain.memory.layers import TalkerContext
 from brain.research import WikiCard
 from brain.tests.agent_rig import FakeResearch, rig
 from brain.tests.fakes import FakeMemory, FakeTextLLM
@@ -140,12 +142,17 @@ async def test_note_unknown_says_when_its_already_known_or_waiting() -> None:
     assert await r.run("note_unknown", **UNKNOWN) == "That's already known or waiting to be asked."
 
 
-async def test_think_hard_reasons_from_the_context_with_its_warning() -> None:
-    r = rig(context="NOW: danger: high")
+async def test_think_hard_reasons_from_memory_the_conversation_and_live() -> None:
+    history = (ChatTurn("assistant", "Boss next?"), ChatTurn("user", "which one first"))
+    r = rig(context=TalkerContext("GAME: Terraria", history, "NOW: danger: high"))
     await r.run("think_hard", question=QUESTION)
     assert r.context_questions == [QUESTION]
-    assert r.deep.prompts == [QUESTION]
-    assert "NOW: danger: high" in r.deep.system and CONTEXT_PREAMBLE in r.deep.system
+    assert r.deep.histories == [history]
+    assert r.deep.prompts[0].endswith(f"NOW: danger: high\n{LIVE_END}\n\n{QUESTION}")
+    assert "GAME: Terraria" in r.deep.system and CONTEXT_PREAMBLE in r.deep.system
+    assert isinstance(r.deep.system_parts, tuple)
+    fixed, memory = r.deep.system_parts
+    assert fixed.cache and memory.cache
 
 
 async def test_think_hard_shows_everything_and_returns_a_short_labelled_part() -> None:

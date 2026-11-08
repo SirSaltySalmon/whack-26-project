@@ -2,6 +2,17 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: The partner thinks before every reply, says less, and lets "okay" be
+
+**Status:** built and tested, not yet run live. Replaces "Player turns stay fast" in the tips entry below, and narrows "Longer only when asked" in the 2026-11-07 entry on reply length. Applies to `brain/config.py`, `brain/director/talker.py`, `brain/director/turns.py`, `brain/director/rules.py`, `brain/director/acks.py`, `brain/director/actions.py` (moved out of `rules.py`) and `brain/agent/turn.py`.
+
+- **The problem.** Live replies ran a median of 22 words and up to 61 (46 lines in memory), against the 12 the prompt asked for. Most tacked on an offer or a question ("Want me to check the wiki?"), read a screen check back in full, or answered a bare "Good." or "Sorry.". Reasoning still leaked with thinking off.
+- **Thinking is on for replies and player turns** (`talker_thinking` now defaults to true), adaptive at low effort, as tips already were. Measured over the real prompts: a player turn's first model call took a median of 1157 ms against 965 ms with thinking off (12 turns each, one slow outlier at 2.5 s), and event reactions about the same. The replies were cleaner: thinking off still ended on offers and echoed the context ("Early game in classic, so..."). `TALKER_THINKING=false` is the fallback.
+- **The prompt follows Anthropic's guidance for thinking off too.** The rule "Never describe what you're about to say" is gone: Anthropic documents that rules against reasoning make it leak more. Player turns may say a brief sentence before a tool call, which is never spoken, and no internal or system XML tags are allowed, without naming any.
+- **Shorter by rule, not only by prompt.** The prompt asks for one sentence of about 12 words, two at most, no offers of more help, and a question only when the answer is needed. In code, a reply is cut to 30 words (whole sentences) unless the player's words ask for detail ("explain", "tell me more", "walk me through"...), which lifts it to the 100-word `talker_max_words`. Only then does the prompt mention the higher limit, because naming 100 on every turn pulled replies toward it.
+- **A bare acknowledgement isn't answered** ("okay", "thanks", "sorry", up to four such words). It is answered when the partner's last line asked something, or when the player's previous turn hasn't been replied to yet, since that turn's reply was cut off and the "okay" resumes it. Yes and no are always answered: they may answer a question asked lines earlier. This stays a director rule, not the model's choice.
+- **The narration filter also drops** any sentence that names a context section ("under NOW", "PLAYER shows"), a tool (`look_closer`) or "the user".
+
 ## 2026-11-08: Memory can be read with the partner off, for any game
 
 **Status:** built, tested, and checked in the Control Center against the real `data/brain.sqlite3`. Applies to `brain/memory/reader.py`, `brain/memory/browse.py`, `shared/protocol/control.py` (additive) and the Control Center's Memory tab.

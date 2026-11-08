@@ -8,9 +8,9 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
-from brain.memory.context import render_context
 from brain.memory.fts import to_match_query
 from brain.memory.gather import gather_context
+from brain.memory.layers import render_context
 from shared.protocol.control import FactView, GameView, NoteView, QuestionView
 
 QUESTION_LIMIT = 20

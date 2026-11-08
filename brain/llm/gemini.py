@@ -8,14 +8,18 @@ from google import genai
 from google.genai import errors, types
 
 from brain.llm.base import (
+    ChatTurn,
     Detail,
     Limiter,
     LLMEmptyResponseError,
     LLMUnavailableError,
     SchemaT,
+    System,
     ToolCall,
     ToolDeclaration,
     ToolStep,
+    merged_turns,
+    system_text,
 )
 
 log = logging.getLogger(__name__)
@@ -25,6 +29,25 @@ _RESOLUTIONS: dict[Detail, types.PartMediaResolutionLevel] = {
     "low": types.PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW,
     "high": types.PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH,
 }
+# Gemini calls the assistant's side "model".
+_ROLES = {"user": "user", "assistant": "model"}
+
+
+def history_contents(history: Sequence[ChatTurn]) -> list[types.Content]:
+    return [
+        types.Content(role=_ROLES[turn.role], parts=[types.Part.from_text(text=turn.text)])
+        for turn in merged_turns(history)
+    ]
+
+
+def add_user(contents: list[types.Content], text: str) -> None:
+    """Joins the last message when that's theirs too, so turns still alternate."""
+    part = types.Part.from_text(text=text)
+    last = contents[-1] if contents else None
+    if last is not None and last.role == "user" and last.parts is not None:
+        last.parts.append(part)
+    else:
+        contents.append(types.Content(role="user", parts=[part]))
 
 
 class GeminiClient:
@@ -50,16 +73,21 @@ class GeminiClient:
             return LLMUnavailableError(f"Gemini quota exceeded for {self._model}")
         return exc
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         self._acquire()
+        # No cache breakpoints here, so the parts are just joined.
         config = types.GenerateContentConfig(
-            system_instruction=system,
+            system_instruction=system_text(system),
             max_output_tokens=max_tokens,
             thinking_config=self._thinking,
         )
+        contents = history_contents(history)
+        add_user(contents, prompt)
         try:
             stream = await self._client.aio.models.generate_content_stream(
-                model=self._model, contents=prompt, config=config
+                model=self._model, contents=contents, config=config
             )
             async for chunk in stream:
                 if chunk.text:
@@ -103,9 +131,13 @@ class GeminiClient:
         raise LLMEmptyResponseError(f"{self._model} returned no parsable output")
 
     def tool_chat(
-        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+        self,
+        system: System,
+        tools: Sequence[ToolDeclaration],
+        max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> "GeminiToolChat":
-        return GeminiToolChat(self, system, tools, max_tokens)
+        return GeminiToolChat(self, system, tools, max_tokens, history)
 
     async def generate_with_tools(
         self,
@@ -154,18 +186,19 @@ class GeminiToolChat:
     def __init__(
         self,
         client: GeminiClient,
-        system: str,
+        system: System,
         tools: Sequence[ToolDeclaration],
         max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> None:
         self._client = client
-        self._system = system
+        self._system = system_text(system)
         self._tools = tools
         self._max_tokens = max_tokens
-        self._contents: list[types.Content] = []
+        self._contents: list[types.Content] = history_contents(history)
 
     async def send(self, text: str) -> ToolStep:
-        self._contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
+        add_user(self._contents, text)
         return await self._generate(allow_tools=True)
 
     async def send_results(

@@ -22,8 +22,58 @@ class LLMEmptyResponseError(RuntimeError):
     """The model returned nothing usable, for example because a safety filter blocked it."""
 
 
+@dataclass(frozen=True)
+class SystemPart:
+    """One block of a system prompt. `cache` asks the vendor to cache the prompt up to and
+    including this block, so it should only mark text that stays the same from call to call."""
+
+    text: str
+    cache: bool = False
+
+
+# A plain string, or blocks in order: a stable, cached start, then what changes every call.
+System = str | tuple[SystemPart, ...]
+
+
+def system_text(system: System) -> str:
+    """The whole prompt as one string, for vendors and fakes that take plain text."""
+    if isinstance(system, str):
+        return system
+    return "\n\n".join(part.text for part in system if part.text)
+
+
+@dataclass(frozen=True)
+class ChatTurn:
+    """One earlier message: the player's words or a note as `user`, the partner's line as
+    `assistant`. Sent as plain text, so no earlier turn's thinking ever goes back to the model."""
+
+    role: Literal["user", "assistant"]
+    text: str
+
+
+# The APIs want a user message first, and a stretch of conversation can open with the partner.
+OPENING_LINE = "(Earlier in this conversation.)"
+
+
+def merged_turns(history: Sequence[ChatTurn]) -> list[ChatTurn]:
+    """Turns from the same side joined into one, with a user line first if the partner opened."""
+    merged: list[ChatTurn] = []
+    for turn in history:
+        if not turn.text.strip():
+            continue
+        if merged and merged[-1].role == turn.role:
+            merged[-1] = ChatTurn(turn.role, f"{merged[-1].text}\n{turn.text}")
+        else:
+            merged.append(turn)
+    if merged and merged[0].role == "assistant":
+        merged.insert(0, ChatTurn("user", OPENING_LINE))
+    return merged
+
+
 class TextLLM(Protocol):
-    def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]: ...
+    def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]: ...
 
 
 class VisionLLM(Protocol):
@@ -61,7 +111,8 @@ class ToolStep:
 
 
 class ToolChat(Protocol):
-    """A single turn's conversation. It holds the history, because providers need it back as-is."""
+    """A single turn's conversation, after any earlier turns it was started with. It holds this
+    turn's messages, because providers need them back as they were sent."""
 
     async def send(self, text: str) -> ToolStep: ...
 
@@ -72,7 +123,11 @@ class ToolChat(Protocol):
 
 class ToolLLM(Protocol):
     def tool_chat(
-        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+        self,
+        system: System,
+        tools: Sequence[ToolDeclaration],
+        max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> ToolChat: ...
 
 

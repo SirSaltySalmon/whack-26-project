@@ -1,10 +1,10 @@
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 import pytest
 
-from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, TextLLM
+from brain.llm.base import ChatTurn, LLMEmptyResponseError, LLMUnavailableError, System, TextLLM
 from brain.memory.models import LoggedEvent
 from brain.memory.notes import (
     DEFAULT_CONFIDENCE,
@@ -38,7 +38,9 @@ class FakeLLM:
         self.prompt = ""
         self.max_tokens = 0
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         self.system, self.prompt, self.max_tokens = system, prompt, max_tokens
         # Split so the tests prove that streamed pieces are joined back together.
         middle = len(self.reply) // 2

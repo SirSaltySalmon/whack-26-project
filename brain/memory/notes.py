@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from brain.llm.base import TextLLM
 from brain.memory.context import format_fact
 from brain.memory.models import Fact, LoggedEvent, NoteKind, Question
+from brain.memory.sessions import TOOL_PREFIX
 from brain.memory.note_reply import (
     DEFAULT_CONFIDENCE,
     MAX_UNKNOWNS_PER_NOTE,
@@ -102,6 +103,10 @@ def _describe(event: LoggedEvent) -> str:
     if event.name.startswith(_TURN_PREFIX):
         speaker = event.name.removeprefix(_TURN_PREFIX)
         return f"{speaker}: {_one_line(data.get('text', ''))}"
+    if event.name.startswith(TOOL_PREFIX):
+        # Already a one-line summary (brain/agent/tool_notes.py), so JSON would only add noise.
+        tool = event.name.removeprefix(TOOL_PREFIX)
+        return f"partner's {tool} tool: {_one_line(data.get('text', ''))}"
     return f"{event.name} {_one_line(json.dumps(data))}" if data else event.name
 
 

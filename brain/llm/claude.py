@@ -8,16 +8,20 @@ from typing import Any, Literal
 
 import anthropic
 import httpx2  # The SDK's own HTTP library. anthropic is pinned exactly, so this is too.
+from anthropic.types import TextBlockParam
 
 from brain.llm.base import (
+    ChatTurn,
     Detail,
     Limiter,
     LLMEmptyResponseError,
     LLMUnavailableError,
     SchemaT,
+    System,
     ToolDeclaration,
 )
-from brain.llm.claude_tools import ClaudeToolChat
+from brain.llm.claude_tools import ClaudeToolChat, chat_messages
+from brain.llm.usage import CallTimer, log_usage, stream_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +78,24 @@ def strict_schema(schema: Any) -> Any:
     return fixed
 
 
+def system_param(system: System) -> str | list[TextBlockParam]:
+    """A plain string goes as is. Parts go as text blocks, and a part marked cache gets a
+    breakpoint: the API then caches the tools and system up to it. Haiku 5.5 and Sonnet 5.5 only
+    cache prefixes of 512 tokens or more, so a shorter one, such as think_hard's instructions with
+    no tools, isn't cached, with no error, and that's expected."""
+    if isinstance(system, str):
+        return system
+    blocks: list[TextBlockParam] = []
+    for part in system:
+        if not part.text:
+            continue
+        block: TextBlockParam = {"type": "text", "text": part.text}
+        if part.cache:
+            block["cache_control"] = {"type": "ephemeral"}
+        blocks.append(block)
+    return blocks
+
+
 class ClaudeClient:
     def __init__(
         self,
@@ -85,7 +107,13 @@ class ClaudeClient:
         think: bool = True,
         fallback: bool = True,
         http_client: httpx2.AsyncClient | None = None,
+        role: str = "claude",
+        tools_role: str | None = None,
     ) -> None:
+        """`role` labels this client's usage lines, and `tools_role` its tool turns, which for
+        the talker's client are player turns rather than event reactions."""
+        self._role = role
+        self._tools_role = tools_role or role
         self._model = model
         # No retries: a retried frame arrives too late to describe what's on screen now, and a
         # retried deep answer too late for the turn that asked.
@@ -129,15 +157,18 @@ class ClaudeClient:
             "output_config": {"effort": self._effort},
         }
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         """With thinking on, effort sets how much; with it off, this is a fast plain reply."""
         self._acquire()
         params: dict[str, Any] = {
             "model": self._model,
-            "system": system,
-            "messages": [{"role": "user", "content": prompt}],
+            "system": system_param(system),
+            "messages": chat_messages(history, prompt),
             **self._reasoning(max_tokens),
         }
+        timer = CallTimer()
         try:
             if self._think and self._fallback:
                 stream = self._client.beta.messages.stream(
@@ -146,8 +177,14 @@ class ClaudeClient:
             else:
                 stream = self._client.messages.stream(**params)
             async with stream as replies:
-                async for text in replies.text_stream:
-                    yield text
+                try:
+                    async for text in replies.text_stream:
+                        timer.first_token()
+                        yield text
+                finally:
+                    # Also when the caller stops reading early, as the talker does past its word
+                    # cap: the snapshot then holds what was used so far.
+                    log_usage(self._role, self._model, timer, stream_snapshot(replies))
                 message = await replies.get_final_message()
         except anthropic.APIStatusError as exc:
             unavailable = self._unavailable(exc)
@@ -158,25 +195,30 @@ class ClaudeClient:
             log.warning("%s stopped early: %s", self._model, message.stop_reason)
 
     def tool_chat(
-        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+        self,
+        system: System,
+        tools: Sequence[ToolDeclaration],
+        max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> ClaudeToolChat:
-        return ClaudeToolChat(self, system, tools, max_tokens)
+        return ClaudeToolChat(self, system, tools, max_tokens, history)
 
     async def create_with_tools(
         self,
         messages: list[dict[str, Any]],
-        system: str,
+        system: System,
         tools: list[dict[str, Any]],
         max_tokens: int,
         allow_tools: bool,
     ) -> Any:
         """Tools run in our own loop, so the director can cancel them and every call is logged."""
         self._acquire()
+        timer = CallTimer()
         try:
             # Thinking blocks come back in message.content, which the tool chat replays as is.
             message = await self._client.messages.create(
                 model=self._model,
-                system=system,
+                system=system_param(system),
                 **self._reasoning(max_tokens),
                 tools=tools,
                 tool_choice={"type": "auto"} if allow_tools else {"type": "none"},
@@ -187,6 +229,7 @@ class ClaudeClient:
             if unavailable is None:
                 raise
             raise unavailable from exc
+        log_usage(self._tools_role, self._model, timer, message)
         if message.stop_reason == "refusal":
             raise LLMEmptyResponseError(f"{self._model} refused a tool turn")
         return message
@@ -201,6 +244,7 @@ class ClaudeClient:
         detail: Detail = "low",  # Claude reads the image at the size it's sent, so this is unused.
     ) -> SchemaT:
         self._acquire()
+        timer = CallTimer()
         try:
             message = await self._client.messages.create(
                 model=self._model,
@@ -237,6 +281,7 @@ class ClaudeClient:
             if unavailable is None:
                 raise
             raise unavailable from exc
+        log_usage(self._role, self._model, timer, message)
 
         if message.stop_reason in ("refusal", "max_tokens"):
             raise LLMEmptyResponseError(f"{self._model} stopped early: {message.stop_reason}")

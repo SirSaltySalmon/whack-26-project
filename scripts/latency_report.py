@@ -1,4 +1,4 @@
-"""Summarises the latency and event-loop lines of saved brain logs as a Markdown table.
+"""Summarises the latency, LLM usage and event-loop lines of saved brain logs as Markdown tables.
 
 Usage: python scripts/latency_report.py run.log [more.log ...]
 With no files, or `-`, it reads stdin. Save a live run's log with
@@ -9,6 +9,10 @@ Frame-to-voice times are split by source (`reader` or `observer`), with their no
 parts as rows of their own, so the slow half is visible. Event-to-bark times also get a row per
 event, so one slow bark stands out. Percentiles are nearest-rank: the value at position
 ceil(p / 100 * count) in sorted order, so every figure is a time that really happened.
+
+Each Claude call logs an `LLM usage:` line (brain/llm/usage.py). Those get a table of their own,
+by role: time to first token, and the cache hit rate, the share of input tokens read from the
+cache: cache_read / (input + cache_read + cache_write).
 """
 
 import argparse
@@ -52,6 +56,11 @@ FRAME_TO = re.compile(
     rf"\([^()]*?\s+from\s+(\w+):\s+noticed\s+in\s+{_NUMBER},\s+spoke\s+in\s+{_NUMBER}\)"
 )
 STALLED = re.compile(_ms("Event loop stalled"))
+# Kept in step with the line brain/llm/usage.py writes.
+USAGE = re.compile(
+    rf"{_phrase('LLM usage:')}\s+role=(\S+)\s+model=\S+\s+ttft_ms=(\d+)\s+input=(\d+)\s+"
+    rf"cache_read=(\d+)\s+cache_write=(\d+)\s+output=\d+"
+)
 LONGEST = re.compile(_ms("Event loop: longest stall") + rf"\s+over\s+{_NUMBER}\s+s\b")
 
 KIND_ORDER = (
@@ -82,17 +91,32 @@ class Kind:
 
 
 @dataclass
+class RoleUsage:
+    """One model role's calls: their times to first token, and input tokens by cache status."""
+
+    ttft_ms: list[float] = field(default_factory=list)
+    uncached: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+
+    def hit_rate(self) -> float | None:
+        total = self.uncached + self.cache_read + self.cache_write
+        return self.cache_read / total if total else None
+
+
+@dataclass
 class Samples:
     latency: dict[Kind, list[float]] = field(default_factory=dict)
     stalls: list[float] = field(default_factory=list)
     longest: list[float] = field(default_factory=list)
     watched_s: list[float] = field(default_factory=list)
+    usage: dict[str, RoleUsage] = field(default_factory=dict)
 
     def add(self, kind: Kind, ms: str) -> None:
         self.latency.setdefault(kind, []).append(float(ms))
 
     def empty(self) -> bool:
-        return not (self.latency or self.stalls or self.longest)
+        return not (self.latency or self.stalls or self.longest or self.usage)
 
 
 def decode_log(data: bytes) -> str:
@@ -123,6 +147,12 @@ def parse_text(text: str, samples: Samples | None = None) -> Samples:
     for name, pattern in SIMPLE_KINDS.items():
         for match in pattern.finditer(text):
             samples.add(Kind(name), match[1])
+    for match in USAGE.finditer(text):
+        role = samples.usage.setdefault(match[1], RoleUsage())
+        role.ttft_ms.append(float(match[2]))
+        role.uncached += int(match[3])
+        role.cache_read += int(match[4])
+        role.cache_write += int(match[5])
     samples.stalls += [float(match[1]) for match in STALLED.finditer(text)]
     for match in LONGEST.finditer(text):
         samples.longest.append(float(match[1]))
@@ -153,6 +183,17 @@ def table_rows(samples: Samples) -> list[tuple[str, int, int, int, int]]:
     ]
 
 
+def usage_rows(samples: Samples) -> list[tuple[str, int, int, int, str]]:
+    """Role, calls, TTFT p50 and p95 in whole milliseconds, and the cache hit rate."""
+    rows: list[tuple[str, int, int, int, str]] = []
+    for name, role in sorted(samples.usage.items()):
+        rate = role.hit_rate()
+        p50, p95 = percentile(role.ttft_ms, 50), percentile(role.ttft_ms, 95)
+        hit = "-" if rate is None else f"{rate:.0%}"
+        rows.append((name, len(role.ttft_ms), round(p50), round(p95), hit))
+    return rows
+
+
 def loop_line(samples: Samples) -> str | None:
     if not (samples.stalls or samples.longest):
         return None
@@ -169,15 +210,22 @@ def render(samples: Samples) -> str:
     if rows:
         lines += ["| Kind | Count | p50 ms | p95 ms | Max ms |", "|---|---:|---:|---:|---:|"]
         lines += [f"| {' | '.join(str(cell) for cell in row)} |" for row in rows]
+    usage = usage_rows(samples)
+    if usage:
+        lines += [""] if lines else []
+        lines += ["| Role | Calls | TTFT p50 ms | TTFT p95 ms | Cache hit |"]
+        lines += ["|---|---:|---:|---:|---:|"]
+        lines += [f"| {' | '.join(str(cell) for cell in row)} |" for row in usage]
     loop = loop_line(samples)
     if loop:
-        lines += ["", loop] if rows else [loop]
+        lines += ["", loop] if lines else [loop]
     return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="latency_report", description="Summarise Latency: lines from saved brain logs."
+        prog="latency_report",
+        description="Summarise Latency: and LLM usage: lines from saved brain logs.",
     )
     parser.add_argument("logs", nargs="*", default=["-"], help="log files; - or none for stdin")
     try:
@@ -196,7 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parse_text(decode_log(data), samples)
 
     if samples.empty():
-        print("No latency or event loop lines found.")
+        print("No latency, LLM usage or event loop lines found.")
         return NOTHING_MATCHED
     print(render(samples))
     return FOUND

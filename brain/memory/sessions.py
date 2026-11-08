@@ -10,6 +10,8 @@ from brain.memory.fts import to_match_query
 from brain.memory.models import LoggedEvent, Note, NoteKind, Session, Speaker, Turn
 
 TURN_PREFIX = "turn."
+# What the partner's tools did on a player turn or a tip, as one line (brain/agent/tool_notes.py).
+TOOL_PREFIX = "tool."
 
 _NOTE_COLUMNS = "n.id, n.session_id, n.kind, n.body, n.from_ts, n.to_ts, n.created_at"
 
@@ -78,6 +80,9 @@ class SessionStore:
 
     def log_turn(self, session_id: int, speaker: Speaker, text: str) -> None:
         self.log_event(session_id, f"{TURN_PREFIX}{speaker}", {"text": text})
+
+    def log_tool(self, session_id: int, tool: str, note: str, ok: bool) -> None:
+        self.log_event(session_id, f"{TOOL_PREFIX}{tool}", {"text": note, "ok": ok})
 
     def recent_turns(self, session_id: int, limit: int = 6) -> list[Turn]:
         # Ties on ts are broken by id so two turns logged in the same clock tick keep their order.

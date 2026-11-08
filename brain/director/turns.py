@@ -15,8 +15,9 @@ from dataclasses import dataclass
 
 from brain.agent.tools import ToolRegistry, TurnContext
 from brain.agent.turn import run_turn
-from brain.director.talker import ADVICE_PROMPT, is_skip, reply
+from brain.director.talker import ADVICE_PROMPT, is_skip, reply, wants_detail
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, TextLLM, ToolLLM
+from brain.memory.layers import TalkerContext
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +36,20 @@ class Persona:
     max_words: int
     hints: bool
 
+    @classmethod
+    def of(cls, name: str, tone: str, instructions: str, max_words: int, hints: bool) -> "Persona":
+        """The personality's tone, with the player's own instructions added when they wrote any."""
+        instructions = instructions.strip()
+        if instructions:
+            tone += f"\nPlayer custom instructions (keep truth and trust rules): {instructions}"
+        return cls(name, tone, max_words, hints)
 
-async def talker_reply(talker: TextLLM, prompt: str, persona: Persona, context: str) -> str | None:
-    """A reply with no tools, for reactions, and for tips and turns when there's no agent."""
+
+async def talker_reply(
+    talker: TextLLM, prompt: str, persona: Persona, context: TalkerContext, detail: bool = False
+) -> str | None:
+    """A reply with no tools, for reactions, and for tips and turns when there's no agent.
+    Only a player's turn can ask for detail, so callers pass it rather than it being read here."""
     text = await reply(
         talker,
         prompt,
@@ -46,6 +58,7 @@ async def talker_reply(talker: TextLLM, prompt: str, persona: Persona, context: 
         context,
         persona.tone,
         hints=persona.hints,
+        detail=detail,
     )
     return None if not text or is_skip(text) else text
 
@@ -64,7 +77,7 @@ def tip_tools(tools: ToolRegistry | None) -> ToolRegistry | None:
 
 
 async def tip_reply(
-    agent: ToolLLM, tools: ToolRegistry, persona: Persona, context: str
+    agent: ToolLLM, tools: ToolRegistry, persona: Persona, context: TalkerContext
 ) -> str | None:
     """Returns the tip to say, or None to stay quiet. Nobody asked, so failing is just silence."""
     try:
@@ -95,7 +108,7 @@ async def give_tip(
     talker: TextLLM | None,
     tools: ToolRegistry | None,
     persona: Persona,
-    context: str,
+    context: TalkerContext,
 ) -> str | None:
     """A tip from the agent when it can point, else from the plain talker, else none."""
     pointing = tip_tools(tools)
@@ -114,7 +127,7 @@ async def player_reply(
     transcript: str,
     turn: TurnContext,
     persona: Persona,
-    context: str,
+    context: TalkerContext,
     looking: Callable[[], Awaitable[None]],
     done_line: str,
     unavailable: Callable[[], str],
@@ -134,6 +147,7 @@ async def player_reply(
             looking,
             done_line,
             hints=persona.hints,
+            detail=wants_detail(transcript),
         )
     except (LLMUnavailableError, LLMEmptyResponseError) as exc:
         log.warning("Player turn unavailable: %s", exc)

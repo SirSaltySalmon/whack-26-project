@@ -272,12 +272,13 @@ async def test_the_open_page_excerpt_reaches_player_turns_and_never_reactions() 
     async with rig.running():
         await rig.publish(GameEvent("danger_started", ts=100.0))
         assert rig.voice.said == ["Reaction."]
-        assert "It drops a mask." not in talker.system and asked == []
+        assert "It drops a mask." not in talker.prompts[0] and asked == []
 
         await rig.publish(PlayerSpeech(transcript="what does it drop?"))
     assert rig.voice.said == ["Reaction.", "Reply."]
     assert asked == ["what does it drop?"]
-    assert "OPEN PAGE (test): Skeletron\nIt drops a mask." in agent.system
+    # In LIVE, the latest message, since it changes with what they ask.
+    assert "OPEN PAGE (test): Skeletron\nIt drops a mask." in agent.sends[0]
 
 
 async def test_a_failing_excerpt_does_not_cost_the_player_their_reply() -> None:

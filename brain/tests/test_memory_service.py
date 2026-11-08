@@ -1,13 +1,13 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
 
 from brain.events import EventBus, GameEvent, PlayerSpeech, QuestionAnswered, SettingsChanged
-from brain.llm.base import LLMUnavailableError, TextLLM
+from brain.llm.base import ChatTurn, LLMUnavailableError, System, TextLLM
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
@@ -21,7 +21,9 @@ class FakeLLM:
     def __init__(self, reply: str) -> None:
         self.reply = reply
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
         yield self.reply
 
 

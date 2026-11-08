@@ -19,6 +19,7 @@ from brain.events import (
     SettingsChanged,
 )
 from brain.llm.base import ToolCall, ToolStep
+from brain.memory.layers import TalkerContext
 from brain.tests.director_rig import DONE, LOOKING, TONE, Rig, Stuck, settle, until
 from brain.tests.fakes import (
     FakeBarkSynth,
@@ -94,23 +95,25 @@ async def test_replies_and_reactions_use_the_personalitys_tone() -> None:
 
 async def test_a_player_turn_gets_the_live_context() -> None:
     queries: list[str] = []
+    currents: list[str | None] = []
 
-    async def context(query: str) -> str:
+    async def context(query: str, current: str | None) -> TalkerContext:
         queries.append(query)
-        return "NOW: danger: high"
+        currents.append(current)
+        return TalkerContext(live="NOW: danger: high")
 
     agent = ScriptedToolLLM([ToolStep("Reply.")])
     rig = Rig(agent=agent, context=context)
     async with rig.running():
         await rig.publish(PlayerSpeech(transcript="hello"))
-    assert queries == ["hello"]
-    assert "NOW: danger: high" in agent.system
+    assert queries == ["hello"] and currents == ["hello"]
+    assert "NOW: danger: high" in agent.sends[0]
 
 
 async def test_a_context_failure_still_answers_the_player(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    async def broken(_query: str) -> str:
+    async def broken(_query: str, _current: str | None) -> TalkerContext:
         raise RuntimeError("database locked")
 
     rig = Rig(agent=ScriptedToolLLM([ToolStep("Reply.")]), context=broken)

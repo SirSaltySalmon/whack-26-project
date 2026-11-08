@@ -8,7 +8,16 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from brain.llm.base import Detail, SchemaT, ToolCall, ToolDeclaration, ToolStep
+from brain.llm.base import (
+    ChatTurn,
+    Detail,
+    SchemaT,
+    System,
+    ToolCall,
+    ToolDeclaration,
+    ToolStep,
+    system_text,
+)
 
 
 @dataclass(frozen=True)
@@ -59,13 +68,19 @@ class FakeTextLLM:
         self.chunks = list(chunks)
         self.error = error
         self.gate = gate
-        self.system = ""  # From the latest call
+        self.system = ""  # From the latest call, as one string
+        self.system_parts: System = ""  # The same, as it was passed
         self.prompts: list[str] = []
         self.max_tokens: list[int] = []
+        self.histories: list[tuple[ChatTurn, ...]] = []  # The earlier turns of each call
 
-    async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
-        self.system = system
+    async def stream_text(
+        self, system: System, prompt: str, max_tokens: int, history: Sequence[ChatTurn] = ()
+    ) -> AsyncIterator[str]:
+        self.system = system_text(system)
+        self.system_parts = system
         self.prompts.append(prompt)
+        self.histories.append(tuple(history))
         self.max_tokens.append(max_tokens)
         if self.gate is not None:
             await self.gate.wait()
@@ -90,9 +105,11 @@ class ScriptedToolLLM:
 
     def __init__(self, steps: Iterable[ScriptStep]) -> None:
         self._steps = deque(steps)
-        self.system = ""  # From the latest chat
+        self.system = ""  # From the latest chat, as one string
+        self.system_parts: System = ""  # The same, as it was passed
         self.tools: list[ToolDeclaration] = []
         self.max_tokens = 0
+        self.history: tuple[ChatTurn, ...] = ()  # The latest chat's earlier turns
         self.sends: list[str] = []
         self.results: list[SentResults] = []
 
@@ -101,9 +118,15 @@ class ScriptedToolLLM:
         return len(self.sends) + len(self.results)
 
     def tool_chat(
-        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+        self,
+        system: System,
+        tools: Sequence[ToolDeclaration],
+        max_tokens: int,
+        history: Sequence[ChatTurn] = (),
     ) -> "_ScriptedChat":
-        self.system = system
+        self.history = tuple(history)
+        self.system = system_text(system)
+        self.system_parts = system
         self.tools = list(tools)
         self.max_tokens = max_tokens
         return _ScriptedChat(self)
