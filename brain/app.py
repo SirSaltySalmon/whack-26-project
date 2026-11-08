@@ -2,117 +2,73 @@
 
 import asyncio
 import logging
-from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
 
 import uvicorn
 
-from brain.agent.focus_tool import watch_tool
 from brain.agent.handlers import AgentLimits, AgentTools
-from brain.agent.tools import ToolRegistry
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
-from brain.capture.source import FrameSource, default_live_source, live_frame_scale
+from brain.capture.source import default_live_source, live_frame_scale
 from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
+from brain.control import ShutdownRequested, stop_when
+from brain.control_wiring import StatusParts, build_control
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
+from brain.game_setup import ensure_brief, name_game
 from brain.hud import build_hud, live_state, send_debug_regions
-from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
-from brain.llm.gemini import GeminiClient
 from brain.memory.db import Database, connect
 from brain.memory.notes import NoteWriter
 from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
-from brain.perception.focus import Focus, FocusIntervals
-from brain.perception.observer import Observer
-from brain.perception.tracker import ObservationTracker
-from brain.replay.source import ReplayFrameSource
-from brain.research import ExaSearch, WikiResearch
+from brain.parts import (
+    find_wiki,
+    make_bark_bank,
+    make_observer,
+    make_progress_scout,
+    make_talker,
+    survive,
+    tool_registry,
+)
+from brain.replay.source import ReplayLoop
+from brain.replay.wiring import (
+    ReplayDone,
+    build_recording,
+    exit_after,
+    no_note_model,
+    replay_talker,
+)
 from brain.research.open_page import OpenPage
-from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink, create_app
-from brain.voice.pipeline import create_voice
+from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
 from shared.protocol.messages import Settings as OverlaySettings
 
 log = logging.getLogger(__name__)
 
 
-def _talker(factory: LLMFactory) -> GeminiClient | None:
-    try:
-        return factory.talker()
-    except LLMUnavailableError as exc:
-        log.warning("Talker disabled: %s", exc)
-        return None
-
-
-def _observer(
-    settings: Settings, factory: LLMFactory, buffer: RingBuffer, link: OverlayLink, bus: EventBus
-) -> Observer | None:
-    try:
-        vision = factory.observer()
-    except LLMUnavailableError as exc:
-        log.warning("Not watching the screen: %s", exc)
-        return None
-    return Observer(
-        buffer,
-        link,
-        vision,
-        bus,
-        ObservationTracker(),
-        Focus(
-            FocusIntervals(
-                settings.observer_interval_low_s,
-                settings.observer_interval_medium_s,
-                settings.observer_interval_high_s,
-            ),
-            settings.focus_hold_s,
-        ),
-        settings.ai_image_max_edge_px,
-        settings.mask_padding_px,
-    )
-
-
-def _registry(tools: AgentTools | None, observer: Observer | None) -> ToolRegistry | None:
-    if tools is None:
-        return None
-    # Only offered while something is watching, or the boost would do nothing.
-    return tools.registry().including(watch_tool(observer.focus)) if observer else tools.registry()
-
-
-async def _find_wiki(settings: Settings, database: Database, tools: AgentTools) -> None:
-    """In the background, so a slow or dead wiki can't hold up the brain's start."""
-    title = settings.game_title.strip()
-    if not title or title == Settings.model_fields["game_title"].default:
-        log.warning("No wiki lookups: set GAME_TITLE to the game being played")
-        return
-    key = settings.exa_api_key
-    web_search = ExaSearch(key.get_secret_value()) if key else None
-    tools.research = await WikiResearch.for_game(title, WikiCache(database), web_search=web_search)
-    if tools.research is None:
-        log.warning("No wiki found for %s", title)
-    else:
-        log.info("Using the wiki at %s", tools.research.site.api_url)
-
-
-async def _survive(name: str, work: Coroutine[Any, Any, None]) -> None:
-    """Keeps a failure in an optional part, such as no audio device, from ending the brain."""
-    try:
-        await work
-    except Exception:
-        log.exception("%s stopped; carrying on without it", name)
-
-
-async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = False) -> None:
+async def run(
+    settings: Settings,
+    replay_dir: Path | None = None,
+    typed: bool = False,
+    record: bool = False,
+    speed: float = 1.0,
+    exit_when_done: bool = False,
+    write_messages: Path | None = None,
+    game_hint: str = "",
+) -> None:
     bus = EventBus()
     link = OverlayLink(bus)
     # One factory, because limiters are per model and vision and deep notes can share a model.
     factory = LLMFactory(settings)
+    # Before memory opens, because memory is filed under the game's title.
+    settings, written = (
+        (settings, None) if replay_dir else await name_game(settings, factory.deep, game_hint)
+    )
     personalities = load_personalities()
     link.personalities = personalities.names
     link.voices = settings.voice_options
@@ -125,7 +81,7 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         bus,
         link.send,
         settings.game_title,
-        NoteWriter(factory.deep),
+        NoteWriter(no_note_model if replay_dir else factory.deep),
         vault_dir=None if replay_dir else settings.vault_dir,
         note_interval_s=settings.note_interval_s,
         note_min_new_events=settings.note_min_new_events,
@@ -133,30 +89,36 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
     await memory.start()
     link.settings = await memory.load_settings(OverlaySettings)
 
-    source: FrameSource = ReplayFrameSource(replay_dir) if replay_dir else default_live_source()
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
-    window = None if replay_dir else create_game_window(settings.game_process)
+    replay = ReplayLoop(replay_dir, buffer, bus, link, speed=speed) if replay_dir else None
     if not replay_dir:
         link.frame_scale_override = live_frame_scale()
-    capture = CaptureLoop(source, buffer, link, settings.capture_fps, window)
-    # Replays are tests and fallbacks, so they never spend money on vision.
-    observer = None if replay_dir else _observer(settings, factory, buffer, link, bus)
-
-    voice = create_voice(settings, bus, link)
-
-    # Set below, once the agent tools that find the wiki exist.
-    tools: AgentTools | None = None
-    hud = build_hud(
-        settings,
-        factory,
-        database,
+    capture = replay or CaptureLoop(
+        default_live_source(),
         buffer,
         link,
-        bus,
-        observer,
-        lambda: tools.research if tools else None,
-        live=not replay_dir,
+        settings.capture_fps,
+        create_game_window(settings.game_process),
     )
+    # Replays are tests and fallbacks, so they never spend money on vision.
+    scout = None if replay_dir else make_progress_scout(settings, factory, buffer, link, memory)
+    observer = (
+        None
+        if replay_dir
+        else make_observer(settings, factory, buffer, link, bus, scout.notice if scout else None)
+    )
+    if observer is None:
+        # Nothing would wake it.
+        scout = None
+    recorder, message_log = build_recording(
+        settings, buffer, bus, link, record and not replay_dir, write_messages
+    )
+
+    # Replay never opens the mic, which would mix live speech into the recording, and never
+    # spends TTS characters. Subtitles also keep two runs' messages comparable.
+    voice = SubtitleOnlyVoice(link) if replay_dir else create_voice(settings, bus, link)
+    # Readers run on replays too, so a reader change shows up in a replayed session.
+    hud = build_hud(settings, factory, database, buffer, link, bus, observer, live=not replay_dir)
 
     async def talker_context(query: str) -> str:
         # What the partner hears and sees now, on top of what memory knows.
@@ -164,10 +126,20 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         live = live_state(voice.live_state(), hud.readers.live_state(), observed)
         return await memory.context(live, query)
 
-    talker = _talker(factory)
+    async def on_spoken(text: str) -> None:
+        if recorder:
+            recorder.on_partner_said(text)
+        await memory.record_partner_turn(text)
+
+    live_talker = None if replay_dir else make_talker(factory)
+    if replay_dir:
+        talker = await replay_talker(settings, lambda: make_talker(factory), replay_dir)
+    else:
+        talker = live_talker
     # Replays never spend money on vision, so they get plain replies with no tools.
+    tools = None
     open_page = None
-    if talker is not None and not replay_dir:
+    if live_talker is not None:
         tools = AgentTools(
             buffer,
             link,
@@ -193,6 +165,13 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         open_page = OpenPage(bus, link.send, wiki_host)
         tools.open_page = open_page
 
+    # Replays get no barks: they'd spend TTS, and a cached one would replace a recorded line.
+    barks = None if replay_dir else make_bark_bank(settings, personalities)
+
+    def voice_id() -> str | None:
+        # Matches the voice PipecatVoice picks: the player's choice, then the configured default.
+        return link.settings.voice_id or settings.elevenlabs_voice_id
+
     director = Director(
         bus,
         voice,
@@ -201,45 +180,77 @@ async def run(settings: Settings, replay_dir: Path | None = None, typed: bool = 
         personality=lambda: link.settings.personality,
         max_words=settings.talker_max_words,
         context=talker_context,
-        on_spoken=memory.record_partner_turn,
-        agent=talker if tools else None,
-        tools=_registry(tools, observer),
+        on_spoken=on_spoken,
+        agent=live_talker if tools else None,
+        tools=tool_registry(tools, observer),
         personalities=personalities,
         take_question=memory.take_question,
         send=link.send,
         question_gap_s=settings.question_gap_s,
         question_quiet_s=settings.question_quiet_s,
+        advice_gap_s=settings.advice_gap_s,
+        advice_quiet_s=settings.advice_quiet_s,
         page_excerpt=open_page.excerpt_for if open_page else None,
+        barks=barks,
+        voice_id=voice_id,
     )
+    startup_voice = voice_id()
+
+    parts = StatusParts(replay_dir is not None, voice, observer, talker, tools, voice_id)
+    control, stop = build_control(settings, link, bus, database, memory, parts, talker_context)
 
     config = uvicorn.Config(
-        create_app(link), host=WS_HOST, port=settings.brain_port, log_level="warning"
+        create_app(link, control), host=WS_HOST, port=settings.brain_port, log_level="warning"
     )
     server = uvicorn.Server(config)
 
     log.info("Brain listening on ws://%s:%s/ws", WS_HOST, settings.brain_port)
     try:
         async with asyncio.TaskGroup() as tasks:
+            for name, part in (("Recorder", recorder), ("Message log", message_log)):
+                if part:
+                    tasks.create_task(survive(name, part.run()))
             tasks.create_task(server.serve())
+            tasks.create_task(stop_when(stop))
             tasks.create_task(director.run())
             tasks.create_task(capture.run())
-            tasks.create_task(_survive("Voice", voice.run()))
+            tasks.create_task(survive("Voice", voice.run()))
             if observer:
-                tasks.create_task(_survive("Observer", observer.run()))
-            tasks.create_task(_survive("Readers", hud.readers.run()))
+                tasks.create_task(survive("Observer", observer.run()))
+            tasks.create_task(survive("Readers", hud.readers.run()))
             if hud.learner:
-                tasks.create_task(_survive("Learner", hud.learner.run()))
+                tasks.create_task(survive("Learner", hud.learner.run()))
             if settings.debug_regions:
-                tasks.create_task(
-                    _survive("Debug view", send_debug_regions(hud.readers, link.send))
-                )
+                debug = send_debug_regions(hud.readers, link.send)
+                tasks.create_task(survive("Debug view", debug))
+            if scout:
+                tasks.create_task(survive("Progress", scout.run()))
             tasks.create_task(memory.run())
+            if barks and startup_voice:
+                # In the background: until a bark is ready, its event goes to the talker instead.
+                tasks.create_task(survive("Barks", barks.prepare(startup_voice)))
+            if not replay_dir:
+                brief = ensure_brief(
+                    database,
+                    settings.game_title,
+                    factory.deep,
+                    game_hint,
+                    written,
+                    settings.brief_timeout_s,
+                )
+                tasks.create_task(survive("Game brief", brief))
             if tools:
-                tasks.create_task(_survive("Wiki", _find_wiki(settings, database, tools)))
+                tasks.create_task(survive("Wiki", find_wiki(settings, database, tools, control)))
             if open_page:
-                tasks.create_task(_survive("Open page", open_page.run()))
+                tasks.create_task(survive("Open page", open_page.run()))
             if typed:
-                tasks.create_task(_survive("Typing", typed_turns(bus)))
+                tasks.create_task(survive("Typing", typed_turns(bus)))
+            if replay and exit_when_done:
+                tasks.create_task(exit_after(replay.finished, settings.replay_exit_grace_s))
+    except* ReplayDone:
+        log.info("Replay finished; exiting")
+    except* ShutdownRequested:
+        log.info("Stopped from the Control Center")
     finally:
         hud.close()
         if tools and tools.research:

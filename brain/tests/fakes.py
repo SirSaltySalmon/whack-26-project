@@ -16,10 +16,11 @@ from pydantic import BaseModel
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event
 from brain.llm.base import Detail, SchemaT, ToolCall, ToolDeclaration, ToolStep
+from brain.memory.models import Fact, RememberResult, Source
 from brain.perception.coords import CropRegion
 from brain.voice.barks import Bark
 from shared.protocol import BrainMessage
-from shared.protocol.messages import QuestionAsk, Rect
+from shared.protocol.messages import QuestionAsk, Rect, Settings
 
 
 class FakeVoice:
@@ -53,9 +54,25 @@ class FakeVoice:
         return dict(self.live)
 
 
+class FakeBarkSynth:
+    """Returns a little silence per line, and records every line it was asked for."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def synthesize(self, text: str, voice_id: str, model: str, sample_rate: int) -> bytes:
+        self.calls.append((text, voice_id, model, sample_rate))
+        if self.fail:
+            raise RuntimeError("quota exceeded")
+        return bytes(sample_rate // 50 * 2)  # 20 ms
+
+
 class FakeOverlay:
     def __init__(self, display_scale: float = 1.0, rects: Iterable[Rect] = ()) -> None:
         self.display_scale = display_scale
+        self.pinned_display_scale: float | None = None
+        self.settings = Settings()
         self.rects = tuple(rects)
         self.sent: list[BrainMessage] = []
 
@@ -200,6 +217,8 @@ class FakeMemory:
         self.questions_taken = 0
         self.partner_turns: list[str] = []
         self.context_calls: list[tuple[dict[str, str], str | None]] = []
+        self.facts: dict[tuple[str, str], Fact] = {}
+        self.remembered: list[tuple[str, str, str, str, float]] = []
 
     async def wonder(self, subject: str, attribute: str, text: str) -> object | None:
         self.wondered.append((subject, attribute, text))
@@ -215,6 +234,28 @@ class FakeMemory:
     async def context(self, live_state: Mapping[str, str], query: str | None = None) -> str:
         self.context_calls.append((dict(live_state), query))
         return self.context_text
+
+    async def current_fact(self, subject: str, attribute: str) -> Fact | None:
+        return self.facts.get((subject, attribute))
+
+    async def remember(
+        self, subject: str, attribute: str, value: str, source: Source, confidence: float
+    ) -> RememberResult:
+        """Stores the latest value as given. The trust rules have their own tests."""
+        self.remembered.append((subject, attribute, value, source, confidence))
+        fact = Fact(
+            len(self.remembered),
+            None,
+            subject,
+            attribute,
+            value,
+            source,
+            confidence,
+            tentative=confidence < 0.5,
+            valid_from=time.time(),
+        )
+        self.facts[(subject, attribute)] = fact
+        return RememberResult("stored", fact=fact)
 
 
 def make_frame(

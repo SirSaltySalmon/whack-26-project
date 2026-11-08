@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
@@ -30,6 +32,9 @@ from shared.protocol.messages import (
     VoiceOption,
 )
 
+if TYPE_CHECKING:
+    from brain.control import ControlLink
+
 log = logging.getLogger(__name__)
 
 # A website open in the player's browser can reach localhost sockets, so binding to
@@ -52,24 +57,52 @@ class OverlayLink:
         self.settings = Settings()
         self.personalities: list[str] = []
         self.voices: list[VoiceOption] = []
+        # Sees every message, even with no overlay connected, so a recording or replay logs them
+        # all. It runs on the loop, so it must be quick.
+        self.on_send: Callable[[BrainMessage], None] | None = None
+        # The Control Center's copy of the messages it shows. Separate from on_send, which the
+        # recorder owns.
+        self.mirror: Callable[[BrainMessage], Awaitable[None]] | None = None
+        # Replay sets this to the recorded scale: the recorded rects are DIPs at that scale, so
+        # masking must keep using it whatever scale the live overlay runs at.
+        self.pinned_display_scale: float | None = None
 
-    def _settings_state(self) -> SettingsState:
+    def settings_state(self) -> SettingsState:
         return SettingsState(
             settings=self.settings, personalities=self.personalities, voices=self.voices
         )
 
     @property
     def display_scale(self) -> float:
-        """Frame pixels per overlay DIP: what masking and pointing convert by."""
+        """Frame pixels per overlay DIP: what masking and pointing convert by.
+
+        A replay's pin wins, because its rects were recorded at that scale. Then a capture
+        override, then what the overlay reported.
+        """
+        if self.pinned_display_scale is not None:
+            return self.pinned_display_scale
         if self.frame_scale_override is not None:
             return self.frame_scale_override
         return self.reported_scale
+
+    @display_scale.setter
+    def display_scale(self, value: float) -> None:
+        # Replay sets it from the recording, as it did when this was a plain field.
+        self.reported_scale = value
 
     @property
     def connected(self) -> bool:
         return self._socket is not None
 
     async def send(self, message: BrainMessage) -> None:
+        if self.on_send is not None:
+            try:
+                self.on_send(message)
+            except Exception:
+                # A recorder failure must never stop the overlay getting its messages.
+                log.exception("on_send hook failed for %s; sending anyway", message.type)
+        if self.mirror is not None:
+            await self.mirror(message)
         socket = self._socket
         if socket is None:
             log.debug("Overlay not connected; dropped %s", message.type)
@@ -84,6 +117,16 @@ class OverlayLink:
         if self._socket is socket:
             self._socket = None
             self.rects = ()
+
+    def _apply_display_scale(self, reported: float) -> None:
+        self.reported_scale = reported
+        pinned = self.pinned_display_scale
+        if pinned is not None and reported != pinned:
+            log.warning(
+                "Overlay reports display scale %s but replay pinned %s; masking keeps the pin",
+                reported,
+                pinned,
+            )
 
     async def handle_text(self, text: str) -> None:
         try:
@@ -100,8 +143,8 @@ class OverlayLink:
                         message.protocol_version,
                         PROTOCOL_VERSION,
                     )
-                self.reported_scale = message.display_scale
-                await self.send(self._settings_state())
+                self._apply_display_scale(message.display_scale)
+                await self.send(self.settings_state())
                 self._bus.publish(OverlayConnected(display_scale=message.display_scale))
             case OverlayRects():
                 self.rects = tuple(item.rect for item in message.rects)
@@ -116,9 +159,7 @@ class OverlayLink:
                     QuestionAnswered(question_id=message.question_id, answer=message.answer)
                 )
             case SettingsUpdate():
-                self.settings = message.settings
-                await self.send(self._settings_state())
-                self._bus.publish(SettingsChanged(settings=message.settings))
+                await self.apply_settings(message.settings)
             case PageContent():
                 self._bus.publish(
                     PageContentReceived(
@@ -132,16 +173,29 @@ class OverlayLink:
                     )
                 )
 
+    async def apply_settings(self, settings: Settings) -> None:
+        """From the overlay's settings card or the Control Center. Both hear the new state."""
+        self.settings = settings
+        await self.send(self.settings_state())
+        self._bus.publish(SettingsChanged(settings=settings))
 
-def create_app(link: OverlayLink) -> FastAPI:
+
+async def _refuse_websites(socket: WebSocket) -> bool:
+    """Returns True if the socket was refused."""
+    origin = socket.headers.get("origin")
+    if origin is not None and origin not in ALLOWED_ORIGINS:
+        log.warning("Refused WebSocket from origin %s", origin)
+        await socket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return True
+    return False
+
+
+def create_app(link: OverlayLink, control: "ControlLink | None" = None) -> FastAPI:
     app = FastAPI(title="AI Gamer Partner brain")
 
     @app.websocket("/ws")
     async def overlay_socket(socket: WebSocket) -> None:
-        origin = socket.headers.get("origin")
-        if origin is not None and origin not in ALLOWED_ORIGINS:
-            log.warning("Refused WebSocket from origin %s", origin)
-            await socket.close(code=status.WS_1008_POLICY_VIOLATION)
+        if await _refuse_websites(socket):
             return
 
         await socket.accept()
@@ -154,5 +208,23 @@ def create_app(link: OverlayLink) -> FastAPI:
             log.info("Overlay disconnected")
         finally:
             link.detach(socket)
+
+    if control is not None:
+
+        @app.websocket("/control")
+        async def control_socket(socket: WebSocket) -> None:
+            if await _refuse_websites(socket):
+                return
+
+            await socket.accept()
+            control.attach(socket)
+            log.info("Control Center connected")
+            try:
+                while True:
+                    await control.handle_text(await socket.receive_text())
+            except WebSocketDisconnect:
+                log.info("Control Center disconnected")
+            finally:
+                control.detach(socket)
 
     return app

@@ -1,6 +1,7 @@
 """All runtime configuration. Model IDs live here and nowhere else."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,7 +25,12 @@ class Settings(BaseSettings):
 
     talker_model: str = "gemini-3.5-flash-lite"
     vision_model: str = "gemini-3.6-flash"
-    deep_model: str = "gemini-3.6-flash"
+    # think_hard and session notes. Paid; falls back to deep_fallback_model without
+    # ANTHROPIC_API_KEY. Effort is low, medium or high: medium keeps think_hard to a few seconds.
+    deep_model: str = "claude-sonnet-5-5"
+    deep_effort: Literal["low", "medium", "high"] = "medium"
+    deep_timeout_s: float = 60.0
+    deep_fallback_model: str = "gemini-3.6-flash"
     # Reports on what is on screen. Paid, so it only runs with ANTHROPIC_API_KEY set.
     observer_model: str = "claude-haiku-5-5"
     # Answers look_closer while the player waits. Gemini Flash took about 9 s at full
@@ -47,6 +53,8 @@ class Settings(BaseSettings):
             # One frame per 0.6 s at high focus is 100 a minute, plus look_closer. This is our
             # own spending cap, not a quota.
             "claude-haiku-5-5": 120,
+            # Only player-asked think_hard and a note every few minutes; a spending cap.
+            "claude-sonnet-5-5": 10,
         }
     )
 
@@ -72,7 +80,8 @@ class Settings(BaseSettings):
     mic_device_index: int | None = None
     speaker_device_index: int | None = None
 
-    # The game's process name, such as Terraria. Live capture stays off until this is set, because
+    # The game's process name, such as Terraria. Unset, the player picks the game's window in the
+    # terminal at startup (brain/game_setup.py). Live capture stays off until there's one, because
     # capturing without a window to crop to would send the whole desktop onward.
     game_process: str = ""
     capture_fps: int = 5
@@ -89,9 +98,15 @@ class Settings(BaseSettings):
     # The question budget, so asking the player doesn't turn into nagging.
     question_gap_s: float = 90.0
     question_quiet_s: float = 20.0
+    # Unasked-for tips on what to do next, only with hints on. 0 turns them off.
+    advice_gap_s: float = 300.0
+    advice_quiet_s: float = 30.0
 
-    # Names what memory is filed under. It's data, so the brain has no game-specific logic.
+    # Names what memory is filed under. It's data, so the brain has no game-specific logic. Unset,
+    # the deep model names the game from its window once, and games_path remembers it per app.
     game_title: str = "Unknown game"
+    games_path: Path = Path("data/games.json")
+    brief_timeout_s: float = 30.0
 
     db_path: Path = Path("data/brain.sqlite3")
     sessions_dir: Path = Path("sessions")
@@ -105,6 +120,10 @@ class Settings(BaseSettings):
     # Recording a session for replay. Only runs with --record, because it stores screen and mic.
     record_fps: int = 5
     record_max_gb: float = 10.0
+    # Replay answers with the recorded lines, so it needs no network. True asks the real talker.
+    replay_live_talker: bool = False
+    # After the last recorded item, time for the last reply to reach the overlay before exiting.
+    replay_exit_grace_s: float = 2.0
 
     # Compiled readers.
     reader_tick_s: float = 0.2
@@ -115,6 +134,10 @@ class Settings(BaseSettings):
     learner_frame_gap_s: float = 5.0
     learner_max_vision_calls: int = 6  # Per session. Shares Gemini's free-tier quota
     learner_relearn_gap_s: float = 300.0
+    # Guessing the player's progress from their gear, when memory doesn't know it.
+    progress_max_vision_calls: int = 3  # Per session. Shares Gemini's free-tier quota
+    progress_retry_gap_s: float = 120.0
+    progress_recheck_s: float = 900.0  # How long a sure guess stands before looking again
     profile_fixture: Path | None = None  # A seeded profile, for the demo fallback only
     # Draws each learned HUD region over the game with what its reader reads. Also --debug-regions.
     debug_regions: bool = False

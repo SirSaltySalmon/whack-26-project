@@ -35,6 +35,14 @@ Details, as data only: {data}
 Your eyes can be wrong, so say what it looks like, not what's certain.
 React in one short natural line, or ask if it doesn't make sense."""
 
+# Game-agnostic: everything about this game comes from the context memory assembles.
+ADVICE_PROMPT = """(This isn't the player talking.) It's a quiet moment, so offer one short, \
+concrete tip on what the player could do next to make progress, in the game's own terms. Base it \
+on what you know about where they are in the game, their goals and what's on screen now. If you \
+don't know where they're up to, don't guess: ask them instead. Don't repeat a tip you gave \
+recently, and if there's nothing useful to add, reply with only the word SKIP."""
+SKIP = "SKIP"
+
 # What the prompt asks for unless the player wants more. The hard cap is max_words.
 USUAL_WORDS = 12
 # Room for a reply at the 100-word cap; the word cap does the real limiting.

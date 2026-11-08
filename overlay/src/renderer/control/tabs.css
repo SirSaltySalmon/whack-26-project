@@ -1,0 +1,165 @@
+/* Keys, Voices and Console tabs. Memory is in memory.css, shared pieces in form.css. */
+
+/* Keys */
+.cc-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.cc-key {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) auto minmax(260px, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cc-key-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cc-key-title code {
+  color: var(--text-muted);
+}
+
+.cc-key-form {
+  display: flex;
+  gap: 6px;
+}
+
+/* Voices */
+.voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.voice-row-on {
+  border-color: var(--accent);
+  background: rgba(110, 231, 183, 0.06);
+}
+
+.voice-row input {
+  accent-color: var(--accent);
+}
+
+.voice-name {
+  min-width: 120px;
+  font-weight: 600;
+}
+
+.voice-row .cc-pill,
+.voice-row .cc-button {
+  margin-left: auto;
+}
+
+.voice-add,
+.voice-preview {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.chip button {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chip-input {
+  flex: 1;
+  min-width: 140px;
+  border: 0;
+  background: none;
+  outline: none;
+}
+
+/* Console */
+.console-page {
+  height: 100%;
+  max-width: none;
+}
+
+.console-toolbar,
+.console-type {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.console-follow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.console-log {
+  flex: 1;
+  min-height: 200px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #090b10;
+  font:
+    12px/1.55 "Cascadia Mono",
+    Consolas,
+    monospace;
+}
+
+.console-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #c5cad6;
+}
+
+.console-error {
+  color: var(--danger);
+}
+.console-warn {
+  color: var(--warn);
+}
+.console-latency {
+  color: var(--info);
+}
+.console-you {
+  color: var(--accent);
+  font-weight: 600;
+}

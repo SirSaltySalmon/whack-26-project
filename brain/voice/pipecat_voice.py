@@ -20,8 +20,9 @@ subtitles only.
 
 import logging
 import time
+import uuid
 
-from pipecat.frames.frames import TTSSpeakFrame, TTSUpdateSettingsFrame
+from pipecat.frames.frames import OutputAudioRawFrame, TTSSpeakFrame, TTSUpdateSettingsFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.frame_processor import FrameProcessor
@@ -39,11 +40,11 @@ from brain.events import (
     PlayerStartedSpeaking,
 )
 from brain.server import OverlayLink
-from brain.voice.barks import Bark
+from brain.voice.barks import Bark, split_pcm
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge
 from brain.voice.sentiment import Mood, MoodTracker
-from shared.protocol.messages import AvatarState, BrainMessage
+from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
 log = logging.getLogger(__name__)
 
@@ -132,8 +133,23 @@ class PipecatVoice:
         return True
 
     async def play(self, bark: Bark) -> bool:
-        # Live TTS until WP6 queues the pre-generated audio, so a bark is late rather than lost.
-        return await self.say(bark.text)
+        if self.user_speaking:
+            log.debug("Player is talking; not playing: %s", bark.text)
+            return False
+        if not self._speaks:
+            return await self._subtitles.say(bark.text)
+        log.info("Bark: %s", bark.text)
+        # One chunk, because SpokenOutputTap only sees TTS text and a line this short needs no
+        # word timing. It goes out as the audio is queued, which is within a chunk of it playing.
+        await self.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=bark.text, final=True))
+        # Data frames, so they queue behind any speech already in the TTS service, the output
+        # transport treats them as speech (bot-speaking state), and an interruption drops the rest.
+        frames = [
+            OutputAudioRawFrame(audio=chunk, sample_rate=bark.sample_rate, num_channels=1)
+            for chunk in split_pcm(bark.pcm, bark.sample_rate)
+        ]
+        await self._worker.queue_frames(frames)
+        return True
 
     async def set_voice(self, voice_id: str | None) -> None:
         voice_id = voice_id or self._default_voice

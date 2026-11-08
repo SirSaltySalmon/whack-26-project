@@ -21,7 +21,6 @@ from brain.memory.profile import ProfileStore
 from brain.perception.observer import Observer
 from brain.perception.ocr import OcrWorker
 from brain.perception.reader_engine import ReaderEngine
-from brain.research import WikiResearch
 from brain.server import OverlayLink
 from shared.protocol import BrainMessage
 from shared.protocol.messages import DebugRegion, DebugRegions
@@ -50,7 +49,6 @@ def build_hud(
     link: OverlayLink,
     bus: EventBus,
     observer: Observer | None,
-    research: Callable[[], WikiResearch | None],
     live: bool,
 ) -> Hud:
     game = settings.game_title
@@ -92,8 +90,6 @@ def build_hud(
             database,
             game,
             factory.vision,
-            factory.deep,
-            research,
             buffer,
             link,
             bus,

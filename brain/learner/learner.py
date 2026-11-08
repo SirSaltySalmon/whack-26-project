@@ -16,7 +16,6 @@ from pathlib import Path
 
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
-from brain.learner.brief import write_brief
 from brain.learner.regions import (
     REGION_PROMPT,
     AgreedRegion,
@@ -25,7 +24,7 @@ from brain.learner.regions import (
     build_spec,
 )
 from brain.learner.validate import Sample, propose_color, validate
-from brain.llm.base import LLMUnavailableError, TextLLM, VisionLLM
+from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.memory.db import Database
 from brain.memory.models import GameProfile
 from brain.memory.profile import ProfileStore
@@ -35,7 +34,6 @@ from brain.perception.observer import OverlayScale
 from brain.perception.ocr import OcrWorker
 from brain.perception.profile_schema import LearnedFor, ReaderSpec, Region
 from brain.perception.readers import compile_reader, crop_box, learned_size
-from brain.research import WikiResearch
 from shared.protocol import BrainMessage
 from shared.protocol.messages import MemoryToast
 
@@ -45,7 +43,6 @@ CHECK_EVERY_S = 5.0
 PROPOSAL_MAX_TOKENS = 2000
 FRAME_WAIT_S = 60.0
 MAX_FRAME_AGE_S = 2.0
-BRIEF_WAIT_FOR_WIKI_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -65,8 +62,6 @@ class GameLearner:
         database: Database,
         game: str,
         vision: Callable[[], VisionLLM],
-        deep: Callable[[], TextLLM],
-        research: Callable[[], WikiResearch | None],
         buffer: RingBuffer,
         overlay: OverlayScale,
         bus: EventBus,
@@ -80,8 +75,6 @@ class GameLearner:
         self._database = database
         self._game = game
         self._vision = vision
-        self._deep = deep
-        self._research = research
         self._buffer = buffer
         self._overlay = overlay
         self._bus = bus
@@ -97,15 +90,11 @@ class GameLearner:
     async def run(self) -> None:
         events = self._bus.subscribe()
         await self.seed_if_empty()
-        brief = asyncio.create_task(self._brief_when_ready())
-        try:
-            while True:
-                reason = await self.why_learn(events)
-                if reason:
-                    await self.learn(reason)
-                await asyncio.sleep(CHECK_EVERY_S)
-        finally:
-            brief.cancel()
+        while True:
+            reason = await self.why_learn(events)
+            if reason:
+                await self.learn(reason)
+            await asyncio.sleep(CHECK_EVERY_S)
 
     async def _profile(self) -> GameProfile:
         return await self._database.run(lambda conn: ProfileStore(conn).get(self._game))
@@ -266,26 +255,3 @@ class GameLearner:
         listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
         verb = "is" if len(names) == 1 else "are"
         await self._send(MemoryToast(text=f"Learned where your {listed} {verb}", source="observed"))
-
-    async def _brief_when_ready(self) -> None:
-        try:
-            if (await self._profile()).brief:
-                return
-            waited = 0.0
-            while self._research() is None and waited < BRIEF_WAIT_FOR_WIKI_S:
-                await asyncio.sleep(1.0)
-                waited += 1.0
-            research = self._research()
-            card = await research.lookup(self._game) if research else None
-            if card is None:
-                log.info("No game brief: no wiki page for %s", self._game)
-                return
-            brief = await write_brief(self._deep(), self._game, card.context_text())
-            if brief:
-                await self._database.run(
-                    lambda conn: ProfileStore(conn).set_brief(self._game, brief)
-                )
-                log.info("Wrote the game brief")
-        except Exception:
-            # The brief is a nicety; the partner works without it.
-            log.exception("Couldn't write the game brief")

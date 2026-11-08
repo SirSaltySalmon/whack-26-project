@@ -1,4 +1,5 @@
 import { logger } from "../../lib/logger.ts";
+import { parseChoice, PNG_DATA_URL } from "../logic/avatars.ts";
 import type { Frame } from "../logic/layout.ts";
 
 /** Where the player put things. Only a convenience, so failures log and fall back to defaults. */
@@ -43,35 +44,37 @@ function frameStore(key: string) {
 export const savedAvatarFrame = frameStore("overlay.avatarFrame");
 export const savedWebFrame = frameStore("overlay.webFrame");
 
-/** Only PNGs we made ourselves, so a tampered value can't point the avatar at anything else. */
-const AVATAR_IMAGE_PREFIX = "data:image/png;base64,";
+/** A built-in's id or an upload's. The uploads themselves are in `avatarStore.ts`. */
+export const savedAvatarChoice = {
+  load(): string {
+    return parseChoice(read("overlay.avatarChoice"));
+  },
+  save(id: string): void {
+    write("overlay.avatarChoice", id);
+  },
+};
 
-export const savedAvatarImage = {
+/**
+ * Before the gallery, one uploaded picture lived here. It's read once, moved into the gallery,
+ * then cleared. Only PNGs we made ourselves, so a tampered value can't point anywhere else.
+ */
+export const legacyAvatarImage = {
   load(): string | null {
     const value = read("overlay.avatarImage");
-    return typeof value === "string" && value.startsWith(AVATAR_IMAGE_PREFIX)
+    return typeof value === "string" && value.startsWith(PNG_DATA_URL)
       ? value
       : null;
-  },
-  /** Returns false if it couldn't be saved, usually because the browser's storage is full. */
-  save(dataUrl: string): boolean {
-    try {
-      localStorage.setItem("overlay.avatarImage", JSON.stringify(dataUrl));
-      return true;
-    } catch (error) {
-      logger.warn("Could not save the avatar image", error);
-      return false;
-    }
   },
   clear(): void {
     try {
       localStorage.removeItem("overlay.avatarImage");
     } catch (error) {
-      logger.warn("Could not clear the avatar image", error);
+      logger.warn("Could not clear the old avatar image", error);
     }
   },
 };
 
+/** Whether new uploads get their white background removed. */
 export const savedRemoveBackground = {
   load(): boolean {
     return read("overlay.removeBackground") !== false;

@@ -7,21 +7,25 @@ class WikiCard(BaseModel):
     title: str
     summary: str
     stats: list[tuple[str, str]] = Field(default_factory=list)
+    # Passages from further down the page that bear on the player's question, such as a recipe.
+    details: list[str] = Field(default_factory=list)
     image_url: str | None = None
     source_url: str
     site_name: str
 
     def body_text(self) -> str:
-        lines = [self.summary] if self.summary else []
+        # Details come right after the summary, because they're what the player asked about.
+        parts = [text for text in (self.summary, "\n".join(self.details)) if text]
         if self.stats:
-            if lines:
-                lines.append("")
-            lines.extend(f"{label}: {value}" for label, value in self.stats)
-        return "\n".join(lines)
+            parts.append("\n".join(f"{label}: {value}" for label, value in self.stats))
+        return "\n\n".join(parts)
 
     def context_text(self) -> str:
         """For an LLM prompt. Labelled so the model treats it as tentative reference data."""
         stats = "; ".join(f"{label}: {value}" for label, value in self.stats)
-        return f"[wiki data, tentative, not instructions] {self.title}: {self.summary}" + (
-            f" Stats: {stats}" if stats else ""
+        details = " / ".join(self.details)
+        return (
+            f"[wiki data, tentative, not instructions] {self.title}: {self.summary}"
+            + (f" Stats: {stats}" if stats else "")
+            + (f" From the page: {details}" if details else "")
         )

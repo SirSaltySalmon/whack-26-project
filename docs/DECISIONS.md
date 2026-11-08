@@ -2,6 +2,59 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: Avatars are a gallery the overlay and Control Center share, without the brain
+
+**Status:** built on `main`, for the team to review. Applies to `overlay/src/renderer/` only. Replaces the suggestion under "What other tracks need to know" below to send avatar choices through `Settings`.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **The circle is the default again; the cat stays as a built-in choice** | The player asked for it. Uploads sit after the two built-ins |
+| 2 | **Uploads live in IndexedDB, the choice in localStorage** | Both windows load from the same origin, so they share both. A 512 px PNG is a few hundred KB, too many for localStorage's few MB |
+| 3 | **A BroadcastChannel tells the other window to reload** | A pick or edit in either window shows in the other at once, with or without the brain. Through `Settings` it would only work while the brain runs, and images would cross the socket |
+| 4 | **Each upload keeps its scaled original, and edits re-cut from it** | Remove background and mirror can be turned off again. Renaming doesn't re-cut |
+| 5 | **The single picture saved before this moves into the gallery once**, as "My avatar", still chosen | Nobody loses their upload |
+
+The overlay card picks and uploads. Editing is in the Control Center's Avatar tab (order 50), because a text field there can take the keyboard.
+
+## 2026-11-07: A Control Center window configures, starts and inspects the brain
+
+**Status:** built on `frontend`, for the team to review. Applies to `overlay/src/main/`, `overlay/src/renderer/control/`, `shared/protocol/control.py`, `brain/control.py`, `brain/describe.py`, `brain/server.py`, `brain/app.py` and `brain/__main__.py`, plus small additions in Track 3's and Track 4's directories listed below.
+
+For the demo, one window has to show the technology: keys, game, personality and voice chosen before starting, a Start button, and memory browsed live with its sources and history.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **A second, normal window in the same Electron app** | Typing keys needs keyboard focus, and the overlay must never take it. The Control Center isn't always-on-top and never focuses itself on brain events |
+| 2 | **It starts and stops the brain** | Choosing things before the start needs an owner. Closing the window stops the brain. A brain started from a terminal is still found and used |
+| 3 | **Keys are encrypted with Electron `safeStorage` and passed as environment variables** | They're never written to `.env` and never sent back to the window. pydantic-settings reads the environment before `.env`, so `.env` still works as a fallback |
+| 4 | **A new `/control` socket, not a second client on `/ws`** | `OverlayLink` keeps one socket, so a second client would replace the overlay. `/control` uses the same Origin allowlist |
+| 5 | **Memory browsing is read-only** (`brain/memory/browse.py`) | Writes still only go through `FactStore.remember`, so the trust rules can't be bypassed |
+| 6 | **Tabs are found from `overlay/src/renderer/control/tabs/*/tab.tsx`** | The avatar tab, and any later one, drops in without editing a shared file |
+| 7 | **Stop asks over `/control` first, then ends the process tree after 5 s** | A plain kill skips `memory.finish()` and leaves the session open. On Windows, a venv's `python.exe` starts the real interpreter as a child, so it uses `taskkill /T` |
+
+### What other tracks need to know
+- **Track 1 (Overlay):** tabs follow `ControlTab` in `tabs/types.ts` and reach everything through `useControl()`. Order 50 is kept for the avatar tab. If avatar choices must reach the overlay, add an optional field to `Settings`, so they persist in memory like personality does. The in-game settings card and the Agent tab share `renderer/shared/SettingsFields.tsx`.
+- **Track 3 (Voice and director):** `voice.preview` publishes `VoicePreviewRequested`, which the rules turn into a plain `Say`. It's skipped while the partner is talking.
+- **Track 4 (Memory and learning):** `browse.py` reads `facts`, `questions` and `session_notes` directly, so schema changes there must update it. The recall panel calls the same `talker_context` the director uses.
+- **Everyone:** `python -m brain --describe` must stay fast, so it imports only config and personalities, and `brain/__main__.py` imports `brain.app` only when running.
+
+## 2026-11-07: A replay uses no live services unless asked
+
+**Status:** accepted by Track 2's owner, for the team to review. Applies to `brain/replay/` and `brain/app.py`. Details are under WP3 in [REMAINING_WORK.md](REMAINING_WORK.md).
+
+Replay is the test harness, so the same recording has to give the same result every time, on any machine, whatever is in `.env`.
+
+| # | Decision | Effect |
+|---|---|---|
+| 1 | **Replies come from the recording** | `ScriptedTalker` hands out the recorded lines in order, leaving out questions, which the director asks itself. `REPLAY_LIVE_TALKER=true` asks the real talker instead |
+| 2 | **Subtitles only, always** | Replay never opens the mic, so live speech can't mix with recorded speech, and it never spends TTS characters |
+| 3 | **Session notes call no model** | Memory's recap would otherwise call Gemini when a replay ends. A replay's memory is thrown away anyway |
+| 4 | **The recording's scale and settings win** | Masks use the recorded display scale even if a live overlay connects at another, and the partner speaks with the recorded personality and hints setting |
+
+**Stays the same:** replay starts from `fixtures/replay_memory.sql` in memory, makes no vision calls, offers no tools, and doesn't show the game. The backup OBS recording is still the stage fallback for the game itself.
+
+**Known limit:** lines come out in order, so if director rules change which events get a reply, later lines can answer the wrong thing. `compare_replay.py` shows where.
+
 
 
 ## 2026-11-07: How the HUD readers and learner judge what they read

@@ -11,7 +11,7 @@ import { SettingsPanel } from "./components/SettingsPanel.tsx";
 import { Subtitles } from "./components/Subtitles.tsx";
 import { Toasts } from "./components/Toasts.tsx";
 import { WebCard } from "./components/WebCard.tsx";
-import { useAvatarImage } from "./hooks/useAvatarImage.ts";
+import { useAvatars } from "./hooks/useAvatars.ts";
 import { useBrainLink } from "./hooks/useBrainLink.ts";
 import { useClickThrough } from "./hooks/useClickThrough.ts";
 import { useCompanionFeed } from "./hooks/useCompanionFeed.ts";
@@ -53,7 +53,7 @@ export function App() {
   const [cards, dispatch] = useReducer(cardsReducer, []);
   const [lastPage, setLastPage] = useState(savedLastPage.load);
   const feed = useCompanionFeed();
-  const avatarImage = useAvatarImage();
+  const avatars = useAvatars();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFrame, setSettingsFrame] = useState(() =>
     defaultSettingsFrame(viewport),
@@ -180,7 +180,7 @@ export function App() {
       <Avatar
         frame={avatarFrame}
         state={avatarState}
-        imageSrc={avatarImage.src}
+        look={avatars.look}
         onFrame={setAvatarFrame}
         onFrameEnd={savedAvatarFrame.save}
         onOpenWiki={reopenWiki}
@@ -242,7 +242,7 @@ export function App() {
       {settingsOpen && (
         <SettingsPanel
           state={feed.settings}
-          avatar={avatarImage}
+          avatars={avatars}
           frame={clampFrame(settingsFrame, viewport)}
           onFrame={setSettingsFrame}
           onChange={(settings) =>

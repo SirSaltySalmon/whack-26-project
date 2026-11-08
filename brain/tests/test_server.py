@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import ANY
 
 import pytest
@@ -14,8 +15,8 @@ from brain.events import (
 )
 from brain.server import OverlayLink, create_app
 from brain.tests.fakes import drain
-from shared.protocol import PROTOCOL_VERSION
-from shared.protocol.messages import Settings, VoiceOption
+from shared.protocol import PROTOCOL_VERSION, BrainMessage
+from shared.protocol.messages import AvatarState, Settings, VoiceOption
 
 
 def make() -> tuple[TestClient, OverlayLink, EventBus]:
@@ -127,6 +128,56 @@ def test_settings_state_with_nothing_to_offer_sends_empty_lists() -> None:
         socket.send_text(ready())
         state = socket.receive_json()
     assert state["personalities"] == [] and state["voices"] == []
+
+
+async def test_on_send_sees_messages_with_no_overlay_connected() -> None:
+    _, link, _ = make()
+    seen: list[BrainMessage] = []
+    link.on_send = seen.append
+    await link.send(AvatarState(state="talking"))
+    assert seen == [AvatarState(state="talking")]
+
+
+def test_a_failing_on_send_does_not_stop_the_overlay_getting_the_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, link, _ = make()
+
+    def broken(message: BrainMessage) -> None:
+        raise OSError("disk full")
+
+    link.on_send = broken
+    with client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        assert socket.receive_json()["type"] == "settings.state"
+    assert "on_send hook failed for settings.state" in caplog.text
+
+
+def test_a_pinned_scale_survives_the_overlay_reporting_another(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, link, bus = make()
+    link.display_scale = link.pinned_display_scale = 1.25
+    events = bus.subscribe()
+    with caplog.at_level(logging.WARNING), client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        assert socket.receive_json()["type"] == "settings.state"
+    assert link.display_scale == 1.25
+    assert drain(events) == [OverlayConnected(display_scale=1.5, ts=ANY)]
+    assert "1.5" in caplog.text and "1.25" in caplog.text
+
+
+def test_without_a_pin_the_overlay_sets_the_scale_and_nothing_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, link, bus = make()
+    events = bus.subscribe()
+    with caplog.at_level(logging.WARNING), client.websocket_connect("/ws") as socket:
+        socket.send_text(ready())
+        socket.receive_json()
+    assert link.display_scale == 1.5
+    assert drain(events) == [OverlayConnected(display_scale=1.5, ts=ANY)]
+    assert not [record for record in caplog.records if record.name == "brain.server"]
 
 
 def test_frame_scale_override_wins_over_the_reported_scale() -> None:

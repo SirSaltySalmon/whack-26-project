@@ -68,40 +68,104 @@ export type Name1 = string;
 export type Status = "ok" | "masked" | "unreadable";
 export type Regions = DebugRegion[];
 export type Type11 = "debug.regions";
+export type Control = ControlHello | MemoryQuery | ContextPreview | SettingsUpdate | VoicePreview | ControlShutdown;
+export type ProtocolVersion = number;
+export type Type12 = "control.hello";
+export type IncludeHistory = boolean;
+export type Limit = number;
+export type RequestId1 = string;
+export type Text3 = string;
+export type Type13 = "memory.query";
+export type RequestId2 = string;
+export type Text4 = string;
+export type Type14 = "memory.context_preview";
+export type Type15 = "settings.update";
+export type Text5 = string;
+export type Type16 = "voice.preview";
+export type Type17 = "control.shutdown";
+export type ControlReply = MemoryResults | MemoryContext | BrainStatus | SettingsState | MemoryToast | ControlError;
+export type ElapsedMs = number;
+export type Attribute = string;
+export type Confidence = number;
+export type Id1 = number;
+export type Source1 = "player" | "observed" | "wiki";
+export type Subject = string;
+export type Tentative = boolean;
+export type ValidFrom = number;
+export type ValidTo = number | null;
+export type Value = string;
+export type Facts = FactView[];
+export type Body2 = string;
+export type CreatedAt = number;
+export type Id2 = number;
+export type Kind = "rolling" | "recap";
+export type Notes = NoteView[];
+export type Answer = string | null;
+export type Id3 = number;
+export type Options1 = string[];
+export type Status1 = "open" | "answered" | "dropped";
+export type Text6 = string;
+export type Questions = QuestionView[];
+export type RequestId3 = string;
+export type Type18 = "memory.results";
+export type Context = string;
+export type ElapsedMs1 = number;
+export type RequestId4 = string;
+export type Type19 = "memory.context";
+export type GameTitle = string;
+export type Listening = boolean;
+export type Mode = "live" | "replay";
+export type SessionId = number | null;
+export type Speaking = boolean;
+export type Talking = boolean;
+export type Tools = boolean;
+export type Type20 = "brain.status";
+export type Watching = boolean;
+export type WikiUrl = string | null;
+export type Message = string;
+export type RequestId5 = string | null;
+export type Type21 = "control.error";
+export type GameProcess = string;
+export type GameTitle1 = string;
+export type Personalities1 = string[];
+export type ProtocolVersion1 = number;
+export type Voices1 = VoiceOption[];
 export type Overlay =
   OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent;
 export type DisplayScale = number;
 export type Height1 = number;
-export type ProtocolVersion = number;
-export type Type12 = "overlay.ready";
+export type ProtocolVersion2 = number;
+export type Type22 = "overlay.ready";
 export type Width1 = number;
 export type ElementId = string;
 export type Rects = ElementRect[];
-export type Type13 = "overlay.rects";
+export type Type23 = "overlay.rects";
 export type CardId3 = string;
-export type Type14 = "card.closed";
+export type Type24 = "card.closed";
 export type CardId4 = string;
 export type Title2 = string | null;
-export type Type15 = "card.navigated";
+export type Type25 = "card.navigated";
 export type Url = string;
-export type Answer = string;
+export type Answer1 = string;
 export type QuestionId1 = string;
-export type Type16 = "question.answer";
-export type Type17 = "settings.update";
+export type Type26 = "question.answer";
 export type CardId5 = string;
-export type RequestId1 = string;
-export type Text3 = string;
+export type RequestId6 = string;
+export type Text7 = string;
 export type Title3 = string | null;
 export type Truncated = boolean;
-export type Type18 = "page.content";
+export type Type27 = "page.content";
 export type Url1 = string;
 export type VisibleText = string;
 
 /**
- * Exists only so one JSON Schema document can describe both directions.
+ * Exists only so one JSON Schema document can describe every direction.
  */
 export interface Protocol {
   brain: Brain;
+  control: Control;
+  control_reply: ControlReply;
+  description: BrainDescription;
   overlay: Overlay;
 }
 export interface SubtitleChunk {
@@ -205,11 +269,122 @@ export interface DebugRegion {
   rect: Rect;
   status: Status;
 }
+export interface ControlHello {
+  protocol_version: ProtocolVersion;
+  type?: Type12;
+}
+/**
+ * Empty text lists the newest facts instead of searching.
+ */
+export interface MemoryQuery {
+  include_history?: IncludeHistory;
+  limit?: Limit;
+  request_id: RequestId1;
+  text?: Text3;
+  type?: Type13;
+}
+/**
+ * Asks for the exact context the talker would get for this query.
+ */
+export interface ContextPreview {
+  request_id: RequestId2;
+  text: Text4;
+  type?: Type14;
+}
+export interface SettingsUpdate {
+  settings: Settings;
+  type?: Type15;
+}
+/**
+ * Speak this sample line in the current voice, if the partner isn't already talking.
+ */
+export interface VoicePreview {
+  text: Text5;
+  type?: Type16;
+}
+/**
+ * Stop the brain cleanly, so the session is closed and its note written.
+ */
+export interface ControlShutdown {
+  type?: Type17;
+}
+export interface MemoryResults {
+  elapsed_ms: ElapsedMs;
+  facts: Facts;
+  notes: Notes;
+  questions: Questions;
+  request_id: RequestId3;
+  type?: Type18;
+}
+export interface FactView {
+  attribute: Attribute;
+  confidence: Confidence;
+  id: Id1;
+  source: Source1;
+  subject: Subject;
+  tentative: Tentative;
+  valid_from: ValidFrom;
+  valid_to?: ValidTo;
+  value: Value;
+}
+export interface NoteView {
+  body: Body2;
+  created_at: CreatedAt;
+  id: Id2;
+  kind: Kind;
+}
+export interface QuestionView {
+  answer?: Answer;
+  id: Id3;
+  options?: Options1;
+  status: Status1;
+  text: Text6;
+}
+export interface MemoryContext {
+  context: Context;
+  elapsed_ms: ElapsedMs1;
+  request_id: RequestId4;
+  type?: Type19;
+}
+/**
+ * Which parts of the partner are running, so the Control Center can show what's on.
+ */
+export interface BrainStatus {
+  game_title: GameTitle;
+  listening: Listening;
+  mode: Mode;
+  session_id?: SessionId;
+  speaking: Speaking;
+  talking: Talking;
+  tools: Tools;
+  type?: Type20;
+  watching: Watching;
+  wiki_url?: WikiUrl;
+}
+export interface ControlError {
+  message: Message;
+  request_id?: RequestId5;
+  type?: Type21;
+}
+/**
+ * Printed by `python -m brain --describe`, before anything starts. Never holds key values.
+ */
+export interface BrainDescription {
+  game_process: GameProcess;
+  game_title: GameTitle1;
+  keys_set: KeysSet;
+  personalities: Personalities1;
+  protocol_version: ProtocolVersion1;
+  voices: Voices1;
+}
+export interface KeysSet {
+  [k: string]: boolean;
+}
 export interface OverlayReady {
   display_scale: DisplayScale;
   height: Height1;
-  protocol_version: ProtocolVersion;
-  type?: Type12;
+  protocol_version: ProtocolVersion2;
+  type?: Type22;
   width: Width1;
 }
 /**
@@ -217,7 +392,7 @@ export interface OverlayReady {
  */
 export interface OverlayRects {
   rects: Rects;
-  type?: Type13;
+  type?: Type23;
 }
 export interface ElementRect {
   element_id: ElementId;
@@ -225,7 +400,7 @@ export interface ElementRect {
 }
 export interface CardClosed {
   card_id: CardId3;
-  type?: Type14;
+  type?: Type24;
 }
 /**
  * The wiki window's page changed. The URL and title come from a website: treat them as data.
@@ -233,17 +408,13 @@ export interface CardClosed {
 export interface CardNavigated {
   card_id: CardId4;
   title?: Title2;
-  type?: Type15;
+  type?: Type25;
   url: Url;
 }
 export interface QuestionAnswer {
-  answer: Answer;
+  answer: Answer1;
   question_id: QuestionId1;
-  type?: Type16;
-}
-export interface SettingsUpdate {
-  settings: Settings;
-  type?: Type17;
+  type?: Type26;
 }
 /**
  * The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
@@ -251,11 +422,11 @@ export interface SettingsUpdate {
  */
 export interface PageContent {
   card_id: CardId5;
-  request_id: RequestId1;
-  text: Text3;
+  request_id: RequestId6;
+  text: Text7;
   title?: Title3;
   truncated?: Truncated;
-  type?: Type18;
+  type?: Type27;
   url: Url1;
   visible_text: VisibleText;
 }

@@ -15,7 +15,7 @@ Two processes joined by a localhost WebSocket:
 | Capture | dxcam (`ra1nty/DXcam`), mss as fallback |
 | Perception | OpenCV, numpy, imagehash, RapidOCR |
 | Voice | Pipecat with `DeepgramFluxSTTService`; ElevenLabs TTS |
-| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, deep reasoning). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it |
+| LLMs | Gemini free tier: Flash-Lite (talker and player turns with tools), Flash (pointing, progress scout). Claude Haiku 5.5 (paid): screen reports, and `look_closer` because the player waits on it. Claude Sonnet 5.5 (paid, medium effort): deep reasoning (`think_hard`, session notes), with Gemini Flash as the fallback without `ANTHROPIC_API_KEY` |
 | Memory | SQLite (WAL, JSON1, FTS5); sqlite-vec and fastembed once FTS5 works |
 | Research | MediaWiki API on the game's wiki; Exa as fallback |
 
@@ -88,6 +88,7 @@ Four people own one track each. Stay inside your track; say so before editing an
 | 4. Memory and learning | `brain/memory/`, `brain/learner/`, `brain/research/` |
 
 - **Shared:** `shared/protocol/`, `brain/llm/` (the only place that calls LLM providers), `brain/agent/` (player-turn tools), `brain/config.py`, `brain/events.py`.
+- **Control Center tabs:** one folder per tab under `overlay/src/renderer/control/tabs/`, found automatically. See `tabs/types.ts`; adding a tab edits no shared file.
 - **The protocol is the contract between tracks.** Pydantic models in `shared/protocol/` are the source of truth, and TypeScript types are generated from them. Never hand-edit the generated types. After hour 1, changes are additive only, and breaking changes need agreement from all tracks.
 - Every vendor sits behind one interface, so a swap is a one-line config change.
 
@@ -96,18 +97,22 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-python -m brain --live                     # run against the live game
+python -m brain --live                     # run against the live game; asks which window if GAME_PROCESS is unset
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --debug-regions     # also draw the learned HUD regions over the game
+python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
 python -m brain --replay <session-dir>     # run from a recorded session
+python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
+python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
+python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
 python scripts/export_profile.py          # save the learned HUD as a fixture for PROFILE_FIXTURE
 python scripts/save_screenshots.py        # save test screenshots of the game
 ruff check --fix brain; ruff format brain
 npm --prefix overlay install
-npm --prefix overlay run dev
+npm --prefix overlay run dev              # overlay plus the Control Center, which can start the brain
 npm --prefix overlay run typecheck
 npm --prefix overlay test
 npm --prefix overlay run format
@@ -116,7 +121,7 @@ python scripts/overlay_demo.py             # drives the overlay with no game, mi
 ```
 
 ## Testing
-What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are in `brain/tests/fakes.py`, so use those rather than writing new ones. Replay mode is meant to be the main test harness: it records frames, audio and events to disk and feeds them back through the same pipeline. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
+What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are in `brain/tests/fakes.py`, so use those rather than writing new ones. Replay mode is the main test harness: `--record` saves frames, events and sent messages to disk, and `--replay` feeds them back through the same pipeline, answering with the recorded lines in subtitles only. Build test sessions with `brain/tests/replay_rig.py`. Tests must run with no game, no microphone and no paid API calls. Always unit test the director rules, coordinate conversion, overlay masking and fact conflict handling. It's also the fallback if the network or game fails on stage.
 
 ## Coding Standards
 - **Python:** type hints at module boundaries, Pydantic for anything crossing a process boundary, ruff for lint and format.
@@ -129,8 +134,8 @@ What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
-- `GAME_PROCESS`: the game's process name, such as `Terraria`. Live capture stays off without it.
-- `GAME_TITLE`: what memory and the learned profile are filed under, so set it for each game. If it's unset, every game shares `Unknown game`. If it's blank, they share an empty title.
+- `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` lists open app windows in the terminal and the player picks the game; the pick is kept in `data/games.json` and reused when there's no terminal, as when the Control Center starts the brain. Live capture stays off until there's a game.
+- `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 
@@ -166,17 +171,20 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Overlay shows subtitles, memory toasts, questions and settings
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
+- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as an observed `playthrough / progress` fact. The same call drafts questions for the player (where they're up to, plus up to 2 more, such as their goal), queued through the question budget. Check the guesses and questions on real Terraria hotbars
+- [ ] Advice: with hints on, a director rule offers a tip on what to do next every `advice_gap_s` (300 s) in a quiet moment, never in danger; the talker can answer SKIP to stay quiet
+- [ ] Barks (WP6): pre-generated per voice into `data/barks/`, played for mapped events and the looking filler, else the talker. Check event-to-bark under 300 ms and that barge-in stops one
 
 **Done, with no keys or game**
 - [x] Shared contract for the remaining work (WP0)
 - [x] Shared fakes and the test plan's automated tests (WP1). WP8's tests come with WP8
 - [x] Typed turns and the extended overlay demo (WP2)
 - [x] Stage 0, apart from what needs a mouse or a visible window
+- [x] Recorder and replay (WP3). Not yet run on a real recording
 
 **Not started**
-- [ ] Run the learner and readers live (WP4 and WP5 are built and tested on synthetic frames). Scene matching is skipped
-- [ ] Recorder and replay source. `--replay` currently raises `NotImplementedError` (Track 2)
-- [ ] Pre-generated bark audio per personality. Filler lines go through TTS for now (Track 3)
+- [ ] Run the learner and readers live (WP4 and WP5 are built and tested on synthetic frames). Scene matching is skipped. Until a profile is learned, live state comes from the Haiku observer
+- [ ] Game brief: at startup the deep model names the game and writes a 60-word brief into the profile, once per game (`brain/learner/brief.py`). Check it on a few real games
 - [ ] Reading the open wiki page, so the partner can answer from it (Tracks 1, 3 and 4)
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 

@@ -12,6 +12,7 @@ import logging
 import os
 from typing import Any
 
+from brain.capture.apps import AppWindow, unique_apps
 from brain.perception.coords import CropRegion
 
 log = logging.getLogger(__name__)
@@ -46,6 +47,19 @@ class MacGameWindow:
             log.info("Game window '%s': %s", self._process_name, state)
             self._last_state = state
         return region
+
+    def app_windows(self) -> list[AppWindow]:
+        """Apps with a normal window on screen, for the player to pick the game from.
+
+        The owner's name is what _names matches. Titles need Screen Recording permission, so
+        they can be empty.
+        """
+        found: list[AppWindow] = []
+        for window in self._on_screen_windows():
+            if self._is_normal(window):
+                owner = str(window.get("kCGWindowOwnerName") or "")
+                found.append(AppWindow(owner, owner, str(window.get("kCGWindowName") or "")))
+        return unique_apps(found)
 
     def _check(self) -> tuple[str, CropRegion | None]:
         if not self._process_name:

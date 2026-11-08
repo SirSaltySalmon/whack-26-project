@@ -1,25 +1,40 @@
 """Entry point: `python -m brain --live` or `python -m brain --replay <session-dir>`.
 
 Add `--type` to take player turns typed on stdin as well, which needs no mic or Deepgram key.
+Add `--record` to a live run to save a session for replay. It stores screen data, so it's never on
+by default. `--describe` prints what the Control Center can offer, as JSON, and exits.
 """
 
 import argparse
 import asyncio
 import logging
+import sys
 from pathlib import Path
+from typing import Any
 
-from brain.app import run
 from brain.config import Settings
 from brain.logging_setup import configure_logging
 
 log = logging.getLogger(__name__)
 
 
-def main() -> None:
+async def run(settings: Settings, **options: Any) -> None:
+    """Imports the brain on first use: it takes seconds, and --describe must answer in one."""
+    from brain.app import run as run_brain
+
+    await run_brain(settings, **options)
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="brain")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--live", action="store_true", help="capture the live screen")
     mode.add_argument("--replay", type=Path, metavar="SESSION_DIR", help="feed a recorded session")
+    mode.add_argument(
+        "--describe",
+        action="store_true",
+        help="print personalities, voices and which keys are set, as JSON, then exit",
+    )
     parser.add_argument(
         "--type",
         action="store_true",
@@ -32,16 +47,72 @@ def main() -> None:
         help="draw the learned HUD regions over the game, with what each reader reads",
     )
     parser.add_argument(
+        "--record",
+        action="store_true",
+        help="live only: save frames, events and messages under sessions/ for replay",
+    )
+    parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="replay only: play the session this many times faster",
+    )
+    parser.add_argument(
+        "--exit-when-done",
+        action="store_true",
+        help="replay only: stop once the session has played",
+    )
+    parser.add_argument(
+        "--write-messages",
+        type=Path,
+        metavar="PATH",
+        help="replay only: save every message sent to the overlay, for scripts/compare_replay.py",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="show debug and library log lines"
     )
+    return parser
+
+
+def main() -> None:
+    parser = _parser()
     args = parser.parse_args()
+    if args.describe:
+        from brain.describe import describe
+
+        # Stdout is the interface here: the Control Center reads this one JSON line.
+        sys.stdout.write(describe(Settings()).model_dump_json() + "\n")
+        return
+    if args.record and args.replay:
+        parser.error("--record only works with --live")
+    replay_only = args.speed != 1.0 or args.exit_when_done or args.write_messages
+    if replay_only and not args.replay:
+        parser.error("--speed, --exit-when-done and --write-messages only work with --replay")
+    if args.speed <= 0:
+        parser.error("--speed must be above 0")
 
     configure_logging(args.verbose)
     try:
-        settings = Settings()
+        settings, game_hint = Settings(), ""
+        if args.live:
+            from brain.game_setup import pick_game
+
+            # Before the event loop, because it can wait on the terminal.
+            settings, game_hint = pick_game(settings)
         if args.debug_regions:
             settings = settings.model_copy(update={"debug_regions": True})
-        asyncio.run(run(settings, replay_dir=args.replay, typed=args.typed))
+        asyncio.run(
+            run(
+                settings,
+                replay_dir=args.replay,
+                typed=args.typed,
+                record=args.record,
+                speed=args.speed,
+                exit_when_done=args.exit_when_done,
+                write_messages=args.write_messages,
+                game_hint=game_hint,
+            )
+        )
     except KeyboardInterrupt:
         log.info("Stopped by user")
 

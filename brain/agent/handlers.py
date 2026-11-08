@@ -120,8 +120,9 @@ class AgentTools:
                 ),
                 Tool(
                     "lookup_wiki",
-                    "Look something up on this game's wiki and show it to the player. Use for "
-                    "game knowledge you aren't sure of, or when asked to open the wiki.",
+                    "Look something up on this game's wiki and show it to the player. Use for any "
+                    "specific game fact instead of answering from memory, or when asked to open "
+                    "the wiki or a page.",
                     WikiInput,
                     self._lookup_wiki,
                 ),
@@ -229,7 +230,7 @@ class AgentTools:
         research = self.research
         if research is None:
             return "You don't have a wiki for this game, so say you can't look it up."
-        card = await research.lookup(arguments.topic)
+        card = await research.lookup(arguments.topic, arguments.question)
         if card is None:
             return "The wiki had nothing on that."
         # The URL comes from the wiki client, so the model can't send the window anywhere else.

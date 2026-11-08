@@ -3,6 +3,7 @@ import { logger } from "../../lib/logger.ts";
 import type { State } from "../../lib/protocol.generated.ts";
 import { useFrameGesture } from "../hooks/useFrameGesture.ts";
 import { useHovered } from "../hooks/useHovered.ts";
+import type { AvatarLook } from "../logic/avatars.ts";
 import {
   AVATAR_LIMITS,
   moveFrame,
@@ -11,14 +12,16 @@ import {
 } from "../logic/layout.ts";
 
 /**
- * The picture, fitted inside the 3:4 frame with its transparent parts showing the game. If the
- * picture can't load, the plain circle stands in so the partner never disappears.
+ * The plain circle, or a picture fitted inside the 3:4 frame with its transparent parts showing
+ * the game. If a picture can't load, the circle stands in so the partner never disappears.
  */
-function AvatarArt({ state, src }: { state: State; src: string }) {
+function AvatarArt({ state, look }: { state: State; look: AvatarLook }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  if (failedSrc === src) {
+  if (look.kind === "loading") return null;
+  if (look.kind === "circle" || failedSrc === look.src) {
     return <div className="avatar-art" data-state={state} />;
   }
+  const src = look.src;
   return (
     <img
       className="avatar-image"
@@ -37,7 +40,7 @@ function AvatarArt({ state, src }: { state: State; src: string }) {
 interface AvatarProps {
   frame: Frame;
   state: State;
-  imageSrc: string;
+  look: AvatarLook;
   onFrame(frame: Frame): void;
   onFrameEnd(frame: Frame): void;
   /** Reopens the wiki window. Null when there's nothing to reopen. */
@@ -52,7 +55,7 @@ interface AvatarProps {
 export function Avatar({
   frame,
   state,
-  imageSrc,
+  look,
   onFrame,
   onFrameEnd,
   onOpenWiki,
@@ -85,7 +88,7 @@ export function Avatar({
         height: frame.height,
       }}
     >
-      <AvatarArt state={state} src={imageSrc} />
+      <AvatarArt state={state} look={look} />
       <div className="avatar-controls">
         <div
           className="avatar-grip"

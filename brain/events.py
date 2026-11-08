@@ -113,6 +113,13 @@ class SettingsChanged(Event):
 
 
 @dataclass(frozen=True)
+class VoicePreviewRequested(Event):
+    """The player asked to hear the current voice from the Control Center."""
+
+    text: str
+
+
+@dataclass(frozen=True)
 class Tick(Event):
     """Time passing. Lets the director's pure rules decide things no other event would prompt."""
 
