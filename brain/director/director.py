@@ -228,7 +228,7 @@ class Director:
         instructions = self._custom_instructions().strip()
         if instructions:
             tone += f"\nPlayer custom instructions (keep truth and trust rules): {instructions}"
-        return Persona(name, tone, self._max_words, self._proactive())
+        return Persona(name, tone, self._max_words, self._proactive(), self._state.in_danger)
 
     async def _play_bark(self, action: PlayBark) -> None:
         bark = self._lines.bark(action.kind)

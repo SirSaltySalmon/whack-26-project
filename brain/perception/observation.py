@@ -34,7 +34,9 @@ loading, cutscene, death (a game over or respawn screen), other.
 - health_visible: whether the player's own health display is on screen. Coins, scores, ammo and \
 enemy health aren't player health.
 - health_raw: exactly what that display shows, such as "72/100" or "5 hearts". Copy any numbers.
-- health_percent: 0-100, how full it is. null if no health display is visible.
+- health_percent: 0-100, how full it is. null if no health display is visible. For a row of \
+icons such as hearts, count only bright, filled ones: a dark, hollow or faded icon is empty even \
+when it keeps its outline and colour, and a shrunken one is partly empty.
 - danger_level: how much trouble the player is in right now.
   none: nothing hostile is visible.
   low: a hostile is visible but not engaged, or an environmental hazard is nearby.

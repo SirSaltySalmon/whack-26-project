@@ -89,7 +89,7 @@ class PipecatVoice:
         voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
         speaks = settings.elevenlabs_api_key is not None and bool(voice_id)
         self._speaks = speaks
-        self._style: str = link.settings.voice_style
+        self._style: tuple[str, bool] = (link.settings.voice_style, False)  # Style, urgent
         # Subscribed now, so a style the Control Center sends on connect isn't missed.
         self._settings_events = bus.subscribe()
         transport = local_audio(settings, speaks)
@@ -151,14 +151,14 @@ class PipecatVoice:
             delta = ElevenLabsTTSService.Settings(voice=voice_id)
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
-    async def set_style(self, style: str) -> None:
+    async def set_style(self, style: str, urgent: bool = False) -> None:
         """Applies from the next line spoken: Pipecat opens a new audio context with them."""
-        if style == self._style:
+        if (style, urgent) == self._style:
             return
-        self._style = style
-        log.info("Voice style: %s", style)
+        self._style = (style, urgent)
+        log.info("Voice style: %s%s", style, ", faster for danger" if urgent else "")
         if self._speaks:
-            delta = ElevenLabsTTSService.Settings(**style_values(style))
+            delta = ElevenLabsTTSService.Settings(**style_values(style, urgent))
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
     async def interrupt(self) -> None:
@@ -171,7 +171,7 @@ class PipecatVoice:
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C
         await runner.add_workers(self._worker)
-        follow = follow_settings(self._settings_events, self)
+        follow = follow_settings(self._settings_events, self, self._style[0])
         settings = asyncio.create_task(follow, name="Voice settings")
         try:
             await runner.run()

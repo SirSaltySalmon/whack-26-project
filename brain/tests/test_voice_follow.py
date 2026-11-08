@@ -3,7 +3,7 @@
 import asyncio
 import contextlib
 
-from brain.events import Event, PlayerSpeech, SettingsChanged
+from brain.events import Event, GameEvent, PlayerSpeech, SettingsChanged
 from brain.tests.director_rig import settle
 from brain.voice.follow import follow_settings, silenced
 from shared.protocol.messages import Settings
@@ -12,10 +12,12 @@ from shared.protocol.messages import Settings
 class Recorder:
     def __init__(self) -> None:
         self.styles: list[str] = []
+        self.urgent: list[bool] = []
         self.interruptions = 0
 
-    async def set_style(self, style: str) -> None:
+    async def set_style(self, style: str, urgent: bool = False) -> None:
         self.styles.append(style)
+        self.urgent.append(urgent)
 
     async def interrupt(self) -> None:
         self.interruptions += 1
@@ -60,3 +62,23 @@ async def test_style_still_follows_the_settings() -> None:
     voice = await run([SettingsChanged(settings=Settings(voice_style="classic"))])
     assert voice.styles == ["classic"]
     assert voice.interruptions == 0
+
+
+async def test_danger_speeds_the_voice_up_until_it_ends() -> None:
+    voice = await run(
+        [
+            SettingsChanged(settings=Settings(voice_style="classic")),
+            GameEvent(name="danger_started"),
+            GameEvent(name="item_found"),  # Not about danger, so nothing changes
+            GameEvent(name="danger_ended"),
+        ]
+    )
+    assert voice.urgent == [False, True, False]
+    assert voice.styles == ["classic"] * 3
+
+
+async def test_turning_vision_off_ends_the_hurry() -> None:
+    voice = await run(
+        [GameEvent(name="danger_high"), SettingsChanged(settings=Settings(vision_enabled=False))]
+    )
+    assert voice.urgent == [True, False]

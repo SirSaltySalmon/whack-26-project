@@ -22,7 +22,7 @@
         "hsv_low": [
           166,
           110,
-          65
+          127
         ],
         "hsv_high": [
           6,
@@ -31,7 +31,7 @@
         ],
         "axis": "x",
         "reverse": false,
-        "full_at": 0.308
+        "full_at": 0.242
       },
       "ocr": null,
       "rules": [

@@ -9,7 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from brain.agent.tools import ToolRegistry, TurnContext
-from brain.director.talker import build_system, cap_words, drop_narration
+from brain.director.talker import build_system, cap_words, drop_narration, word_cap
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, ToolLLM
 
 log = logging.getLogger(__name__)
@@ -73,13 +73,15 @@ async def run_turn(
     after_tools_line: str,
     hints: bool = True,
     max_rounds: int = MAX_TOOL_ROUNDS,
+    urgent: bool = False,
 ) -> str | None:
     """Returns what to say, or None for nothing. Raises if the very first model call fails.
 
     Once a tool has run, the player may already be looking at its result, so a failed or wordless
     follow-up returns after_tools_line rather than claiming the partner couldn't help.
     """
-    base = build_system(personality, tone, max_words, context, hints)
+    base = build_system(personality, tone, max_words, context, hints, urgent)
+    max_words = word_cap(max_words, urgent)
     system = f"{base}\n\n{_TOOL_GUIDANCE}"
     chat = llm.tool_chat(system, registry.declarations(), MAX_TOKENS)
     step = await chat.send(transcript)

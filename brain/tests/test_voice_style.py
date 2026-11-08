@@ -1,4 +1,4 @@
-from brain.voice.style import DEFAULT_STYLE, VOICE_STYLES, style_values
+from brain.voice.style import DEFAULT_STYLE, MAX_SPEED, VOICE_STYLES, style_values
 from shared.protocol.messages import Settings
 
 
@@ -21,3 +21,10 @@ def test_expressive_varies_more_than_classic() -> None:
 
 def test_an_unknown_style_falls_back_to_the_default() -> None:
     assert style_values("loud") == style_values(None) == VOICE_STYLES[DEFAULT_STYLE]
+
+
+def test_danger_speeds_up_every_style_without_passing_the_limit() -> None:
+    for style in VOICE_STYLES:
+        calm, urgent = style_values(style), style_values(style, urgent=True)
+        assert calm["speed"] < urgent["speed"] <= MAX_SPEED
+        assert {**urgent, "speed": calm["speed"]} == calm

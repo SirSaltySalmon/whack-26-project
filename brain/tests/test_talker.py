@@ -186,3 +186,33 @@ def test_narration_about_the_player_is_never_spoken() -> None:
 async def test_a_reply_that_is_only_narration_stays_quiet() -> None:
     llm = FakeLLM(["The player seems to be exploring."])
     assert await reply(llm, "hi", "supportive", 12) is None
+
+
+def test_in_danger_the_prompt_asks_for_callouts() -> None:
+    calm = build_system("supportive", "", 100, "")
+    urgent = build_system("supportive", "", 100, "", urgent=True)
+    assert "mid-fight" not in calm
+    assert "mid-fight" in urgent and "about 6 words" in urgent and "under 25 words" in urgent
+
+
+async def test_in_danger_even_a_requested_explanation_is_cut_short() -> None:
+    llm = FakeLLM([" ".join(["word"] * 60)])
+    text = await reply(llm, "explain", "supportive", max_words=100, urgent=True)
+    assert text is not None and len(text.split()) == 25
+
+
+async def test_the_director_hurries_only_while_the_player_is_in_danger() -> None:
+    systems: list[str] = []
+
+    class Recording(FakeLLM):
+        async def stream_text(
+            self, system: str, prompt: str, max_tokens: int
+        ) -> AsyncIterator[str]:
+            systems.append(system)
+            yield "Behind you!"
+
+    director = Director(EventBus(), FakeVoice(), proactive=lambda: True, talker=Recording([]))
+    await director._perform(ReactToEvent("item_found", {}))
+    director._state.in_danger = True
+    await director._perform(ReactToEvent("danger_started", {}))
+    assert "mid-fight" not in systems[0] and "mid-fight" in systems[1]

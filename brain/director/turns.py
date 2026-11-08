@@ -34,6 +34,8 @@ class Persona:
     tone: str
     max_words: int
     hints: bool
+    # In danger right now, so replies shrink to callouts.
+    urgent: bool = False
 
 
 async def talker_reply(talker: TextLLM, prompt: str, persona: Persona, context: str) -> str | None:
@@ -46,6 +48,7 @@ async def talker_reply(talker: TextLLM, prompt: str, persona: Persona, context: 
         context,
         persona.tone,
         hints=persona.hints,
+        urgent=persona.urgent,
     )
     return None if not text or is_skip(text) else text
 
@@ -134,6 +137,7 @@ async def player_reply(
             looking,
             done_line,
             hints=persona.hints,
+            urgent=persona.urgent,
         )
     except (LLMUnavailableError, LLMEmptyResponseError) as exc:
         log.warning("Player turn unavailable: %s", exc)
