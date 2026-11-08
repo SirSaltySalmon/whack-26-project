@@ -255,6 +255,9 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
             elif state.paused and not paused:
                 state.ask_on_resume = True
             state.paused = paused
+            if not getattr(event.settings, "vision_enabled", True):
+                # Blind, it can't know a fight is still on, so it stops holding back for one.
+                state.in_danger = False
             return actions
         case VoicePreviewRequested():
             # A plain Say, so it's skipped while the partner is talking and never interrupts.

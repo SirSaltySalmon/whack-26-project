@@ -8,7 +8,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
-from brain.events import EventBus, GameEvent, OverlayConnected
+from brain.events import EventBus, GameEvent, OverlayConnected, SettingsChanged
 from shared.protocol.messages import BrainMessage, DangerState
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,13 @@ async def forward_danger(bus: EventBus, send: Callable[[BrainMessage], Awaitable
         if isinstance(event, OverlayConnected):
             # A reconnecting overlay has forgotten, and would otherwise miss a fight in progress.
             if level != "none":
+                await send(DangerState(level=level))
+            continue
+        if isinstance(event, SettingsChanged):
+            if level != "none" and not getattr(event.settings, "vision_enabled", True):
+                # Blinded, the partner can't see the fight, so it stops showing one.
+                level = "none"
+                log.debug("Danger cleared: vision turned off")
                 await send(DangerState(level=level))
             continue
         if not isinstance(event, GameEvent):

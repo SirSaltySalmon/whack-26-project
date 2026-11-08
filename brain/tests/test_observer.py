@@ -210,3 +210,13 @@ async def test_a_reply_that_lands_after_blinding_is_dropped() -> None:
     await settle(built)
     assert vision.calls == 1
     assert seen == []
+
+
+async def test_blinding_forgets_a_fight_so_danger_ends_with_vision() -> None:
+    built, _, vision_on = blindable(FakeVision(), [])
+    built._apply(report(), 1.0)
+    built._apply(report(), 1.8)
+    assert built._tracker.danger is not None
+    vision_on[0] = False
+    built._tick(time.monotonic())
+    assert built._tracker.danger is None

@@ -34,10 +34,6 @@ MAX_FRAME_AGE_S = 2.0
 BLIND_STATE = {"screen": "not watching: the player turned the partner's vision off"}
 
 
-def _always() -> bool:
-    return True
-
-
 class OverlayScale(Protocol):
     @property
     def display_scale(self) -> float: ...
@@ -68,7 +64,7 @@ class Observer:
         *,
         suppressed_events: Callable[[], Collection[str]] = frozenset,
         # The player's vision setting, read live so blinding applies from the next tick.
-        watching: Callable[[], bool] = _always,
+        watching: Callable[[], bool] = lambda: True,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
@@ -90,7 +86,7 @@ class Observer:
         self._unavailable = False
 
     def live_state(self) -> dict[str, str]:
-        if not self._watching():
+        if not self._sees():
             return dict(BLIND_STATE)
         # Focus keeps its own clock, so tests can move it.
         return {**self._tracker.live_state(time.monotonic()), **self.focus.live_state()}
@@ -122,12 +118,18 @@ class Observer:
             for task in self._tasks:
                 task.cancel()
 
-    def _tick(self, now: float) -> None:
+    def _sees(self) -> bool:
+        """The player's vision setting. Going blind forgets what was seen, danger included."""
         watching = self._watching()
         if watching != self._was_watching:
             self._was_watching = watching
             log.info("Vision turned %s by the player", "on" if watching else "off")
-        if not watching:
+            if not watching:
+                self._tracker.forget()
+        return watching
+
+    def _tick(self, now: float) -> None:
+        if not self._sees():
             return
         frame = self._buffer.latest()
         if frame is None or frame.ts == self._last_sent_ts or now - frame.ts > MAX_FRAME_AGE_S:
@@ -170,7 +172,7 @@ class Observer:
             log.info("Observer resumed")
         self._unavailable = False
         log.debug("Observation in %.2f s", time.monotonic() - started)
-        if not self._watching():
+        if not self._sees():
             # Sent before the player blinded the partner. Acting on it now would mean seeing.
             log.debug("Dropping an observation that arrived after vision was turned off")
             return
