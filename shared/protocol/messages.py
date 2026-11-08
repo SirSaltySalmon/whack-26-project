@@ -163,6 +163,27 @@ class DebugRegions(BaseModel):
     regions: list[DebugRegion]
 
 
+class DebugSighting(BaseModel):
+    """Something a model looked at or noticed, drawn over the game while debugging."""
+
+    label: str
+    # Overlay window coordinates, like DebugRegion.rect.
+    rect: Rect
+    # noticed: the observer's report. look, point and look_back: what a player-turn tool used.
+    kind: Literal["noticed", "look", "point", "look_back"]
+    ttl_ms: int = Field(gt=0)
+
+
+class DebugSightings(BaseModel):
+    """Adds sightings to the debug view. Each fades on its own once its ttl_ms runs out.
+
+    Sent only with --debug-regions, so the overlay draws whatever arrives.
+    """
+
+    type: Literal["debug.sightings"] = "debug.sightings"
+    sightings: list[DebugSighting]
+
+
 # --- Overlay to brain ---
 class OverlayReady(BaseModel):
     type: Literal["overlay.ready"] = "overlay.ready"
@@ -238,6 +259,7 @@ BrainMessage = Annotated[
     | SettingsState
     | PageRead
     | DebugRegions
+    | DebugSightings
     | DangerState,
     Field(discriminator="type"),
 ]

@@ -499,6 +499,64 @@
       "title": "DebugRegions",
       "type": "object"
     },
+    "DebugSighting": {
+      "description": "Something a model looked at or noticed, drawn over the game while debugging.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "noticed",
+            "look",
+            "point",
+            "look_back"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "ttl_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Ttl Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "rect",
+        "kind",
+        "ttl_ms"
+      ],
+      "title": "DebugSighting",
+      "type": "object"
+    },
+    "DebugSightings": {
+      "description": "Adds sightings to the debug view. Each fades on its own once its ttl_ms runs out.\n\nSent only with --debug-regions, so the overlay draws whatever arrives.",
+      "properties": {
+        "sightings": {
+          "items": {
+            "$ref": "#/$defs/DebugSighting"
+          },
+          "title": "Sightings",
+          "type": "array"
+        },
+        "type": {
+          "const": "debug.sightings",
+          "default": "debug.sightings",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sightings"
+      ],
+      "title": "DebugSightings",
+      "type": "object"
+    },
     "ElementRect": {
       "properties": {
         "element_id": {
@@ -1310,6 +1368,7 @@
           "card.update": "#/$defs/CardUpdate",
           "danger.state": "#/$defs/DangerState",
           "debug.regions": "#/$defs/DebugRegions",
+          "debug.sightings": "#/$defs/DebugSightings",
           "page.read": "#/$defs/PageRead",
           "pointer.fly": "#/$defs/PointerFly",
           "pointer.hide": "#/$defs/PointerHide",
@@ -1356,6 +1415,9 @@
         },
         {
           "$ref": "#/$defs/DebugRegions"
+        },
+        {
+          "$ref": "#/$defs/DebugSightings"
         },
         {
           "$ref": "#/$defs/DangerState"
