@@ -73,6 +73,7 @@ def build_hud(
         settings.reader_failing_after_s,
         ocr=ocr,
         in_gameplay=in_gameplay,
+        watching=lambda: link.settings.vision_enabled,
     )
     if observer is not None:
         observer.suppressed_events = readers.provides

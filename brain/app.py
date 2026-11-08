@@ -48,7 +48,7 @@ from brain.replay.wiring import (
     replay_talker,
 )
 from brain.research.open_page import OpenPage
-from brain.server import OverlayLink, create_app
+from brain.server import MOMENTARY_SETTINGS, OverlayLink, create_app
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
 from shared.protocol.messages import Settings as OverlaySettings
@@ -107,7 +107,8 @@ async def run(
         semantic=semantic,
     )
     await memory.start()
-    link.settings = await memory.load_settings(OverlaySettings)
+    saved = await memory.load_settings(OverlaySettings)
+    link.settings = saved.model_copy(update=MOMENTARY_SETTINGS)
     if semantic:
         semantic.follow(link.settings)
 

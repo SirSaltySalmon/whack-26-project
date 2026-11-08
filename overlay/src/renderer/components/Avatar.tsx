@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { logger } from "../../lib/logger.ts";
-import type { State } from "../../lib/protocol.generated.ts";
+import type { Settings, State } from "../../lib/protocol.generated.ts";
 import { useFrameGesture } from "../hooks/useFrameGesture.ts";
 import { useHovered } from "../hooks/useHovered.ts";
 import type { AvatarLook } from "../logic/avatars.ts";
@@ -11,6 +11,7 @@ import {
   resizeFrame,
   type Frame,
 } from "../logic/layout.ts";
+import { AvatarToggles } from "./AvatarToggles.tsx";
 
 /**
  * The plain circle, or a picture fitted inside the 3:4 frame with its transparent parts showing
@@ -44,11 +45,12 @@ interface AvatarProps {
   look: AvatarLook;
   onFrame(frame: Frame): void;
   onFrameEnd(frame: Frame): void;
-  /** Reopens the wiki window. Null when there's nothing to reopen. */
-  onOpenWiki: (() => void) | null;
   onOpenSettings(): void;
   /** Opens the chat box. Null while the brain is away: the button stays, disabled, to say why. */
   onOpenChat: (() => void) | null;
+  /** The brain's settings, for pause, mute and blind. Null while the brain is away. */
+  settings: Settings | null;
+  onSettings(settings: Settings): void;
 }
 
 /**
@@ -61,9 +63,10 @@ export function Avatar({
   look,
   onFrame,
   onFrameEnd,
-  onOpenWiki,
   onOpenSettings,
   onOpenChat,
+  settings,
+  onSettings,
 }: AvatarProps) {
   const startMove = useFrameGesture({
     frame,
@@ -85,6 +88,7 @@ export function Avatar({
     <div
       className={`avatar${hovered ? " avatar-hovered" : ""}`}
       data-rect-id="avatar"
+      data-paused={settings?.paused ? "" : undefined}
       // On the frame too, so skins can style the frame around any picture by state.
       data-state={state}
       style={{
@@ -102,17 +106,6 @@ export function Avatar({
           title="Drag to move"
           onPointerDown={startMove}
         />
-        {onOpenWiki && (
-          <button
-            className="avatar-wiki"
-            data-interactive
-            type="button"
-            title="Reopen the wiki"
-            onClick={onOpenWiki}
-          >
-            Wiki
-          </button>
-        )}
         <button
           className="avatar-button avatar-chat"
           data-interactive
@@ -141,6 +134,8 @@ export function Avatar({
           onPointerDown={startResize}
         />
       </div>
+      {/* Outside the hover-only controls, so a pressed one can still show. */}
+      <AvatarToggles settings={settings} onChange={onSettings} />
     </div>
   );
 }
