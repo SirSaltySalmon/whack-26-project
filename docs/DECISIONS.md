@@ -2,6 +2,23 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: Reactions are timed from the frame that showed them
+
+**Status:** built on `main` (WP9), not yet run live. Applies to `brain/latency.py`, `brain/events.py`, `brain/perception/tracker.py`, `brain/perception/observer.py`, `brain/director/` and `brain/voice/`.
+
+The prompt judges how fast the partner reacts to what happens on screen. `Latency: event to bark` started when the event was published, seconds after the frame for the observer, so it hid the slowest part.
+
+- **`GameEvent.frame_ts`** is when the frame that first showed the event was captured. The tracker uses the first frame of the agreeing run, not the confirming one, because that's when it was first visible.
+- **Reactions carry an `Origin`** (event, source, frame time, publish time) on `PlayBark` and `ReactToEvent`, with `compare=False`, so the rules' decisions and tests don't change.
+- **Two log lines, split into noticed and spoke:** `frame to bark` when a bark's audio is queued, and `frame to first audio` when the voice really starts playing, for barks and talker lines alike. The old `event to bark` line stays, so earlier numbers can still be compared. `scripts/latency_report.py` and the Control Center's Latency tab parse these formats, so change all three together.
+- **No number rather than a wrong one:** a line queued behind speech already playing isn't timed, because a later start could be credited to it. The player's next turn drops a pending timing, and audio starting more than 10 s after queuing isn't credited.
+- **Replays don't record `frame_ts`:** monotonic times mean nothing in another process.
+
+### What other tracks need to know
+
+- `Voice.say` and `Voice.play` take a keyword `origin: Origin | None = None`. Any new voice or fake must accept it.
+- After the WP4 merge, the reader engine should publish with `frame_ts` set to the first of its `confirm_reads` frames. Until then reader events log no frame latency.
+
 ## 2026-11-08: Questions are spoken and settle in the turn, the player wins corrections, and tips can point
 
 **Status:** built on `main`, for the team to review. Applies to `brain/memory/`, `brain/director/`, `brain/agent/`, `brain/learner/`, `brain/voice/`, `overlay/`, and additively to `shared/protocol/`. Replaces part of "Low confidence means talk to the player" (2026-11-07): spoken answers no longer wait for the next session note.

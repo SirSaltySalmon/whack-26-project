@@ -14,6 +14,7 @@ from brain.events import (
     SettingsChanged,
     Tick,
 )
+from brain.latency import Origin
 from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, ToolCall, ToolStep
 from brain.tests.director_rig import DONE, LOOKING, QUIET_S, UNAVAILABLE, Rig, Stuck, settle
 from brain.tests.fakes import FakeMemory, FakeTextLLM, FakeVoice, ScriptedToolLLM
@@ -173,8 +174,8 @@ async def test_a_failed_reaction_doesnt_stop_the_loop(caplog: pytest.LogCaptureF
 class FailingVoice(FakeVoice):
     """Refuses its first line and every voice change, as a lost audio device would."""
 
-    async def say(self, text: str) -> bool:
-        await super().say(text)
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
+        await super().say(text, origin=origin)
         if len(self.said) == 1:
             raise OSError("no audio device")
         return True

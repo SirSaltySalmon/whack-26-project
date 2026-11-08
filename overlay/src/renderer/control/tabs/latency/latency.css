@@ -1,0 +1,123 @@
+/* The Latency tab. Sections, pills and buttons come from form.css. */
+
+/* Amber rather than red: a slow reaction is worth noticing, not an error. */
+.lat-over {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.lat-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: baseline;
+}
+
+.lat-hero-total {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-empty {
+  color: var(--text-muted);
+}
+
+.lat-hero-what {
+  display: flex;
+  flex-direction: column;
+}
+
+.lat-hero-what strong {
+  font-size: 16px;
+}
+
+.lat-split {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-raised);
+}
+
+.lat-split > span {
+  flex-basis: 0;
+}
+
+.lat-split-noticed {
+  background: var(--observed);
+}
+
+.lat-split-spoke {
+  background: var(--accent);
+}
+
+.lat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-legend > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.lat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.lat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.lat-table th {
+  padding: 0 10px 6px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.lat-table td {
+  padding: 6px 10px 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.lat-table .lat-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lat-time,
+.lat-target {
+  color: var(--text-muted);
+}
+
+.lat-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+}
+
+.lat-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.lat-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

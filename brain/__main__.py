@@ -51,11 +51,6 @@ def _parser() -> argparse.ArgumentParser:
         help="also take player turns typed on stdin, such as `5: what's that` to wait 5 s first",
     )
     parser.add_argument(
-        "--debug-regions",
-        action="store_true",
-        help="draw the learned HUD regions over the game, with what each reader reads",
-    )
-    parser.add_argument(
         "--record",
         action="store_true",
         help="live only: save frames, events and messages under sessions/ for replay",
@@ -84,6 +79,11 @@ def _parser() -> argparse.ArgumentParser:
         metavar="PARTS",
         help="turn parts off for this run, comma-separated: "
         + "; ".join(f"{name} ({what})" for name, what in PARTS.items()),
+    )
+    parser.add_argument(
+        "--debug-regions",
+        action="store_true",
+        help="draw the learned HUD regions over the game, with what each reader reads",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="show debug and library log lines"

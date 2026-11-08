@@ -169,7 +169,8 @@ class Observer:
                 log.debug("Left %s to the readers", change.name)
                 continue
             log.info("Confirmed %s: %s", change.name, change.data)
-            self._bus.publish(GameEvent(change.name, change.data))
+            seen = change.since if change.since is not None else frame_ts
+            self._bus.publish(GameEvent(change.name, change.data, frame_ts=seen))
         self._refocus(observation, [change.name for change in changes])
 
     def _refocus(self, observation: Observation, changes: list[str]) -> None:

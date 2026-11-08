@@ -21,6 +21,8 @@ class Change:
 
     name: str
     data: dict[str, Any] = field(default_factory=dict)
+    # The first frame of the agreeing run, the earliest that showed it. Latency counts from here.
+    since: float | None = None
 
 
 def _same_name(first: str, second: str) -> bool:
@@ -50,6 +52,9 @@ class ObservationTracker:
         self._stale_after_s = stale_after_s
 
         self._last_ts: float | None = None
+        self._previous_ts: float | None = None
+        # When each streak began, so a confirmed change can say when it was first seen.
+        self._elevated_since = self._high_since = self._calm_since = self._screen_since = 0.0
         self._previous: Observation | None = None
         self._elevated_streak = 0
         self._high_streak = 0
@@ -76,11 +81,12 @@ class ObservationTracker:
         if self._last_ts is not None and ts - self._last_ts > self._max_gap_s:
             # Frames this far apart, say after an alt-tab, say nothing about each other.
             self._forget_streaks()
+        self._previous_ts = self._last_ts if self._previous is not None else None
         self._last_ts = ts
 
-        changes = self._update_danger(observation)
-        changes += self._update_screen(observation)
-        changes += self._update_health(observation)
+        changes = self._update_danger(observation, ts)
+        changes += self._update_screen(observation, ts)
+        changes += self._update_health(observation, ts)
         self._update_item(observation)
         self._update_description(observation)
         self._previous = observation
@@ -125,14 +131,20 @@ class ObservationTracker:
             if any(_same_name(threat, earlier) for earlier in self._previous.threats)
         ]
 
-    def _update_danger(self, observation: Observation) -> list[Change]:
+    def _update_danger(self, observation: Observation, ts: float) -> list[Change]:
         level = observation.danger_level
         if level in ELEVATED:
+            if self._elevated_streak == 0:
+                self._elevated_since = ts
             self._elevated_streak += 1
             self._calm_streak = 0
         else:
+            if self._calm_streak == 0:
+                self._calm_since = ts
             self._elevated_streak = 0
             self._calm_streak += 1
+        if level == "high" and self._high_streak == 0:
+            self._high_since = ts
         self._high_streak = self._high_streak + 1 if level == "high" else 0
 
         agreed = self._agreed_threats(observation)
@@ -141,28 +153,31 @@ class ObservationTracker:
                 return []
             self._danger = "high" if self._high_streak >= self._confirm else "medium"
             self._threats = agreed
-            return [Change("danger_started", {"level": self._danger, "threats": agreed})]
+            data = {"level": self._danger, "threats": agreed}
+            return [Change("danger_started", data, self._elevated_since)]
 
         if self._calm_streak >= self._clear:
             self._danger = None
             self._threats = []
-            return [Change("danger_ended")]
+            return [Change("danger_ended", since=self._calm_since)]
         if agreed:
             self._threats = agreed
         if self._danger == "medium" and self._high_streak >= self._confirm:
             self._danger = "high"
-            return [Change("danger_high", {"threats": self._threats})]
+            return [Change("danger_high", {"threats": self._threats}, self._high_since)]
         return []
 
-    def _update_screen(self, observation: Observation) -> list[Change]:
+    def _update_screen(self, observation: Observation, ts: float) -> list[Change]:
         same = self._previous and self._previous.screen_type == observation.screen_type
         self._screen_streak = self._screen_streak + 1 if same else 1
+        if self._screen_streak == 1:
+            self._screen_since = ts
         if self._screen_streak < self._confirm or self._screen == observation.screen_type:
             return []
         self._screen = observation.screen_type
-        return [Change("player_died")] if self._screen == "death" else []
+        return [Change("player_died", since=self._screen_since)] if self._screen == "death" else []
 
-    def _update_health(self, observation: Observation) -> list[Change]:
+    def _update_health(self, observation: Observation, ts: float) -> list[Change]:
         if not observation.health_visible:
             self._no_health_streak += 1
             if self._no_health_streak >= self._confirm:
@@ -183,7 +198,9 @@ class ObservationTracker:
             self._health_low_reported = False
         if fraction <= self._low_health and not self._health_low_reported:
             self._health_low_reported = True
-            return [Change("health_low", {"percent": round(fraction * 100)})]
+            # The previous frame agreed with this one, so it showed it first.
+            since = self._previous_ts if self._previous_ts is not None else ts
+            return [Change("health_low", {"percent": round(fraction * 100)}, since)]
         return []
 
     def _update_item(self, observation: Observation) -> None:

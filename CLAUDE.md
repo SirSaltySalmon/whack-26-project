@@ -108,6 +108,8 @@ python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
 python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
+python -m brain --live --record 2>&1 | Tee-Object run.log   # keep the log for the latency report
+python scripts/latency_report.py run.log  # p50/p95/max per latency kind, as a Markdown table
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
 python scripts/export_profile.py          # save the learned HUD as a fixture for PROFILE_FIXTURE
@@ -167,11 +169,11 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now (2026-11-08 01:15, freeze about 04:30): commit, merge, measure, then run it live.** The spoken-questions work is still uncommitted. Then push and merge `perf/voice-path-stalls` (local only), merge `origin/wp4-wp5-readers`, build WP9 so latency is measured from the frame, then run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers and learned regions are merged. `perf/voice-path-stalls` is still local only. Then build WP9 so latency is measured from the frame, and run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
-- [ ] WP9: log latency from the frame that showed the event, not from when it was published
-- [ ] WP11: latency report, event-loop stall watch, and observer, tool-choice and pointer evals. Results go in the test plan's Benchmarks table
+- [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. After the WP4 merge, reader events need `frame_ts`
+- [ ] WP11: the latency report (`scripts/latency_report.py`), the event-loop stall watch (`brain/loop_watch.py`) and the Control Center's Latency tab are built. Observer, tool-choice and pointer evals aren't. Results go in the test plan's Benchmarks table
 - [ ] WP10, if there's time before freeze: `look_back` answers "what just hit me?" from the last few seconds of frames
 
 **Wired, not yet run live**
@@ -192,11 +194,13 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [x] Shared fakes and the test plan's automated tests (WP1), including WP8's
 - [x] Typed turns and the extended overlay demo (WP2)
 - [x] Stage 0, apart from what needs a mouse or a visible window
-- [x] Recorder and replay (WP3). Not yet run on a real recording. The check that a reader's event comes from the frames waits on the WP4 merge
+- [x] Recorder and replay (WP3). Not yet run on a real recording
 - [x] Game brief (`brain/learner/brief.py`): at startup the deep model names the game and writes a 60-word brief into the profile, once per game. Check it on a few real games
+- [x] Readers and learned regions (WP4 and WP5), tested on synthetic frames. Scene matching was cut
 
-**Not on `main`**
-- [ ] Readers and learned regions (WP4 and WP5): on `wp4-wp5-readers`, merged with `main` there. The first live run rejected the bar readers because vision's boxes were looser than the bars; the learner now calibrates where a full bar ends. Run them live again. Until a profile is learned, live state comes from the Haiku observer. Scene matching was cut
+**Not yet run live**
+- [ ] The learner and readers over a real game. Until a profile is learned, live state still comes from the Haiku observer
+- [ ] `main` merged an early snapshot of the readers (`bfabbf5`). The live-tested versions are on `claude/night`: pixel boxes and fill colours from Haiku, full-bar calibration, and a closer look for small elements. Health was learned live there; mana is found but its labels aren't trusted yet
 - [ ] Agree personality boundaries, and which voice goes with each (all)
 
 **Still unproven from hour 0-1**

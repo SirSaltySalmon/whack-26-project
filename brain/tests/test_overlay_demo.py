@@ -107,6 +107,11 @@ async def test_a_pass_shows_every_part_of_the_overlay() -> None:
     assert kinds == {AvatarState, PointerFly, DebugRegions, SubtitleChunk, MemoryToast}
 
 
+def spoken(overlay: FakeOverlay) -> list[SubtitleChunk]:
+    """Subtitles apart from the spoken questions."""
+    return [chunk for chunk in subtitles(overlay) if chunk.text not in QUESTIONS]
+
+
 async def test_debug_regions_keep_coming_until_an_empty_list_clears_them() -> None:
     overlay = await run_one_pass()
     sent = [message for message in overlay.sent if isinstance(message, DebugRegions)]
@@ -117,11 +122,6 @@ async def test_debug_regions_keep_coming_until_an_empty_list_clears_them() -> No
         later - earlier < DEBUG_REGIONS_STALE_S
         for earlier, later in zip(times, times[1:], strict=False)
     )
-
-
-def spoken(overlay: FakeOverlay) -> list[SubtitleChunk]:
-    """Subtitles apart from the spoken questions."""
-    return [chunk for chunk in subtitles(overlay) if chunk.text not in QUESTIONS]
 
 
 async def test_word_chunks_then_an_empty_final_share_one_utterance() -> None:

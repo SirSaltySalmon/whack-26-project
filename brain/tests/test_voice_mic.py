@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from brain.events import EventBus, PlayerSpeech, PlayerSpeechPartial, PlayerStartedSpeaking
+from brain.latency import FirstAudio
 from brain.tests.fakes import FakeOverlay, drain
 from brain.voice.sentiment import MoodTracker
 from shared.protocol.messages import AvatarState, Settings
@@ -65,7 +66,7 @@ class Harness:
         voice._last_partial_logged = 0.0
         voice.user_speaking = False
         voice.bot_speaking = False
-        voice._end_of_turn_at = None
+        voice._first_audio = FirstAudio()
         voice._half_duplex = False
         voice._echo_tail_s = 0.4
         voice._bot_stopped_at = None
