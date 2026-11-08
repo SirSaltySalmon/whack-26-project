@@ -1,11 +1,11 @@
 """Builds a run's optional parts. Each can be missing, such as with no key, so each logs why."""
 
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
 from brain.agent.focus_tool import watch_tool
-from brain.agent.handlers import AgentTools
+from brain.agent.handlers import AgentLimits, AgentTools
 from brain.agent.tools import ToolRegistry
 from brain.capture.ring_buffer import RingBuffer
 from brain.config import Settings
@@ -75,6 +75,34 @@ def make_observer(
         settings.mask_padding_px,
         on_observation,
         watching=lambda: link.settings.vision_enabled,
+        debug_send=link.send if settings.debug_regions else None,
+    )
+
+
+def make_agent_tools(
+    settings: Settings,
+    factory: LLMFactory,
+    buffer: RingBuffer,
+    link: OverlayLink,
+    memory: MemoryService,
+    context: Callable[[str], Awaitable[str]],
+) -> AgentTools:
+    limits = AgentLimits(
+        settings.mask_padding_px,
+        settings.closeup_max_edge_px,
+        settings.look_max_frame_age_s,
+        settings.pointer_ttl_ms,
+        show_sightings=settings.debug_regions,
+    )
+    return AgentTools(
+        buffer,
+        link,
+        factory.vision,
+        factory.deep,
+        memory,
+        context,
+        limits,
+        look_vision=factory.closeup,
     )
 
 

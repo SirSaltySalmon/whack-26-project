@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 import uvicorn
 
-from brain.agent.handlers import AgentLimits, AgentTools
 from brain.capture.loop import CaptureLoop
 from brain.capture.ring_buffer import RingBuffer
 from brain.capture.source import default_live_source, live_frame_scale
@@ -32,6 +31,7 @@ from brain.memory.service import MemoryService
 from brain.memory.snapshot import connect_replay
 from brain.parts import (
     find_wiki,
+    make_agent_tools,
     make_bark_bank,
     make_observer,
     make_progress_scout,
@@ -167,21 +167,7 @@ async def run(
     tools = None
     open_page = None
     if live_talker is not None:
-        tools = AgentTools(
-            buffer,
-            link,
-            factory.vision,
-            factory.deep,
-            memory,
-            talker_context,
-            AgentLimits(
-                settings.mask_padding_px,
-                settings.closeup_max_edge_px,
-                settings.look_max_frame_age_s,
-                settings.pointer_ttl_ms,
-            ),
-            look_vision=factory.closeup,
-        )
+        tools = make_agent_tools(settings, factory, buffer, link, memory, talker_context)
         live_tools = tools
 
         def wiki_host() -> str | None:

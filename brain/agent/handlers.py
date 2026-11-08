@@ -11,10 +11,9 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Protocol
 
-from brain.agent.memory_tools import PlayerMemory, memory_tools
+from brain.agent.memory_tools import memory_tools
+from brain.agent.ports import AgentLimits, AgentMemory, Overlay
 from brain.agent.rewind import Rewind
 from brain.agent.schemas import (
     BLINDED,
@@ -38,10 +37,12 @@ from brain.llm.base import LLMEmptyResponseError, TextLLM, VisionLLM
 from brain.memory.context import CONTEXT_PREAMBLE
 from brain.perception.closeup import Closeup, make_closeup
 from brain.perception.coords import box_to_dip_rect, pixel_box_to_normalized
+from brain.perception.sightings import area_sighting, rect_sighting, show
 from brain.research import WikiResearch, card_message
 from brain.research.open_page import NOTHING_OPEN, OpenPage
-from shared.protocol import BrainMessage
-from shared.protocol.messages import CardShow, PointerFly, Settings
+from shared.protocol.messages import CardShow, PointerFly
+
+__all__ = ["AgentLimits", "AgentMemory", "AgentTools", "Overlay"]
 
 log = logging.getLogger(__name__)
 
@@ -55,29 +56,6 @@ MAX_POINTER_LABEL_CHARS = 40
 REASONING_CARD_ID = "reasoning"
 VISION_TIMEOUT_S = 12.0
 DEEP_TIMEOUT_S = 25.0
-
-
-class Overlay(Protocol):
-    @property
-    def display_scale(self) -> float: ...
-
-    # The player's settings, for whether they've turned the partner's vision off.
-    @property
-    def settings(self) -> Settings: ...
-
-    async def send(self, message: BrainMessage) -> None: ...
-
-
-class AgentMemory(PlayerMemory, Protocol):
-    async def wonder(self, subject: str, attribute: str, text: str) -> object | None: ...
-
-
-@dataclass(frozen=True)
-class AgentLimits:
-    mask_padding_px: int
-    closeup_max_edge_px: int
-    max_frame_age_s: float
-    pointer_ttl_ms: int
 
 
 class AgentTools:
@@ -103,6 +81,8 @@ class AgentTools:
         self._memory = memory
         self._context = context
         self._limits = limits
+        # Only while debugging, so a normal run sends nothing extra.
+        self._debug = overlay.send if limits.show_sightings else None
         # Set once the wiki has been found, which happens in the background at startup.
         self.research: WikiResearch | None = None
         # Set by the app on live runs, where the overlay can read the wiki window.
@@ -127,6 +107,7 @@ class AgentTools:
                     self._limits.mask_padding_px,
                     self._limits.closeup_max_edge_px,
                     watching=self._watching,
+                    debug_send=self._debug,
                 ).tool(VISION_TIMEOUT_S),
                 Tool(
                     "point_at",
@@ -208,6 +189,8 @@ class AgentTools:
         if frame is None:
             return CANT_SEE
         closeup = await self._closeup(frame, arguments.area)
+        scale = self._overlay.display_scale
+        await show(self._debug, [area_sighting(arguments.question, closeup.region, scale, "look")])
         reply = await self._look_vision().vision_json(
             LOOK_PROMPT.format(question=arguments.question),
             closeup.image,
@@ -257,6 +240,7 @@ class AgentTools:
                 ttl_ms=self._limits.pointer_ttl_ms,
             )
         )
+        await show(self._debug, [rect_sighting(label, rect, "point")])
         return f"The pointer is now beside it. {SEEN_LABEL} {label}"
 
     async def _lookup_wiki(self, arguments: WikiInput, _turn: TurnContext) -> str:

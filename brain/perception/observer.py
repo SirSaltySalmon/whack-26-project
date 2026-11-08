@@ -18,12 +18,20 @@ from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.perception.closeup import encode_jpeg
 from brain.perception.focus import Focus
 from brain.perception.masking import mask_overlay
-from brain.perception.observation import OBSERVATION_PROMPT, Observation
+from brain.perception.observation import (
+    OBSERVATION_PROMPT,
+    Observation,
+    SightedObservation,
+    sightings_prompt,
+)
+from brain.perception.sightings import Send, crop_of, noticed, show
 from brain.perception.tracker import ELEVATED, ObservationTracker
 
 log = logging.getLogger(__name__)
 
 MAX_OUTPUT_TOKENS = 500
+# Room for up to 4 boxes on top of the report, so a debug run never loses one to the cap.
+DEBUG_MAX_OUTPUT_TOKENS = 700
 REPLY_TIMEOUT_S = 10.0
 # A reply takes about 1.6-2.7 s, so at the fastest interval, 0.6 s, a few overlap. Past this, the
 # model is falling behind and more requests would only pay for out-of-date answers.
@@ -39,14 +47,23 @@ class OverlayScale(Protocol):
     def display_scale(self) -> float: ...
 
 
-def prepare_image(frame: Frame, display_scale: float, padding_px: int, max_edge_px: int) -> bytes:
-    """Hides the overlay so the model can't read its own subtitles, then shrinks and encodes."""
+def prepare_sized(
+    frame: Frame, display_scale: float, padding_px: int, max_edge_px: int
+) -> tuple[bytes, int, int]:
+    """Hides the overlay so the model can't read its own subtitles, then shrinks and encodes.
+
+    Also returns the image's width and height as sent, which the model's pixel boxes refer to.
+    """
     masked = mask_overlay(frame.image, frame.overlay_rects, display_scale, padding_px, frame.region)
     height, width = masked.shape[:2]
     scale = min(1.0, max_edge_px / max(height, width))
     if scale < 1.0:
         masked = cv2.resize(masked, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    return encode_jpeg(masked)
+    return encode_jpeg(masked), masked.shape[1], masked.shape[0]
+
+
+def prepare_image(frame: Frame, display_scale: float, padding_px: int, max_edge_px: int) -> bytes:
+    return prepare_sized(frame, display_scale, padding_px, max_edge_px)[0]
 
 
 class Observer:
@@ -65,6 +82,9 @@ class Observer:
         suppressed_events: Callable[[], Collection[str]] = frozenset,
         # The player's vision setting, read live so blinding applies from the next tick.
         watching: Callable[[], bool] = lambda: True,
+        # Set only with --debug-regions: then each report also boxes what it noticed, for the
+        # overlay to draw. Off, the prompt and reply stay as short as they were.
+        debug_send: Send | None = None,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
@@ -80,6 +100,7 @@ class Observer:
         self.suppressed_events = suppressed_events
         self._watching = watching
         self._was_watching = True
+        self._debug_send = debug_send
         self._tasks: set[asyncio.Task[None]] = set()
         self._last_sent_ts: float | None = None
         self._last_applied_ts: float | None = None
@@ -145,17 +166,19 @@ class Observer:
     async def _observe(self, frame: Frame) -> None:
         started = time.monotonic()
         try:
-            image = await asyncio.to_thread(
-                prepare_image,
+            image, width, height = await asyncio.to_thread(
+                prepare_sized,
                 frame,
                 self._overlay.display_scale,
                 self._padding_px,
                 self._max_edge_px,
             )
+            debugging = self._debug_send is not None
+            prompt = sightings_prompt(width, height) if debugging else OBSERVATION_PROMPT
+            schema = SightedObservation if debugging else Observation
+            tokens = DEBUG_MAX_OUTPUT_TOKENS if debugging else MAX_OUTPUT_TOKENS
             observation = await asyncio.wait_for(
-                self._vision.vision_json(
-                    OBSERVATION_PROMPT, image, "image/jpeg", Observation, MAX_OUTPUT_TOKENS
-                ),
+                self._vision.vision_json(prompt, image, "image/jpeg", schema, tokens),
                 REPLY_TIMEOUT_S,
             )
         except LLMUnavailableError as exc:
@@ -176,14 +199,24 @@ class Observer:
             # Sent before the player blinded the partner. Acting on it now would mean seeing.
             log.debug("Dropping an observation that arrived after vision was turned off")
             return
-        self._apply(observation, frame.ts)
+        if self._apply(observation, frame.ts) and isinstance(observation, SightedObservation):
+            await self._show_sightings(observation, frame, width, height)
 
-    def _apply(self, observation: Observation, frame_ts: float) -> None:
+    async def _show_sightings(
+        self, observation: SightedObservation, frame: Frame, width: int, height: int
+    ) -> None:
+        frame_height, frame_width = frame.image.shape[:2]
+        items = [(sighting.label, sighting.box_px) for sighting in observation.sightings]
+        crop = crop_of(frame_width, frame_height, frame.region)
+        scale = self._overlay.display_scale
+        await show(self._debug_send, noticed(items, width, height, crop, scale))
+
+    def _apply(self, observation: Observation, frame_ts: float) -> bool:
         # Replies can overlap and arrive out of order. The tracker compares consecutive frames, so
         # a late reply would make it compare the wrong ones.
         if self._last_applied_ts is not None and frame_ts <= self._last_applied_ts:
             log.debug("Dropping an out-of-order observation")
-            return
+            return False
         self._last_applied_ts = frame_ts
         if self._on_observation:
             self._on_observation(observation, frame_ts)
@@ -197,6 +230,7 @@ class Observer:
             seen = change.since if change.since is not None else frame_ts
             self._bus.publish(GameEvent(change.name, change.data, frame_ts=seen))
         self._refocus(observation, [change.name for change in changes])
+        return True
 
     def _refocus(self, observation: Observation, changes: list[str]) -> None:
         """Keeps watching closely while there's danger, then drops back once the hold runs out."""
