@@ -3,8 +3,8 @@ import { test } from "node:test";
 import {
   allVoices,
   brainArgs,
-  DEFAULT_CONFIG,
   partnerSettings,
+  DEFAULT_CONFIG,
   sanitizeConfig,
   toEnv,
   type LauncherConfig,
@@ -43,6 +43,7 @@ test("keys, game and voice choices reach the environment", () => {
         mic_enabled: true,
         voice_style: "classic",
         memory_search: "hybrid",
+        custom_instructions: "Avoid spoilers",
         pacing: DEFAULT_PACING,
       },
     }),
@@ -121,6 +122,7 @@ test("saved files are repaired field by field", () => {
     mic_enabled: true,
     voice_style: "expressive",
     memory_search: "keyword",
+    custom_instructions: "",
     pacing: { ...DEFAULT_PACING, question_gap_s: 12 },
   });
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
@@ -164,4 +166,16 @@ test("voices from .env come first and repeats are dropped", () => {
       { name: "B", id: "v2" },
     ],
   );
+});
+
+test("custom instructions survive settings conversion and saved configuration", () => {
+  const saved = sanitizeConfig({
+    settings: { custom_instructions: "Avoid spoilers" },
+  });
+  assert.equal(saved.settings.custom_instructions, "Avoid spoilers");
+  assert.equal(
+    partnerSettings(saved.settings).custom_instructions,
+    "Avoid spoilers",
+  );
+  assert.equal(sanitizeConfig({}).settings.custom_instructions, "");
 });

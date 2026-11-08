@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Notice, Pill, Section, Toggle } from "../../components/ui.tsx";
 import { useControl } from "../../ControlContext.tsx";
 import { ago, groupFacts, SOURCE_LABEL } from "../../logic/memory.ts";
@@ -7,10 +7,47 @@ import { GamePicker } from "./GamePicker.tsx";
 import { useMemoryGames } from "./useMemoryGames.ts";
 import { useMemoryQuery } from "./useMemoryQuery.ts";
 
+import { MemoryManager } from "./MemoryManager.tsx";
+import { InstructionsEditor } from "./InstructionsEditor.tsx";
+
+export function MemoryTab() {
+  const { connected, process, stop, external } = useControl();
+  const stopped = !connected && ["stopped", "crashed"].includes(process.state);
+  const [revision, setRevision] = useState(0);
+  const onUpdated = useCallback(() => setRevision((value) => value + 1), []);
+  return (
+    <div className="cc-page mem-page">
+      <InstructionsEditor />
+      <ReviewMemory key={revision} />
+      <details>
+        <summary>Add, edit or clear saved memory</summary>
+        {stopped ? (
+          <MemoryManager onUpdated={onUpdated} />
+        ) : (
+          <Section
+            title="Edit or clear memory"
+            hint="Stop the brain before editing so a running turn cannot restore old memories. Managing saved memory uses no API tokens."
+          >
+            {external ? (
+              <Notice>
+                Stop the brain in its terminal to manage saved memory here.
+              </Notice>
+            ) : (
+              <button className="cc-button" type="button" onClick={stop}>
+                Stop brain to manage memory
+              </button>
+            )}
+          </Section>
+        )}
+      </details>
+    </div>
+  );
+}
+
 const count = (n: number, noun: string): string =>
   `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-export function MemoryTab() {
+function ReviewMemory() {
   const { connected } = useControl();
   const [text, setText] = useState("");
   const [history, setHistory] = useState(false);

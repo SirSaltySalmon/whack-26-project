@@ -5,6 +5,7 @@ See messages.py for the overlay's /ws messages and control.py for the Control Ce
 
 from pydantic import BaseModel
 
+from shared.protocol.admin import MemoryAdminRequest, MemoryAdminResult
 from shared.protocol.control import (
     BrainDescription,
     ControlReply,
@@ -29,6 +30,8 @@ class Protocol(BaseModel):
     control: ControlRequest
     control_reply: ControlReply
     description: BrainDescription
+    memory_admin_request: MemoryAdminRequest
+    memory_admin_result: MemoryAdminResult
 
 
 __all__ = [

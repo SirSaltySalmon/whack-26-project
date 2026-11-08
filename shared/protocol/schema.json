@@ -1,5 +1,82 @@
 {
   "$defs": {
+    "AdminFact": {
+      "properties": {
+        "attribute": {
+          "title": "Attribute",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "game": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Game"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "player",
+            "observed",
+            "wiki"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "tentative": {
+          "title": "Tentative",
+          "type": "boolean"
+        },
+        "valid_from": {
+          "title": "Valid From",
+          "type": "number"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "subject",
+        "attribute",
+        "value",
+        "source",
+        "confidence",
+        "tentative",
+        "valid_from",
+        "game"
+      ],
+      "title": "AdminFact",
+      "type": "object"
+    },
     "AvatarState": {
       "properties": {
         "state": {
@@ -693,6 +770,125 @@
       "title": "GameView",
       "type": "object"
     },
+    "MemoryAdminRequest": {
+      "properties": {
+        "attribute": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Attribute",
+          "type": "string"
+        },
+        "confirmation": {
+          "default": "",
+          "title": "Confirmation",
+          "type": "string"
+        },
+        "fact_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fact Id"
+        },
+        "game": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Game"
+        },
+        "operation": {
+          "default": "list",
+          "enum": [
+            "list",
+            "remember",
+            "forget",
+            "clear"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "subject": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Subject",
+          "type": "string"
+        },
+        "value": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "title": "MemoryAdminRequest",
+      "type": "object"
+    },
+    "MemoryAdminResult": {
+      "properties": {
+        "backup": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backup"
+        },
+        "database": {
+          "title": "Database",
+          "type": "string"
+        },
+        "events": {
+          "title": "Events",
+          "type": "integer"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/AdminFact"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "notes": {
+          "title": "Notes",
+          "type": "integer"
+        },
+        "questions": {
+          "title": "Questions",
+          "type": "integer"
+        },
+        "total_facts": {
+          "title": "Total Facts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "facts",
+        "total_facts",
+        "notes",
+        "events",
+        "questions",
+        "database"
+      ],
+      "title": "MemoryAdminResult",
+      "type": "object"
+    },
     "MemoryContext": {
       "properties": {
         "context": {
@@ -1351,6 +1547,12 @@
     },
     "Settings": {
       "properties": {
+        "custom_instructions": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Custom Instructions",
+          "type": "string"
+        },
         "memory_search": {
           "default": "keyword",
           "enum": [
@@ -1681,6 +1883,12 @@
     "description": {
       "$ref": "#/$defs/BrainDescription"
     },
+    "memory_admin_request": {
+      "$ref": "#/$defs/MemoryAdminRequest"
+    },
+    "memory_admin_result": {
+      "$ref": "#/$defs/MemoryAdminResult"
+    },
     "overlay": {
       "discriminator": {
         "mapping": {
@@ -1729,7 +1937,9 @@
     "overlay",
     "control",
     "control_reply",
-    "description"
+    "description",
+    "memory_admin_request",
+    "memory_admin_result"
   ],
   "title": "Protocol",
   "type": "object"

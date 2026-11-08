@@ -76,7 +76,6 @@ async def run(
     personalities = load_personalities()
     link.personalities = personalities.names
     link.voices = settings.voice_options
-
     # Replays are test and fallback runs: they start from a fixed snapshot and leave no trace.
     conn = connect_replay(settings.replay_snapshot) if replay_dir else connect(settings.db_path)
     database = Database(conn)
@@ -110,7 +109,6 @@ async def run(
     link.settings = saved.model_copy(update=MOMENTARY_SETTINGS)
     if semantic:
         semantic.follow(link.settings)
-
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
     replay = ReplayLoop(replay_dir, buffer, bus, link, speed=speed) if replay_dir else None
     if not replay_dir:
@@ -139,7 +137,6 @@ async def run(
     recorder, message_log = build_recording(
         settings, buffer, bus, link, record and not replay_dir, write_messages
     )
-
     # Replay never opens the mic, which would mix live speech into the recording, and never
     # spends TTS characters. Subtitles also keep two runs' messages comparable.
     voice = SubtitleOnlyVoice(link) if replay_dir else create_voice(settings, bus, link)
@@ -182,6 +179,7 @@ async def run(
         proactive=lambda: link.settings.proactive,
         talker=talker,
         personality=lambda: link.settings.personality,
+        custom_instructions=lambda: link.settings.custom_instructions,
         max_words=settings.talker_max_words,
         context=talker_context,
         on_spoken=on_spoken,

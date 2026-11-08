@@ -67,6 +67,8 @@ def _settings(tmp_path: Path) -> Settings:
         elevenlabs_api_key=None,
         exa_api_key=None,
         cartesia_api_key=None,
+        # Keep a running dashboard from connecting to the test brain.
+        brain_port=0,
         game_process="FakeGame",
         game_title="Test Game",
         capture_fps=20,

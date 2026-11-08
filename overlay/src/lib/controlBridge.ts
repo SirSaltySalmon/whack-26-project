@@ -3,6 +3,8 @@
    two sandboxed preloads share no module, which a sandboxed preload couldn't load. */
 import type { KeyName, LauncherConfig } from "./launcher.ts";
 import type {
+  MemoryAdminRequest,
+  MemoryAdminResult,
   BrainDescription,
   ContextPreview,
   MemoryContext,
@@ -69,6 +71,7 @@ export function isMemoryRequest(value: unknown): value is MemoryRequest {
 }
 
 export interface ControlBridge {
+  manageMemory(request: MemoryAdminRequest): Promise<MemoryAdminResult>;
   getConfig(): Promise<LauncherConfig>;
   setConfig(config: LauncherConfig): Promise<LauncherConfig>;
   listKeys(): Promise<KeyList>;
@@ -89,6 +92,7 @@ export interface ControlBridge {
 
 export const CONTROL_IPC = {
   getConfig: "control:get-config",
+  manageMemory: "control:manage-memory",
   setConfig: "control:set-config",
   listKeys: "control:list-keys",
   setKey: "control:set-key",

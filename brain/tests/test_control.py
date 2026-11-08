@@ -160,6 +160,7 @@ def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
         "mic_enabled": False,
         "voice_style": "classic",
         "memory_search": "hybrid",
+        "custom_instructions": "Avoid spoilers",
         "pacing": {
             "event_gap_s": 2.0,
             "question_gap_s": 30.0,

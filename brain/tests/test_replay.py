@@ -183,7 +183,7 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
     _, _, link = await replay(write_session(tmp_path, session))
 
     assert (link.display_scale, link.pinned_display_scale) == (1.5, 1.5)
-    assert link.settings.model_dump() == settings
+    assert link.settings.model_dump() == {**settings, "custom_instructions": ""}
 
 
 async def test_invalid_manifest_settings_keep_the_current_ones(tmp_path: Path) -> None:

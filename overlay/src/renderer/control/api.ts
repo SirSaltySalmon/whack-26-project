@@ -1,6 +1,8 @@
 import type { KeyList, ProcessSnapshot } from "../../lib/controlBridge.ts";
 import type { KeyName, LauncherConfig } from "../../lib/launcher.ts";
 import type {
+  MemoryAdminRequest,
+  MemoryAdminResult,
   BrainDescription,
   BrainStatus,
   Control,
@@ -20,6 +22,7 @@ export type ReplyOf<T extends ReplyType> = Extract<ControlReply, { type?: T }>;
 
 /** Everything a tab may use, from `useControl()`. Tabs never touch window.control or the socket. */
 export interface ControlApi {
+  manageMemory(request: MemoryAdminRequest): Promise<MemoryAdminResult>;
   process: ProcessSnapshot;
   connected: boolean;
   /** Connected to a brain this window didn't start, such as one run from a terminal. */

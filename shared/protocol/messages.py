@@ -53,6 +53,7 @@ class Settings(BaseModel):
     # How memory finds what the player's words are about. "keyword" matches words, "semantic"
     # matches meaning with a local embedding model, and "hybrid" merges the two.
     memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
+    custom_instructions: str = Field(default="", max_length=4000)
     pacing: Pacing = Field(default_factory=Pacing)
     # Paused, the partner says nothing, but keeps listening, watching and taking notes. Never
     # restored at startup, so a restart can't leave it silent with no idea why.

@@ -1,5 +1,4 @@
 """Runs the rules against the event bus and carries out their actions.
-
 Deciding stays instant because speech runs in its own task. There's one speech slot: a player turn
 replaces whatever is in it, the start of their next turn cancels it, and anything else is skipped
 while it's busy. A cancelled turn doesn't take back a pointer or card it has already shown, and if
@@ -82,6 +81,7 @@ class Director:
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
         voice_id: Callable[[], str | None] = lambda: None,
+        custom_instructions: Callable[[], str] = lambda: "",
         bark_events: Mapping[str, str] | None = None,
         # Stamps ticks and spoken lines, so they share a clock with the events the rules see.
         clock: Callable[[], float] = time.monotonic,
@@ -90,6 +90,7 @@ class Director:
         self._voice = voice
         self._proactive = proactive
         self._talker = talker
+        self._custom_instructions = custom_instructions
         self._personality = personality
         self._max_words = max_words
         self._context = context
@@ -221,7 +222,11 @@ class Director:
 
     def _persona(self) -> Persona:
         name = self._personality()
-        return Persona(name, self._personalities.tone(name), self._max_words, self._proactive())
+        tone = self._personalities.tone(name)
+        instructions = self._custom_instructions().strip()
+        if instructions:
+            tone += f"\nPlayer custom instructions (keep truth and trust rules): {instructions}"
+        return Persona(name, tone, self._max_words, self._proactive())
 
     async def _play_bark(self, action: PlayBark) -> None:
         bark = self._lines.bark(action.kind)
