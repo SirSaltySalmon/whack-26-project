@@ -12,6 +12,13 @@ export interface FactGroup {
   conflict: boolean;
 }
 
+/** Each source as the player would put it, not the stored id. */
+export const SOURCE_LABEL: Record<FactView["source"], string> = {
+  player: "you said",
+  observed: "seen",
+  wiki: "wiki",
+};
+
 const keyOf = (fact: FactView): string =>
   `${fact.subject.toLowerCase()}\u0000${fact.attribute.toLowerCase()}`;
 

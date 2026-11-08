@@ -4,7 +4,8 @@ Usage: python scripts/overlay_demo.py   then, in another terminal: npm --prefix 
 
 Uses the real brain server, so origin checks and message validation behave as they do in a real run.
 
-Each pass shows the avatar's states, the pointer, the HUD regions debug view, subtitles both ways,
+Each pass shows the avatar's states, the pointer, the danger alert rising and ending, the HUD
+regions debug view, subtitles both ways,
 a toast for each source and two spoken questions, so Stage 0 of docs/TEST_PLAN.md can be checked by
 eye. Questions are only spoken, as in a real run: answering one in the overlay's text box moves on
 straight away. The terminal logs what the overlay reports back, including typed turns and the
@@ -32,6 +33,7 @@ from shared.protocol import BrainMessage  # noqa: E402
 from shared.protocol.messages import (  # noqa: E402
     AvatarState,
     CardShow,
+    DangerState,
     DebugRegion,
     DebugRegions,
     MemoryToast,
@@ -99,6 +101,13 @@ async def show_pointer(overlay: Overlay, sleep: Sleep) -> None:
     box = Rect(x=500, y=200, width=200, height=80)
     await overlay.send(PointerFly(x=600, y=240, label="Beside this box", target=box, ttl_ms=3000))
     await sleep(5)
+
+
+async def show_danger(overlay: Overlay, sleep: Sleep) -> None:
+    log.info("Danger: rises, then ends")
+    for level, hold in (("medium", 2), ("high", 5), ("none", 1)):
+        await overlay.send(DangerState(level=level))
+        await sleep(hold)
 
 
 def debug_regions(health: str) -> DebugRegions:
@@ -170,6 +179,7 @@ async def ask(overlay: Overlay, question: str, answered: asyncio.Event, sleep: S
 async def one_pass(overlay: Overlay, answered: asyncio.Event, sleep: Sleep = asyncio.sleep) -> None:
     await show_avatar_states(overlay, sleep)
     await show_pointer(overlay, sleep)
+    await show_danger(overlay, sleep)
     await show_debug_regions(overlay, sleep)
     await show_subtitles(overlay, sleep)
     await show_toasts(overlay, sleep)

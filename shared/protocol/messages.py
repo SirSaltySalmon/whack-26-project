@@ -50,6 +50,14 @@ class AvatarState(BaseModel):
     state: Literal["idle", "listening", "talking", "reacting"]
 
 
+class DangerState(BaseModel):
+    """How much trouble the player is in, so the overlay can show it without covering the game.
+    Sent when the level changes, and again when the overlay connects."""
+
+    type: Literal["danger.state"] = "danger.state"
+    level: Literal["none", "medium", "high"]
+
+
 class PointerFly(BaseModel):
     type: Literal["pointer.fly"] = "pointer.fly"
     x: float
@@ -223,7 +231,8 @@ BrainMessage = Annotated[
     | QuestionAsk
     | SettingsState
     | PageRead
-    | DebugRegions,
+    | DebugRegions
+    | DangerState,
     Field(discriminator="type"),
 ]
 OverlayMessage = Annotated[

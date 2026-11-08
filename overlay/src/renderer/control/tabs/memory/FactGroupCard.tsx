@@ -1,12 +1,20 @@
 import type { FactView } from "../../../../lib/protocol.generated.ts";
 import { Pill } from "../../components/ui.tsx";
-import { ago, type FactGroup } from "../../logic/memory.ts";
+import { ago, SOURCE_LABEL, type FactGroup } from "../../logic/memory.ts";
 
 const SOURCE_TITLE: Record<FactView["source"], string> = {
   player: "You said so. Beats anything else.",
   observed: "Seen on screen. Beats the wiki.",
   wiki: "From the wiki. Tentative until you or the screen confirm it.",
 };
+
+function Source({ source }: { source: FactView["source"] }) {
+  return (
+    <Pill tone={source} title={SOURCE_TITLE[source]}>
+      {SOURCE_LABEL[source]}
+    </Pill>
+  );
+}
 
 function Confidence({ value }: { value: number }) {
   const percent = Math.round(value * 100);
@@ -20,20 +28,21 @@ function Confidence({ value }: { value: number }) {
   );
 }
 
+// Source first, as a column, so a glance down the list shows where everything came from.
 function CurrentFact({ fact }: { fact: FactView }) {
   return (
     <div className="mem-fact">
-      <span className="mem-value">{fact.value}</span>
-      <Pill tone={fact.source} title={SOURCE_TITLE[fact.source]}>
-        {fact.source}
-      </Pill>
+      <Source source={fact.source} />
+      <span className="mem-value">
+        {fact.value}
+        {fact.tentative && (
+          <small className="mem-tentative">
+            Tentative until you or the screen confirm it
+          </small>
+        )}
+      </span>
       <Confidence value={fact.confidence} />
-      {fact.tentative && (
-        <Pill tone="warn" title="Not confirmed by you or the screen yet">
-          tentative
-        </Pill>
-      )}
-      <span className="cc-hint mem-when">since {ago(fact.valid_from)}</span>
+      <span className="mem-when">since {ago(fact.valid_from)}</span>
     </div>
   );
 }
@@ -44,9 +53,9 @@ function PastFact({ fact }: { fact: FactView }) {
       className="mem-fact mem-fact-past"
       title="Closed, not deleted: memory never overwrites"
     >
+      <Source source={fact.source} />
       <span className="mem-value">{fact.value}</span>
-      <span className="mem-source-text">{fact.source}</span>
-      <span className="cc-hint mem-when">
+      <span className="mem-when">
         {ago(fact.valid_from)} → replaced{" "}
         {fact.valid_to ? ago(fact.valid_to) : ""}
       </span>

@@ -28,6 +28,7 @@ from shared.protocol import PROTOCOL_VERSION, BrainMessage, BrainMessageAdapter
 from shared.protocol.messages import (
     AvatarState,
     CardShow,
+    DangerState,
     DebugRegions,
     MemoryToast,
     PointerFly,
@@ -104,7 +105,14 @@ async def test_every_message_in_a_pass_survives_the_protocol_round_trip() -> Non
 async def test_a_pass_shows_every_part_of_the_overlay() -> None:
     overlay = await run_one_pass()
     kinds = {type(message) for message in overlay.sent}
-    assert kinds == {AvatarState, PointerFly, DebugRegions, SubtitleChunk, MemoryToast}
+    assert kinds == {
+        AvatarState,
+        PointerFly,
+        DangerState,
+        DebugRegions,
+        SubtitleChunk,
+        MemoryToast,
+    }
 
 
 def spoken(overlay: FakeOverlay) -> list[SubtitleChunk]:

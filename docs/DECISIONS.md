@@ -2,6 +2,15 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: The overlay has swappable skins, and danger has one quiet look
+
+**Status:** built on `main`, not yet run live. Applies to `overlay/src/renderer/skins/`, `brain/danger_feed.py` and `shared/protocol/messages.py`.
+
+- **Skins are CSS, keyed on `data-skin` on the overlay's root.** Sticker (default), Island, Signal, Pixel, Broadcast and Classic, listed in `logic/skins.ts`. The player picks one in the overlay's settings card or the Control Center's Avatar tab, and both windows follow. It's saved in the overlay, like the avatar, so it works before the brain connects. Adding one is a stylesheet and a line in the list, never a branch in a component.
+- **Danger looks the same in every skin:** a small black pill at the top for 4 s and one faint glow at the screen edges that fades within 2 s. Full-width banners and screen shakes were tried in mockups and rejected as too obtrusive during a fight. The pill is masked like any element. The glow isn't, because masking the screen edges would hide the game's health bars, which is why it's faint and brief.
+- **`danger.state` (additive)** carries `none`, `medium` or `high`. `brain/danger_feed.py` forwards the tracker's `danger_started`, `danger_high` and `danger_ended` events, so the alert and the spoken line follow the same rule, and replays show it too. It's sent again when the overlay reconnects mid-fight.
+- **Fonts are bundled** in `overlay/src/renderer/assets/fonts/` (Google Fonts, Open Font License), so the stage demo needs no network.
+
 ## 2026-11-08: Reactions are timed from the frame that showed them
 
 **Status:** built on `main` (WP9), not yet run live. Applies to `brain/latency.py`, `brain/events.py`, `brain/perception/tracker.py`, `brain/perception/observer.py`, `brain/director/` and `brain/voice/`.

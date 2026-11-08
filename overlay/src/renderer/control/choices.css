@@ -1,0 +1,183 @@
+/* Every way to pick something: switches, option pills, and the settings grid the Agent tab
+   wraps around the overlay's settings buttons. */
+
+.cc-toggles {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.cc-toggle {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.cc-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.cc-switch {
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background-color var(--ease);
+}
+
+.cc-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition:
+    transform var(--ease),
+    background-color var(--ease);
+}
+
+.cc-toggle:hover .cc-switch {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.cc-toggle input:checked + .cc-switch {
+  background: var(--accent);
+}
+
+.cc-toggle input:checked + .cc-switch::after {
+  background: var(--accent-ink);
+  transform: translateX(12px);
+}
+
+.cc-toggle input:focus-visible + .cc-switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cc-toggle-label {
+  display: block;
+  font-weight: 500;
+}
+
+.cc-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Option pills: SettingsFields and SkinPicker render these in both windows. Here they're quiet
+   until picked, and the pick takes the accent. */
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.option {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    border-color var(--ease),
+    color var(--ease);
+}
+
+/* Personalities arrive as lowercase ids. Only the first letter is raised, so labels stay in
+   sentence case ("Type instead", not "Type Instead"). */
+.option::first-letter {
+  text-transform: uppercase;
+}
+
+.option:hover {
+  border-color: var(--border-hover);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.option-on,
+.option-on:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.cc-mode {
+  margin-bottom: 4px;
+}
+
+/* SettingsFields is a flat run of heading, row and hint. A two-column grid turns it into
+   label-and-control rows without touching the shared markup. */
+.cc-settings {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 12px 16px;
+  align-items: center;
+}
+
+.cc-settings .settings-heading {
+  grid-column: 1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.cc-settings .settings-row,
+.cc-settings .settings-hint {
+  grid-column: 2;
+}
+
+.settings-hint {
+  max-width: 68ch;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-row + .settings-hint {
+  margin: 8px 0 0;
+}
+
+/* Pulls a hint up under its own row, against the grid's gap. */
+.cc-settings .settings-row + .settings-hint {
+  margin: -6px 0 2px;
+}
+
+@media (max-width: 760px) {
+  .cc-settings {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .cc-settings .settings-heading,
+  .cc-settings .settings-row,
+  .cc-settings .settings-hint {
+    grid-column: 1;
+  }
+
+  .cc-settings .settings-heading:not(:first-child) {
+    margin-top: 8px;
+  }
+
+  .cc-settings .settings-row + .settings-hint {
+    margin: 2px 0 0;
+  }
+}

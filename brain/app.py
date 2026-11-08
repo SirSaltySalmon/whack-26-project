@@ -15,6 +15,7 @@ from brain.capture.window import create_game_window
 from brain.config import WS_HOST, Settings
 from brain.control import ShutdownRequested, stop_when
 from brain.control_wiring import StatusParts, build_control
+from brain.danger_feed import forward_danger
 from brain.director.director import Director
 from brain.director.personalities import load_personalities
 from brain.events import EventBus
@@ -252,6 +253,7 @@ async def run(
             tasks.create_task(stop_when(stop))
             tasks.create_task(survive("Loop watch", watch_loop()))
             tasks.create_task(director.run())
+            tasks.create_task(survive("Danger feed", forward_danger(bus, link.send)))
             tasks.create_task(capture.run())
             tasks.create_task(survive("Voice", voice.run()))
             if observer:

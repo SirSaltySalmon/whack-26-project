@@ -6,14 +6,16 @@ export function Section({
   hint,
   children,
   aside,
+  className,
 }: {
   title: string;
   hint?: ReactNode;
   children: ReactNode;
   aside?: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="cc-section">
+    <section className={className ? `cc-section ${className}` : "cc-section"}>
       <header className="cc-section-head">
         <div>
           <h2>{title}</h2>
