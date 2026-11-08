@@ -24,8 +24,6 @@ export interface SettingsChoices {
 interface SettingsFieldsProps {
   choices: SettingsChoices;
   onChange(settings: Settings): void;
-  /** The Control Center offers "default", which leaves the voice to ELEVENLABS_VOICE_ID. */
-  allowDefaultVoice?: boolean;
 }
 
 export function Choice({
@@ -53,11 +51,7 @@ export function Choice({
  * Buttons only, so changing a setting in the overlay never takes the keyboard from the game.
  * Shared by the overlay's settings card and the Control Center's Agent tab.
  */
-export function SettingsFields({
-  choices,
-  onChange,
-  allowDefaultVoice = false,
-}: SettingsFieldsProps) {
+export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
@@ -103,17 +97,10 @@ export function SettingsFields({
           />
         ))}
       </div>
-      {(voices.length > 0 || allowDefaultVoice) && (
+      {voices.length > 0 && (
         <>
           <h3 className="settings-heading">Voice</h3>
           <div className="settings-row">
-            {allowDefaultVoice && (
-              <Choice
-                label="Default"
-                on={!settings.voice_id}
-                onClick={() => onChange({ ...settings, voice_id: null })}
-              />
-            )}
             {voices.map((voice) => (
               <Choice
                 key={voice.id}

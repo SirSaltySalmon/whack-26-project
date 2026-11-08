@@ -13,6 +13,7 @@ from brain.events import Event, EventBus, OverlayConnected, Tick
 from brain.llm.base import ToolStep
 from brain.tests.fakes import FakeMemory, FakeOverlay, FakeTextLLM, FakeVoice, ScriptedToolLLM
 from brain.voice.barks import BarkBank
+from shared.protocol.messages import Pacing
 
 QUIET_S = 20.0
 GAP_S = 90.0
@@ -75,6 +76,7 @@ class Rig:
         voice: FakeVoice | None = None,
         talker: FakeTextLLM | None = None,
         agent: ScriptedToolLLM | None = None,
+        tip_llm: object | None = None,
         tools: Iterable[Tool] = (),
         memory: FakeMemory | None = None,
         context: Callable[[str], Awaitable[str]] | None = None,
@@ -89,6 +91,7 @@ class Rig:
         advice_quiet_s: float = 20.0,
         advice_first_s: float = 90.0,
         advice_after_learning_s: float = 15.0,
+        event_gap_s: float = 8.0,
     ) -> None:
         self.bus = EventBus()
         self.voice = voice or FakeVoice()
@@ -105,15 +108,19 @@ class Rig:
             context=context,
             on_spoken=self._on_spoken,
             agent=agent,
+            tip_llm=tip_llm,  # type: ignore[arg-type]
             tools=ToolRegistry(tools),
             personalities=BOOK,
             take_question=memory.take_question if memory else None,
             release_question=memory.release_question if memory else None,
-            question_gap_s=gap_s,
-            question_quiet_s=quiet_s,
-            advice_gap_s=advice_gap_s,
-            advice_quiet_s=advice_quiet_s,
-            advice_first_s=advice_first_s,
+            pacing=Pacing(
+                event_gap_s=event_gap_s,
+                question_gap_s=gap_s,
+                question_quiet_s=quiet_s,
+                advice_gap_s=advice_gap_s,
+                advice_quiet_s=advice_quiet_s,
+                advice_first_s=advice_first_s,
+            ),
             advice_after_learning_s=advice_after_learning_s,
             page_excerpt=page_excerpt,
             barks=barks,

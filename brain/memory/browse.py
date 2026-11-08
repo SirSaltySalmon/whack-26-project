@@ -8,8 +8,10 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
+from brain.memory.context import render_context
 from brain.memory.fts import to_match_query
-from shared.protocol.control import FactView, NoteView, QuestionView
+from brain.memory.gather import gather_context
+from shared.protocol.control import FactView, GameView, NoteView, QuestionView
 
 QUESTION_LIMIT = 20
 NOTE_LIMIT = 5
@@ -105,3 +107,43 @@ def browse(
         questions(conn, game, include_history),
         notes(conn, game, text),
     )
+
+
+# Facts and questions with no game apply to every game, so they don't name one here.
+_GAMES = """
+WITH titles AS (
+    SELECT game FROM sessions
+    UNION SELECT game FROM facts WHERE game IS NOT NULL
+    UNION SELECT game FROM questions WHERE game IS NOT NULL
+    UNION SELECT game FROM profile
+)
+SELECT t.game AS title,
+    (SELECT COUNT(*) FROM facts f WHERE f.game = t.game AND f.valid_to IS NULL) AS facts,
+    (SELECT COUNT(*) FROM questions q WHERE q.game = t.game AND q.status = 'open') AS questions,
+    (SELECT COUNT(*) FROM sessions s WHERE s.game = t.game) AS sessions,
+    (SELECT MAX(s.started_at) FROM sessions s WHERE s.game = t.game) AS last_played
+FROM titles t
+ORDER BY last_played IS NULL, last_played DESC, title
+"""
+
+
+def games(conn: sqlite3.Connection) -> list[GameView]:
+    """Every game memory holds anything for, most recently played first."""
+    return [
+        GameView(
+            title=row["title"],
+            facts=row["facts"],
+            questions=row["questions"],
+            sessions=row["sessions"],
+            last_played=row["last_played"],
+        )
+        for row in conn.execute(_GAMES)
+    ]
+
+
+def preview_context(conn: sqlite3.Connection, game: str, text: str) -> str:
+    """The context a new session of `game` would start with: its last session's note and what
+    memory knows, with no live state and no turns yet. Recalls by keywords only, so it never
+    loads an embedding model."""
+    row = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM sessions").fetchone()
+    return render_context(gather_context(conn, game, row[0], {}, text or None))

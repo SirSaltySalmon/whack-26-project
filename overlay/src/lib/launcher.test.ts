@@ -9,6 +9,7 @@ import {
   toEnv,
   type LauncherConfig,
 } from "./launcher.ts";
+import { DEFAULT_PACING } from "./pacing.ts";
 
 const config = (change: Partial<LauncherConfig> = {}): LauncherConfig => ({
   ...DEFAULT_CONFIG,
@@ -42,6 +43,7 @@ test("keys, game and voice choices reach the environment", () => {
         mic_enabled: true,
         voice_style: "classic",
         memory_search: "hybrid",
+        pacing: DEFAULT_PACING,
       },
     }),
     { GEMINI_API_KEY: "g-key", ANTHROPIC_API_KEY: "a-key" },
@@ -99,6 +101,7 @@ test("saved files are repaired field by field", () => {
       mic_enabled: "no",
       voice_style: "loud",
       memory_search: "telepathy",
+      pacing: { event_gap_s: "soon", question_gap_s: 12 },
     },
   });
   assert.equal(repaired.mode, "live");
@@ -118,6 +121,7 @@ test("saved files are repaired field by field", () => {
     mic_enabled: true,
     voice_style: "expressive",
     memory_search: "keyword",
+    pacing: { ...DEFAULT_PACING, question_gap_s: 12 },
   });
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
 });

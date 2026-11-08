@@ -111,7 +111,8 @@ async def test_a_new_player_turn_replaces_one_in_progress() -> None:
         assert first.cancelled
         first.gate.set()
         await settle()
-    assert agent.sends == ["first", "second"]
+    # The first never got a reply, so its words start the second (test_director_carry.py).
+    assert agent.sends == ["first", "first second"]
     assert rig.voice.said == ["Second reply."]
 
 

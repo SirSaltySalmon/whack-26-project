@@ -124,6 +124,7 @@ async def test_streams_text_with_thinking_on_at_the_chosen_effort() -> None:
     assert "".join(chunks) == "Mine hellstone."
     assert messages.kwargs["thinking"] == {"type": "adaptive"}
     assert messages.kwargs["output_config"] == {"effort": "medium"}
+    assert messages.kwargs["fallbacks"] == "default"
     # The caller's cap is for the visible answer; thinking gets room on top.
     assert messages.kwargs["max_tokens"] > 100
 
@@ -152,3 +153,26 @@ def test_number_and_string_limits_are_dropped_but_fields_named_like_them_kept() 
     assert "'minimum'" not in flat and "'maxLength'" not in flat
     # The progress scout's reply failed live with a 400 over exactly these.
     assert "'maximum': " not in str(strict_schema(ProgressEstimate.model_json_schema()))
+
+
+def plain_client(messages: FakeBetaMessages, think: bool) -> ClaudeClient:
+    built = ClaudeClient("test-model", "test-key", RateLimiter(5), think=think, fallback=False)
+    built._client = SimpleNamespace(messages=messages)  # type: ignore[assignment]
+    return built
+
+
+async def test_a_haiku_client_thinks_on_the_plain_endpoint_with_no_fallback() -> None:
+    messages = FakeBetaMessages(["Try ", "a torch."])
+    chunks = [chunk async for chunk in plain_client(messages, True).stream_text("T", "Now?", 100)]
+    assert "".join(chunks) == "Try a torch."
+    assert messages.kwargs["thinking"] == {"type": "adaptive"}
+    assert messages.kwargs["output_config"] == {"effort": "low"}
+    assert "fallbacks" not in messages.kwargs and "betas" not in messages.kwargs
+    assert messages.kwargs["max_tokens"] > 100
+
+
+async def test_with_thinking_off_a_reply_is_fast_and_capped_as_asked() -> None:
+    messages = FakeBetaMessages(["Hi."])
+    _ = [chunk async for chunk in plain_client(messages, False).stream_text("T", "hi", 100)]
+    assert messages.kwargs["thinking"] == {"type": "disabled"}
+    assert messages.kwargs["max_tokens"] == 100 and "fallbacks" not in messages.kwargs

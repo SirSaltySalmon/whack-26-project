@@ -28,7 +28,6 @@ export function AgentTab() {
           <SettingsFields
             choices={control.choices}
             onChange={control.changeSettings}
-            allowDefaultVoice
           />
         </div>
       </Section>

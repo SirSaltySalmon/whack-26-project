@@ -9,7 +9,7 @@ from brain.config import Settings
 from brain.control import ControlLink
 from brain.events import EventBus
 from brain.llm.base import TextLLM
-from brain.memory.browse import browse
+from brain.memory.browse import browse, games, preview_context
 from brain.memory.db import Database
 from brain.memory.service import MemoryService
 from brain.perception.observer import Observer
@@ -58,13 +58,23 @@ def build_control(
 ) -> tuple[ControlLink, asyncio.Event]:
     """The link, and the event that is set when the Control Center asks the brain to stop."""
     stop = asyncio.Event()
+
+    async def recall_for(text: str, game: str | None) -> str:
+        if game is None or game == settings.game_title:
+            return await recall(text)
+        # Another game has no live state or session here: show what its next session would get.
+        return await database.run(lambda conn: preview_context(conn, game, text))
+
     control = ControlLink(
         link,
         bus,
-        browse=lambda text, history, limit: database.run(
-            lambda conn: browse(conn, settings.game_title, text, history, limit)
+        browse=lambda text, history, limit, game: database.run(
+            lambda conn: browse(
+                conn, settings.game_title if game is None else game, text, history, limit
+            )
         ),
-        recall=recall,
+        recall=recall_for,
+        games=lambda: database.run(games),
         status=lambda: parts.status(settings, memory),
         shutdown=stop.set,
     )

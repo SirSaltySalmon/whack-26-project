@@ -18,6 +18,7 @@ const bridge: ControlBridge = {
   setKey: (name, value) => ipcRenderer.invoke(CONTROL_IPC.setKey, name, value),
   clearKey: (name) => ipcRenderer.invoke(CONTROL_IPC.clearKey, name),
   describe: () => ipcRenderer.invoke(CONTROL_IPC.describe),
+  memory: (request) => ipcRenderer.invoke(CONTROL_IPC.memory, request),
   start: () => ipcRenderer.invoke(CONTROL_IPC.start),
   stop: () => ipcRenderer.invoke(CONTROL_IPC.stop),
   getProcess: () => ipcRenderer.invoke(CONTROL_IPC.getProcess),
