@@ -6,8 +6,9 @@ With no files, or `-`, it reads stdin. Save a live run's log with
 Exits 0 after printing the report, 1 when no line matched and 2 when a file can't be read.
 
 Frame-to-voice times are split by source (`reader` or `observer`), with their noticed and spoke
-parts as rows of their own, so the slow half is visible. Percentiles are nearest-rank: the value
-at position ceil(p / 100 * count) in sorted order, so every figure is a time that really happened.
+parts as rows of their own, so the slow half is visible. Event-to-bark times also get a row per
+event, so one slow bark stands out. Percentiles are nearest-rank: the value at position
+ceil(p / 100 * count) in sorted order, so every figure is a time that really happened.
 """
 
 import argparse
@@ -28,27 +29,45 @@ FOUND = 0
 NOTHING_MATCHED = 1
 UNREADABLE = 2
 
-# Matched anywhere in the line: the quiet and --verbose log formats put different prefixes first.
+# Matched anywhere in the log: the quiet and --verbose formats put different prefixes first, and
+# Windows PowerShell 5 wraps long lines at the console width, so any space may be a line break.
 _NUMBER = r"(-?\d+(?:\.\d+)?)"
-SIMPLE_KINDS = {
-    "player turn": re.compile(rf"Latency: player turn took {_NUMBER} ms"),
-    "event to bark": re.compile(rf"Latency: event to bark {_NUMBER} ms"),
-    "end of turn to first audio": re.compile(rf"Latency: end of turn to first audio {_NUMBER} ms"),
-}
-FRAME_TO = re.compile(
-    rf"Latency: frame to (bark|first audio) {_NUMBER} ms "
-    rf"\([^()]*? from (\w+): noticed in {_NUMBER}, spoke in {_NUMBER}\)"
-)
-STALLED = re.compile(rf"Event loop stalled {_NUMBER} ms")
-LONGEST = re.compile(rf"Event loop: longest stall {_NUMBER} ms over {_NUMBER} s")
 
-KIND_ORDER = (*SIMPLE_KINDS, "frame to bark", "frame to first audio")
+
+def _phrase(text: str) -> str:
+    return r"\s+".join(re.escape(word) for word in text.split())
+
+
+def _ms(prefix: str) -> str:
+    return rf"{_phrase(prefix)}\s+{_NUMBER}\s+ms\b"
+
+
+SIMPLE_KINDS = {
+    "player turn": re.compile(_ms("Latency: player turn took")),
+    "end of turn to first audio": re.compile(_ms("Latency: end of turn to first audio")),
+}
+EVENT_TO_BARK = re.compile(_ms("Latency: event to bark") + r"(?:\s+\(([\w.-]+)\))?")
+FRAME_TO = re.compile(
+    rf"{_phrase('Latency: frame to')}\s+(bark|first\s+audio)\s+{_NUMBER}\s+ms\s+"
+    rf"\([^()]*?\s+from\s+(\w+):\s+noticed\s+in\s+{_NUMBER},\s+spoke\s+in\s+{_NUMBER}\)"
+)
+STALLED = re.compile(_ms("Event loop stalled"))
+LONGEST = re.compile(_ms("Event loop: longest stall") + rf"\s+over\s+{_NUMBER}\s+s\b")
+
+KIND_ORDER = (
+    "player turn",
+    "event to bark",
+    "end of turn to first audio",
+    "frame to bark",
+    "frame to first audio",
+)
 PARTS = ("", "noticed", "spoke")
 
 
 @dataclass(frozen=True)
 class Kind:
-    """One row of the table: a latency kind, its source if split by one, and which part."""
+    """One row of the table: a latency kind, what it's split by if anything (a frame time's
+    source, a bark's event), and which part."""
 
     name: str
     source: str = ""
@@ -84,31 +103,31 @@ def decode_log(data: bytes) -> str:
 
 
 def parse_lines(lines: Iterable[str], samples: Samples | None = None) -> Samples:
-    """Adds every recognised line to samples, ignoring the rest of the log."""
+    """Adds every recognised measurement to samples, ignoring the rest of the log."""
+    return parse_text("\n".join(lines), samples)
+
+
+def parse_text(text: str, samples: Samples | None = None) -> Samples:
+    """Parses the whole log at once, so a measurement the console wrapped onto two lines counts."""
     if samples is None:
         samples = Samples()
-    for line in lines:
-        if "Latency: " in line:
-            _parse_latency(line, samples)
-        elif match := STALLED.search(line):
-            samples.stalls.append(float(match[1]))
-        elif match := LONGEST.search(line):
-            samples.longest.append(float(match[1]))
-            samples.watched_s.append(float(match[2]))
-    return samples
-
-
-def _parse_latency(line: str, samples: Samples) -> None:
-    if match := FRAME_TO.search(line):
-        name, source = f"frame to {match[1]}", match[3]
+    for match in FRAME_TO.finditer(text):
+        name, source = f"frame to {' '.join(match[1].split())}", match[3]
         samples.add(Kind(name, source), match[2])
         samples.add(Kind(name, source, "noticed"), match[4])
         samples.add(Kind(name, source, "spoke"), match[5])
-        return
+    for match in EVENT_TO_BARK.finditer(text):
+        samples.add(Kind("event to bark"), match[1])
+        if match[2]:
+            samples.add(Kind("event to bark", match[2]), match[1])
     for name, pattern in SIMPLE_KINDS.items():
-        if match := pattern.search(line):
+        for match in pattern.finditer(text):
             samples.add(Kind(name), match[1])
-            return
+    samples.stalls += [float(match[1]) for match in STALLED.finditer(text)]
+    for match in LONGEST.finditer(text):
+        samples.longest.append(float(match[1]))
+        samples.watched_s.append(float(match[2]))
+    return samples
 
 
 def percentile(values: Sequence[float], pct: float) -> float:
@@ -174,7 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         except OSError as error:
             print(f"latency_report: can't read {name}: {error}", file=sys.stderr)
             return UNREADABLE
-        parse_lines(decode_log(data).splitlines(), samples)
+        parse_text(decode_log(data), samples)
 
     if samples.empty():
         print("No latency or event loop lines found.")
