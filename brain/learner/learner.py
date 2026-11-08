@@ -236,7 +236,7 @@ class GameLearner:
                 color = calibrate(color, samples)
                 if color.full_at < 1.0:
                     full = color.full_at * 100
-                    log.info("Bar %s is full at %.0f%% of its box", region.name, full)
+                    log.info("A full %s bar colours %.0f%% of its box", region.name, full)
         spec = build_spec(agreed, color)
         if spec is None:
             log.info("No local reader for %s: nothing to read it by", region.name)

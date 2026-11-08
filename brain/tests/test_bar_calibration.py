@@ -1,5 +1,6 @@
 """Bars in boxes looser than the bar: vision's boxes rarely end exactly where a full bar does."""
 
+import numpy as np
 import pytest
 
 from brain.learner.validate import Sample, calibrate, propose_color, validate
@@ -58,8 +59,8 @@ def test_near_empty_samples_are_left_out() -> None:
 
 
 async def test_colour_covering_too_little_of_the_box_isnt_calibrated() -> None:
-    # Vision says full, but the colour covers a quarter of the box: more likely something else.
-    samples = [Sample(bar(0.25), 1.0), Sample(bar(0.25), 1.0)]
+    # Vision says full, but the colour covers 15% of the box: more likely something else.
+    samples = [Sample(bar(0.15), 1.0), Sample(bar(0.15), 1.0)]
     color = calibrate(red(), samples)
     assert color.full_at == 1.0
     accepted, _ = await validate(reader(color), samples, None)
@@ -79,3 +80,39 @@ def test_profiles_saved_before_calibration_read_the_same() -> None:
 def test_proposed_colour_starts_uncalibrated() -> None:
     color = propose_color(bar(1.0))
     assert color is not None and color.full_at == 1.0
+
+
+# Astra's review: a 100 x 10 black crop with whole columns painted red, calibrated on two full
+# samples. Each of these read wrongly when the reader measured the furthest red column.
+
+
+def columns(*spans: tuple[int, int]) -> np.ndarray:
+    crop = np.zeros((10, 100, 3), dtype=np.uint8)
+    for start, end in spans:
+        crop[:, start:end] = (0, 0, 255)
+    return crop
+
+
+async def calibrated_on(full: np.ndarray) -> CompiledReader:
+    samples = [Sample(full, 1.0), Sample(full.copy(), 1.0)]
+    color = calibrate(red(), samples)
+    built = reader(color)
+    accepted, why = await validate(built, samples, None)
+    assert accepted, why
+    return built
+
+
+async def test_padding_before_the_bar_doesnt_inflate_a_low_reading() -> None:
+    built = await calibrated_on(columns((20, 80)))
+    assert built.read(columns((20, 26))).value == pytest.approx(0.1, abs=0.01)
+
+
+async def test_a_bar_that_drains_from_the_other_end_reads_low() -> None:
+    built = await calibrated_on(columns((0, 100)))
+    assert built.read(columns((90, 100))).value == pytest.approx(0.1, abs=0.01)
+
+
+async def test_a_fixed_end_cap_doesnt_hide_damage() -> None:
+    built = await calibrated_on(columns((0, 100)))
+    # 10 of 99 fillable columns, plus the permanent cap: reads 11%, close to the true 10%.
+    assert built.read(columns((0, 10), (99, 100))).value == pytest.approx(0.1, abs=0.02)

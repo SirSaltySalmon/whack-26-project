@@ -69,10 +69,11 @@ def _colour_mask(hsv: np.ndarray, params: ColorFillParams) -> np.ndarray:
 
 
 class ColorFillReader:
-    """How full a bar is, from how far its colour reaches along the bar.
+    """How full a bar is, from how many of its box's columns (rows on axis y) show its colour.
 
-    It measures the furthest filled column from the start edge, not an unbroken run, so segmented
-    bars and rows of icons (such as hearts) read correctly despite the gaps between them.
+    Counted against how many show it when the bar is full (`full_at`), so it doesn't depend on
+    which way the bar drains, padding inside a loose box, a fixed end cap, or the gaps in a row
+    of icons such as hearts. Measuring the furthest coloured column got all four wrong.
     """
 
     uses_ocr = False
@@ -83,32 +84,23 @@ class ColorFillReader:
         self._params = spec.color
 
     def read(self, crop: np.ndarray) -> Reading:
-        reach = colour_reach(crop, self._params)
+        share = colour_share(crop, self._params)
         # No colour at all might mean empty, or a bar that's gone or changed colour. Those can't be
         # told apart, so it isn't read as 0: a false "health low" is worse than not knowing.
-        if reach is None:
+        if share is None:
             return Reading(self.spec.name, "unreadable")
-        fraction = round(min(1.0, reach / self._params.full_at), 3)
+        fraction = round(min(1.0, share / self._params.full_at), 3)
         return Reading(self.spec.name, "ok", fraction, f"{round(fraction * 100)}%")
 
 
-def colour_reach(crop: np.ndarray, params: ColorFillParams) -> float | None:
-    """How far along the box, 0-1, the furthest filled line is, before any full_at scaling."""
+def colour_share(crop: np.ndarray, params: ColorFillParams) -> float | None:
+    """The share of the box's lines, 0-1, that show the colour, before any full_at scaling."""
     if crop.size == 0:
         return None
     matches = _colour_mask(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV), params)
-    if params.axis == "x":
-        # Fills left to right unless reversed.
-        lines = matches.mean(axis=0)
-        filled = lines[::-1] if params.reverse else lines
-    else:
-        # Fills bottom up unless reversed, which means top down.
-        lines = matches.mean(axis=1)
-        filled = lines if params.reverse else lines[::-1]
-    filled_at = np.flatnonzero(filled >= FILLED_SHARE)
-    if filled_at.size == 0:
-        return None
-    return float(filled_at[-1] + 1) / len(filled)
+    lines = matches.mean(axis=0 if params.axis == "x" else 1)
+    filled = int(np.count_nonzero(lines >= FILLED_SHARE))
+    return filled / len(lines) if filled else None
 
 
 class OcrReader:

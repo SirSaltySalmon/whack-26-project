@@ -13,7 +13,7 @@ import numpy as np
 from brain.perception.numbers import first_number, parse_fraction
 from brain.perception.ocr import OcrWorker
 from brain.perception.profile_schema import ColorFillParams
-from brain.perception.readers import CompiledReader, OcrReader, Reading, colour_reach
+from brain.perception.readers import CompiledReader, OcrReader, Reading, colour_share
 
 MIN_SAMPLES_AGREEING = 2
 FRACTION_TOLERANCE = 0.15
@@ -25,9 +25,9 @@ HUE_TOLERANCE = 10
 # Calibration only uses samples at least this full: near empty, one column either way would
 # swing where "full" lands.
 CALIBRATE_FROM = 0.2
-# A full bar whose colour covers less of its box than this is more likely something else in the
-# box, so it isn't calibrated and validation decides.
-MIN_FULL_AT = 0.4
+# A full bar whose colour shows in fewer of its box's lines than this is more likely something
+# else in the box, so it isn't calibrated and validation decides.
+MIN_FULL_AT = 0.25
 
 
 @dataclass(frozen=True)
@@ -63,9 +63,9 @@ def propose_color(crop: np.ndarray) -> ColorFillParams | None:
 
 
 def calibrate(color: ColorFillParams, samples: Sequence[Sample]) -> ColorFillParams:
-    """Sets where "full" ends inside the box, from how full vision said each sample was.
+    """Sets how much of the box a full bar colours, from how full vision said each sample was.
 
-    Each sample gives reach / expected, and the median is used. validate() then still checks
+    Each sample gives share / expected, and the median is used. validate() then still checks
     every sample against vision. When every sample was at the same level, that only shows the
     reader is consistent, not that it follows changes: the live low-health check covers that.
     """
@@ -73,9 +73,9 @@ def calibrate(color: ColorFillParams, samples: Sequence[Sample]) -> ColorFillPar
     for sample in samples:
         if not isinstance(sample.expected, float) or sample.expected < CALIBRATE_FROM:
             continue
-        reach = colour_reach(sample.crop, color)
-        if reach is not None:
-            estimates.append(reach / sample.expected)
+        share = colour_share(sample.crop, color)
+        if share is not None:
+            estimates.append(share / sample.expected)
     if not estimates:
         return color
     full_at = min(1.0, float(np.median(estimates)))
