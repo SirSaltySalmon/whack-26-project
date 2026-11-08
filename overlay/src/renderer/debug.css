@@ -45,3 +45,35 @@
 .debug-unreadable {
   --debug-color: #ef4444;
 }
+
+/* Sightings: what the models looked at or noticed. Colours stay clear of the HUD statuses above. */
+.debug-sighting {
+  animation-name: sighting-fade;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes sighting-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.sighting-noticed {
+  --debug-color: #f59e0b;
+}
+
+.sighting-look {
+  --debug-color: #22d3ee;
+}
+
+.sighting-point {
+  --debug-color: #e879f9;
+}
+
+.sighting-look_back {
+  --debug-color: #818cf8;
+}
