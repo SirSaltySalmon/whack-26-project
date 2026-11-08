@@ -141,7 +141,8 @@ async def test_a_pass_learns_the_bar_saves_it_and_announces_it(tmp_path: Path) -
     assert data["learned_for"] == {"width": 400, "height": 200}
     assert any(isinstance(e, ProfileUpdated) for e in drain(rig.events))
     assert rig.overlay.sent[-1].text == "Learned where your health is"  # type: ignore[union-attr]
-    assert len(rig.vision.calls) == 3 and rig.vision.calls[0].detail == "high"
+    # 3 whole-screen looks, then 3 closer looks around the health bar.
+    assert len(rig.vision.calls) == 6 and {c.detail for c in rig.vision.calls} == {"high"}
 
 
 async def test_the_vision_budget_caps_calls(tmp_path: Path) -> None:

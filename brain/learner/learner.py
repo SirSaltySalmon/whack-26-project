@@ -26,6 +26,7 @@ from brain.learner.regions import (
     region_prompt,
 )
 from brain.learner.validate import Sample, calibrate, propose_color, validate
+from brain.learner.zoom import Zoom, zoom_around, zoom_pass
 from brain.llm.base import LLMUnavailableError, VisionLLM
 from brain.memory.db import Database
 from brain.memory.models import GameProfile
@@ -34,7 +35,7 @@ from brain.perception.closeup import make_closeup
 from brain.perception.masking import box_is_masked
 from brain.perception.observer import OverlayScale
 from brain.perception.ocr import OcrWorker
-from brain.perception.profile_schema import LearnedFor, ReaderSpec, Region
+from brain.perception.profile_schema import Box, LearnedFor, ReaderSpec, Region
 from brain.perception.readers import compile_reader, crop_box, learned_size
 from shared.protocol import BrainMessage
 from shared.protocol.messages import MemoryToast
@@ -165,9 +166,12 @@ class GameLearner:
         if len(samples) < 2:
             log.info("Not enough gameplay frames to learn from")
             return False
+        frames = [frame for frame, _ in samples]
+        found = agree([proposal for _, proposal in samples], self._image_size)
+        found += await self._zoom_pass(frames, found)
         kept: list[tuple[Region, ReaderSpec]] = []
-        for agreed in agree([proposal for _, proposal in samples], self._image_size):
-            built = await self._build_and_check(agreed, [frame for frame, _ in samples])
+        for agreed in found:
+            built = await self._build_and_check(agreed, frames)
             if built:
                 kept.append(built)
         if not kept:
@@ -180,9 +184,6 @@ class GameLearner:
         samples: list[tuple[Frame, RegionProposal]] = []
         previous: Frame | None = None
         for index in range(self._config.frames):
-            if self.vision_calls >= self._config.max_vision_calls:
-                log.info("Learner vision budget used up for this session")
-                break
             if index:
                 await asyncio.sleep(self._config.frame_gap_s)
             frame = await self._gameplay_frame(previous)
@@ -196,19 +197,42 @@ class GameLearner:
                 self._config.mask_padding_px,
                 self._config.closeup_max_edge_px,
             )
-            self.vision_calls += 1
             # Every frame in a pass has the same size, so the last one's size stands for all.
             self._image_size = (closeup.width, closeup.height)
-            proposal = await self._vision().vision_json(
-                region_prompt(closeup.width, closeup.height),
-                closeup.image,
-                "image/jpeg",
-                RegionProposal,
-                PROPOSAL_MAX_TOKENS,
-                detail="high",
-            )
+            proposal = await self._ask(closeup.image, closeup.width, closeup.height)
+            if proposal is None:
+                break
             samples.append((frame, proposal))
         return samples
+
+    async def _ask(self, image: bytes, width: int, height: int) -> RegionProposal | None:
+        """One vision call where the HUD is, or None once this session's budget is spent."""
+        if self.vision_calls >= self._config.max_vision_calls:
+            log.info("Learner vision budget used up for this session")
+            return None
+        self.vision_calls += 1
+        prompt, tokens, call = region_prompt(width, height), PROPOSAL_MAX_TOKENS, self._vision()
+        return await call.vision_json(prompt, image, "image/jpeg", RegionProposal, tokens, "high")
+
+    async def _zoom_pass(
+        self, frames: list[Frame], found: list[AgreedRegion]
+    ) -> list[AgreedRegion]:
+        """A closer look around what was found, within the same call budget. Never fails a pass."""
+
+        async def zoom(frame: Frame, box: Box) -> Zoom | None:
+            config, scale = self._config, self._overlay.display_scale
+            edge, padding = config.closeup_max_edge_px, config.mask_padding_px
+            return await asyncio.to_thread(zoom_around, frame, box, scale, padding, edge)
+
+        try:
+            extra = await zoom_pass(frames, found, self._image_size, self._ask, zoom)
+        except Exception:
+            # Includes running out of quota: what the full view found still stands.
+            log.exception("The closer look around the HUD failed; keeping what was found")
+            return []
+        if extra:
+            log.info("A closer look also found: %s", ", ".join(a.region.name for a in extra))
+        return extra
 
     async def _gameplay_frame(self, previous: Frame | None) -> Frame | None:
         deadline = self._clock() + FRAME_WAIT_S
