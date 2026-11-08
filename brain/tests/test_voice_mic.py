@@ -143,3 +143,11 @@ async def test_turning_the_mic_back_on_brings_turns_back(caplog: pytest.LogCaptu
     assert kinds[0] is PlayerStartedSpeaking
     assert PlayerSpeechPartial in kinds and kinds[-1] is PlayerSpeech
     assert h.bridge.interruptions == 1
+
+
+async def test_interrupting_cuts_speech_and_resets_a_talking_avatar() -> None:
+    h = Harness()
+    h.voice.bot_speaking = True
+    await h.voice.interrupt()
+    assert h.bridge.interruptions == 1
+    assert h.avatar() == ["idle"]

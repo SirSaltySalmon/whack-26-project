@@ -44,6 +44,10 @@ log = logging.getLogger(__name__)
 # 127.0.0.1 isn't enough. Browsers always send Origin, which lets us refuse them.
 ALLOWED_ORIGINS = {"file://", "http://localhost:5173", "http://127.0.0.1:5173"}
 
+# Settings for the moment only, with their startup values: a partner that starts paused or blind
+# would look broken. The Control Center never saves them, so an update without one keeps it.
+MOMENTARY_SETTINGS = {"paused": False, "vision_enabled": True}
+
 
 class OverlayLink:
     """Tracks the connected overlay and what it has reported."""
@@ -191,6 +195,14 @@ class OverlayLink:
 
     async def apply_settings(self, settings: Settings) -> None:
         """From the overlay's settings card or the Control Center. Both hear the new state."""
+        # The Control Center sends its saved choices on connect, and never saves these.
+        kept = {
+            name: getattr(self.settings, name)
+            for name in MOMENTARY_SETTINGS
+            if name not in settings.model_fields_set
+        }
+        if kept:
+            settings = settings.model_copy(update=kept)
         self.settings = settings
         await self.send(self.settings_state())
         self._bus.publish(SettingsChanged(settings=settings))

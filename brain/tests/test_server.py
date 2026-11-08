@@ -103,6 +103,8 @@ def test_settings_state_on_connect_offers_personalities_and_voices() -> None:
         "voice_id": "voice-2",
         "mic_enabled": True,
         "voice_style": "expressive",
+        "paused": False,
+        "vision_enabled": True,
     }
 
 
@@ -115,6 +117,8 @@ def test_settings_state_after_an_update_still_offers_them_and_shows_the_change()
         "voice_id": "voice-2",
         "mic_enabled": True,
         "voice_style": "classic",
+        "paused": True,
+        "vision_enabled": False,
     }
     with client.websocket_connect("/ws") as socket:
         socket.send_text(ready())
@@ -128,6 +132,26 @@ def test_settings_state_after_an_update_still_offers_them_and_shows_the_change()
     assert link.settings == Settings.model_validate(chosen)
     changes = [event for event in drain(events) if isinstance(event, SettingsChanged)]
     assert [change.settings for change in changes] == [Settings.model_validate(chosen)]
+
+
+async def test_an_update_without_paused_keeps_the_current_pause() -> None:
+    # The Control Center sends its saved settings on connect, and it never saves a pause.
+    _, link, _ = make()
+    link.settings = Settings(paused=True)
+    await link.apply_settings(Settings.model_validate({"personality": "calm"}))
+    assert link.settings.paused and link.settings.personality == "calm"
+    await link.apply_settings(Settings.model_validate({"paused": False}))
+    assert not link.settings.paused
+
+
+async def test_an_update_without_vision_keeps_the_partner_blind() -> None:
+    # Like a pause: opening the Control Center mustn't let the partner see again.
+    _, link, _ = make()
+    link.settings = Settings(vision_enabled=False)
+    await link.apply_settings(Settings.model_validate({"personality": "calm"}))
+    assert not link.settings.vision_enabled and link.settings.personality == "calm"
+    await link.apply_settings(Settings.model_validate({"vision_enabled": True}))
+    assert link.settings.vision_enabled
 
 
 def test_settings_state_with_nothing_to_offer_sends_empty_lists() -> None:

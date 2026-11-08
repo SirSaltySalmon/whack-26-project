@@ -32,6 +32,12 @@ class Settings(BaseModel):
     # How much the ElevenLabs voice varies its delivery. "classic" is the original flat sound,
     # kept so the two can be compared by ear.
     voice_style: Literal["expressive", "classic"] = "expressive"
+    # Paused, the partner says nothing, but keeps listening, watching and taking notes. Never
+    # restored at startup, so a restart can't leave it silent with no idea why.
+    paused: bool = False
+    # Off, the partner stops watching the screen but keeps listening and talking. Never restored
+    # at startup, for the same reason as a pause.
+    vision_enabled: bool = True
 
 
 # --- Brain to overlay ---

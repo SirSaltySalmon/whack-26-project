@@ -54,8 +54,10 @@ export type Text2 = string;
 export type Type8 = "question.ask";
 export type Personalities = string[];
 export type MicEnabled = boolean;
+export type Paused = boolean;
 export type Personality = string;
 export type Proactive = boolean;
+export type VisionEnabled = boolean;
 export type VoiceId = string | null;
 export type VoiceStyle = "expressive" | "classic";
 export type Type9 = "settings.state";
@@ -241,8 +243,10 @@ export interface SettingsState {
 }
 export interface Settings {
   mic_enabled?: MicEnabled;
+  paused?: Paused;
   personality?: Personality;
   proactive?: Proactive;
+  vision_enabled?: VisionEnabled;
   voice_id?: VoiceId;
   voice_style?: VoiceStyle;
 }

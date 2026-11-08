@@ -12,6 +12,8 @@ interface SettingsPanelProps {
   frame: Frame;
   onFrame(frame: Frame): void;
   onChange(settings: Settings): void;
+  /** Brings back the last wiki page after its window was closed. Null when there's none to reopen. */
+  onReopenWiki: (() => void) | null;
   onClose(): void;
 }
 
@@ -21,6 +23,7 @@ export function SettingsPanel({
   frame,
   onFrame,
   onChange,
+  onReopenWiki,
   onClose,
 }: SettingsPanelProps) {
   return (
@@ -46,6 +49,21 @@ export function SettingsPanel({
             }}
             onChange={onChange}
           />
+        )}
+        {/* Overlay only, so it works before the brain connects. */}
+        {onReopenWiki && (
+          <>
+            <h3 className="settings-heading">Wiki</h3>
+            <div className="settings-row">
+              <button
+                className="option option-plain"
+                type="button"
+                onClick={onReopenWiki}
+              >
+                Reopen the last page
+              </button>
+            </div>
+          </>
         )}
         {/* Visual only, so it works before the brain connects. */}
         <AvatarSettings avatars={avatars} />

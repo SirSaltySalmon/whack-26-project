@@ -7,6 +7,8 @@ while it's busy. A cancelled turn doesn't take back a pointer or card it has alr
 One exception: a turn that has started a tool, such as checking the screen, isn't cancelled.
 Players talk while they wait, and cancelling meant the answer they asked for never came. It
 finishes, says its answer once they stop talking, and then their next turn runs.
+
+Pausing is the player's own choice, so it cancels the slot even mid-tool, with any turn queued.
 """
 
 import asyncio
@@ -31,8 +33,10 @@ from brain.director.rules import (
     ReactToEvent,
     Say,
     SetVoice,
+    StopSpeaking,
     decide,
 )
+from brain.director.slot import SpeechSlot
 from brain.director.talker import ADVICE_PROMPT, event_prompt
 from brain.director.turns import (
     TIP_QUERY,
@@ -111,7 +115,7 @@ class Director:
             advice_after_learning_s=advice_after_learning_s,
             bark_events=events,
         )
-        self._slot: asyncio.Task[None] | None = None
+        self._slot = SpeechSlot()
         self._background: set[asyncio.Task[None]] = set()
         # True while the turn in the slot is running a tool, so it isn't cancelled.
         self.checking = False
@@ -123,7 +127,7 @@ class Director:
                 self._handle(await self._events.get())
         finally:
             ticker.cancel()
-            self._cancel_slot()
+            self._slot.cancel()
 
     async def _tick(self) -> None:
         # Not published on the bus: only the rules care, and every subscriber would have to skip it.
@@ -132,15 +136,12 @@ class Director:
             self._handle(Tick(ts=self._clock()))
 
     def _handle(self, event: Event) -> None:
-        if isinstance(event, Tick) and self._busy():
+        if isinstance(event, Tick) and self._slot.busy():
             # A tick only brings up questions and tips, which a busy slot would skip, and deciding
             # one would spend its budget on nothing. The next tick tries again.
             return
         for action in decide(event, self._state):
             self._dispatch(action)
-
-    def _busy(self) -> bool:
-        return self._slot is not None and not self._slot.done()
 
     def _dispatch(self, action: Action) -> None:
         match action:
@@ -148,33 +149,25 @@ class Director:
                 if self.checking:
                     log.info("Player spoke during a check; it will still answer")
                     return
-                self._cancel_slot()
+                self._slot.cancel()
+            case StopSpeaking():
+                log.info("Paused; stopping speech in progress")
+                self._slot.cancel()
             case AskTalker():
-                if self.checking and self._busy() and self._slot is not None:
-                    self._slot = asyncio.create_task(self._after(self._slot, action))
+                if self.checking and self._slot.busy():
+                    self._slot.queue(self._perform_safely(action))
                     return
-                self._cancel_slot()
-                self._slot = asyncio.create_task(self._perform_safely(action))
+                self._slot.start(self._perform_safely(action))
             case SetVoice():
                 # Separate from speech, because a setting shouldn't wait for or cancel a reply.
                 task = asyncio.create_task(self._perform_safely(action))
                 self._background.add(task)
                 task.add_done_callback(self._background.discard)
             case _:
-                if self._busy():
+                if self._slot.busy():
                     log.debug("Busy speaking; skipped %s", action)
                     return
-                self._slot = asyncio.create_task(self._perform_safely(action))
-
-    def _cancel_slot(self) -> None:
-        if self._slot is not None and not self._slot.done():
-            log.debug("Cancelling speech in progress")
-            self._slot.cancel()
-
-    async def _after(self, previous: asyncio.Task[None], action: Action) -> None:
-        # wait() rather than await, so a failed or cancelled check doesn't stop this turn.
-        await asyncio.wait({previous})
-        await self._perform_safely(action)
+                self._slot.start(self._perform_safely(action))
 
     async def _perform_safely(self, action: Action) -> None:
         try:
@@ -208,8 +201,8 @@ class Director:
                 await self._voice.set_voice(action.voice_id)
                 # This task is already off the speech slot, so generating can take its time.
                 await self._lines.prepare(action.voice_id)
-            case CancelSpeech():
-                self._cancel_slot()
+            case CancelSpeech() | StopSpeaking():
+                self._slot.cancel()
 
     def _note_line(self) -> None:
         # The quiet stretch before a question or tip counts from lines really said, not attempted.

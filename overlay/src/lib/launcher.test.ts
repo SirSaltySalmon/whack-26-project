@@ -119,6 +119,13 @@ test("saved files are repaired field by field", () => {
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
 });
 
+test("a pause or a blinded partner is never saved", () => {
+  const saved = partnerSettings({ paused: true, vision_enabled: false });
+  // Sent on connect without them, so the brain keeps its own: unpaused and seeing at startup.
+  assert.equal("paused" in saved, false);
+  assert.equal("vision_enabled" in saved, false);
+});
+
 test("typing instead of talking survives a save and a restart", () => {
   // Dropping it would send the default with the next change, and the mic would come back on.
   const saved = partnerSettings({ personality: "calm", mic_enabled: false });

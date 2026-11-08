@@ -10,7 +10,13 @@ from brain.llm.base import LLMUnavailableError, SchemaT
 from brain.perception.coords import CropRegion
 from brain.perception.focus import Focus, FocusIntervals
 from brain.perception.observation import Observation
-from brain.perception.observer import MAX_FRAME_AGE_S, MAX_IN_FLIGHT, Observer, prepare_image
+from brain.perception.observer import (
+    BLIND_STATE,
+    MAX_FRAME_AGE_S,
+    MAX_IN_FLIGHT,
+    Observer,
+    prepare_image,
+)
 from brain.perception.tracker import ObservationTracker
 from shared.protocol.messages import Rect
 
@@ -155,3 +161,52 @@ async def test_vision_failures_do_not_escape() -> None:
         built._tick(time.monotonic())
         await settle(built)
         assert built.live_state() == {"screen": "can't see the game right now"}
+
+
+def blindable(vision: FakeVision, seen: list[float]) -> tuple[Observer, RingBuffer, list[bool]]:
+    """An observer whose vision setting the test flips, as the player's button does."""
+    vision_on = [True]
+    buffer = RingBuffer(5)
+    built = Observer(
+        buffer,
+        Overlay(),
+        vision,
+        EventBus(),
+        ObservationTracker(),
+        focus(),
+        1280,
+        0,
+        on_observation=lambda _, ts: seen.append(ts),
+        watching=lambda: vision_on[0],
+    )
+    return built, buffer, vision_on
+
+
+async def test_blinded_it_sends_nothing_and_says_it_cannot_see() -> None:
+    vision = FakeVision()
+    built, buffer, vision_on = blindable(vision, [])
+    vision_on[0] = False
+    buffer.push(make_frame())
+    built._tick(time.monotonic())
+    await settle(built)
+    assert vision.calls == 0
+    assert built.live_state() == BLIND_STATE
+
+    vision_on[0] = True
+    built._tick(time.monotonic())
+    await settle(built)
+    assert vision.calls == 1
+    assert built.live_state() != BLIND_STATE
+
+
+async def test_a_reply_that_lands_after_blinding_is_dropped() -> None:
+    seen: list[float] = []
+    vision = FakeVision()
+    built, buffer, vision_on = blindable(vision, seen)
+    buffer.push(make_frame())
+    built._tick(time.monotonic())
+    # Already sent, then the player presses the button before the reply comes back.
+    vision_on[0] = False
+    await settle(built)
+    assert vision.calls == 1
+    assert seen == []

@@ -137,6 +137,8 @@ def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
         "voice_id": "v1",
         "mic_enabled": False,
         "voice_style": "classic",
+        "paused": False,
+        "vision_enabled": False,
     }
     with rig.client.websocket_connect("/control") as socket:
         send(socket, {"type": "settings.update", "settings": settings})

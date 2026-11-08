@@ -43,7 +43,7 @@ from brain.replay.wiring import (
     replay_talker,
 )
 from brain.research.open_page import OpenPage
-from brain.server import OverlayLink, create_app
+from brain.server import MOMENTARY_SETTINGS, OverlayLink, create_app
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.typed import typed_turns
 from shared.protocol.messages import Settings as OverlaySettings
@@ -90,7 +90,8 @@ async def run(
         question_max_turns=settings.question_max_turns,
     )
     await memory.start()
-    link.settings = await memory.load_settings(OverlaySettings)
+    saved = await memory.load_settings(OverlaySettings)
+    link.settings = saved.model_copy(update=MOMENTARY_SETTINGS)
 
     buffer = RingBuffer(settings.capture_fps * settings.ring_buffer_seconds)
     replay = ReplayLoop(replay_dir, buffer, bus, link, speed=speed) if replay_dir else None
