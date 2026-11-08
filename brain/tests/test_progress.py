@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -217,3 +218,8 @@ async def test_over_quota_still_asks_the_player() -> None:
     found, _, memory = scout(LLMUnavailableError("over quota"))
     await found.check()
     assert memory.wondered == [(SUBJECT, ATTRIBUTE, FALLBACK_QUESTION)]
+
+
+def test_the_reply_schema_is_one_gemini_accepts() -> None:
+    # Gemini's response_schema rejects additionalProperties with a 400, so every call failed live.
+    assert "additionalProperties" not in json.dumps(ProgressEstimate.model_json_schema())
