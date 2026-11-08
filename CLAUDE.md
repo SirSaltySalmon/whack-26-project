@@ -165,7 +165,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers and learned regions are merged. `perf/voice-path-stalls` is still local only. Then build WP9 so latency is measured from the frame, and run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers, learned regions, WP9 and memory search are merged. From `perf/voice-path-stalls`, only the vault-export fix was kept: every role runs on Claude now, so sharing SDK clients no longer matters. Next, run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
 - [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. After the WP4 merge, reader events need `frame_ts`
