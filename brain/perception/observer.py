@@ -1,6 +1,7 @@
 """Asks the vision model about the newest frame on a timer, and publishes what gets confirmed.
 
 The timer runs at the rate Focus sets. Danger boosts it here, by rule, with no extra model call.
+While the player has blinded the partner it sends nothing, as if the game weren't in front.
 """
 
 import asyncio
@@ -29,6 +30,8 @@ REPLY_TIMEOUT_S = 10.0
 MAX_IN_FLIGHT = 5
 # An older frame means capture stopped, usually because the game isn't in front.
 MAX_FRAME_AGE_S = 2.0
+# What the talker hears instead of an out-of-date picture, so it says it can't see.
+BLIND_STATE = {"screen": "not watching: the player turned the partner's vision off"}
 
 
 class OverlayScale(Protocol):
@@ -60,6 +63,8 @@ class Observer:
         on_observation: Callable[[Observation, float], None] | None = None,
         *,
         suppressed_events: Callable[[], Collection[str]] = frozenset,
+        # The player's vision setting, read live so blinding applies from the next tick.
+        watching: Callable[[], bool] = lambda: True,
     ) -> None:
         self._buffer = buffer
         self._overlay = overlay
@@ -73,12 +78,16 @@ class Observer:
         # Events the faster local readers already cover, so the observer doesn't repeat them.
         # Set after construction, because the readers are built later.
         self.suppressed_events = suppressed_events
+        self._watching = watching
+        self._was_watching = True
         self._tasks: set[asyncio.Task[None]] = set()
         self._last_sent_ts: float | None = None
         self._last_applied_ts: float | None = None
         self._unavailable = False
 
     def live_state(self) -> dict[str, str]:
+        if not self._sees():
+            return dict(BLIND_STATE)
         # Focus keeps its own clock, so tests can move it.
         return {**self._tracker.live_state(time.monotonic()), **self.focus.live_state()}
 
@@ -109,7 +118,19 @@ class Observer:
             for task in self._tasks:
                 task.cancel()
 
+    def _sees(self) -> bool:
+        """The player's vision setting. Going blind forgets what was seen, danger included."""
+        watching = self._watching()
+        if watching != self._was_watching:
+            self._was_watching = watching
+            log.info("Vision turned %s by the player", "on" if watching else "off")
+            if not watching:
+                self._tracker.forget()
+        return watching
+
     def _tick(self, now: float) -> None:
+        if not self._sees():
+            return
         frame = self._buffer.latest()
         if frame is None or frame.ts == self._last_sent_ts or now - frame.ts > MAX_FRAME_AGE_S:
             return
@@ -151,6 +172,10 @@ class Observer:
             log.info("Observer resumed")
         self._unavailable = False
         log.debug("Observation in %.2f s", time.monotonic() - started)
+        if not self._sees():
+            # Sent before the player blinded the partner. Acting on it now would mean seeing.
+            log.debug("Dropping an observation that arrived after vision was turned off")
+            return
         self._apply(observation, frame.ts)
 
     def _apply(self, observation: Observation, frame_ts: float) -> None:

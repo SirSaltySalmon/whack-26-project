@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -93,7 +94,13 @@ async def test_validation_accepts_a_reader_that_agrees_and_rejects_one_that_does
 
 
 class Rig:
-    def __init__(self, tmp_path: Path, vision: FakeVision, **config: Any) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        vision: FakeVision,
+        sees: Callable[[], bool] = lambda: True,
+        **config: Any,
+    ) -> None:
         self.database = Database(connect(tmp_path / "brain.sqlite3"))
         self.buffer = RingBuffer(4)
         self.bus = EventBus()
@@ -107,7 +114,8 @@ class Rig:
                     "closeup_max_edge_px": 800, "mask_padding_px": 0, **config}  # fmt: skip
         self.learner = GameLearner(self.database, "Some Game", lambda: vision, self.buffer,
                                    self.overlay, self.bus,
-                                   self.overlay.send, LearnerConfig(**settings))  # fmt: skip
+                                   self.overlay.send, LearnerConfig(**settings),
+                                   watching=sees)  # fmt: skip
 
     def push(self) -> None:
         # Windows' monotonic clock ticks every ~15 ms, so back-to-back frames could share a time.
@@ -128,6 +136,29 @@ def watching(rig_ref: list[Rig], fraction: float = 0.9) -> FakeVision:
         return proposal(fraction)
 
     return FakeVision(reply)
+
+
+async def test_a_blinded_learner_sends_no_frame_even_mid_pass(tmp_path: Path) -> None:
+    sees = [False]
+    ref: list[Rig] = []
+
+    def reply(_call: VisionCall) -> dict[str, Any]:
+        ref[0].push()
+        if len(ref[0].vision.calls) == 2:
+            sees[0] = False  # Blinded during the pass, before its closer look
+        return proposal(0.9)
+
+    rig = Rig(tmp_path, FakeVision(reply), lambda: sees[0])
+    ref.append(rig)
+    assert await rig.learner.why_learn(rig.events) is None
+    assert not await rig.learner.learn("test")
+    assert rig.vision.calls == []
+
+    sees[0] = True
+    assert await rig.learner.why_learn(rig.events) == "nothing learned yet"
+    await rig.learner.learn("test")
+    # Seeing, a pass makes 3 whole-screen looks and 3 closer ones. Blinded after 2, no more go out.
+    assert len(rig.vision.calls) == 2
 
 
 async def test_a_pass_learns_the_bar_saves_it_and_announces_it(tmp_path: Path) -> None:

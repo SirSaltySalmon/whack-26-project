@@ -121,6 +121,7 @@ def make_observer(
         settings.ai_image_max_edge_px,
         settings.mask_padding_px,
         on_observation,
+        watching=lambda: link.settings.vision_enabled,
     )
 
 

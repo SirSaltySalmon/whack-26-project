@@ -50,7 +50,11 @@ class ObservationTracker:
         self._health_tolerance = health_tolerance
         self._max_gap_s = max_gap_s
         self._stale_after_s = stale_after_s
+        self.forget()
 
+    def forget(self) -> None:
+        """Drops everything seen so far. Called when the partner is blinded: none of it holds once
+        it looks again, and a fight still going then must be confirmed afresh."""
         self._last_ts: float | None = None
         self._previous_ts: float | None = None
         # When each streak began, so a confirmed change can say when it was first seen.

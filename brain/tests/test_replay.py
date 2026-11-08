@@ -176,6 +176,8 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
         "mic_enabled": True,
         "memory_search": "semantic",
         "pacing": Pacing(advice_gap_s=0.0).model_dump(),
+        "paused": False,
+        "vision_enabled": True,
     }
     session = RigSession(display_scale=1.5, settings=settings)
     _, _, link = await replay(write_session(tmp_path, session))

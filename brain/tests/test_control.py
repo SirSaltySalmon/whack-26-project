@@ -168,6 +168,8 @@ def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
             "advice_gap_s": 60.0,
             "advice_quiet_s": 5.0,
         },
+        "paused": False,
+        "vision_enabled": False,
     }
     with rig.client.websocket_connect("/control") as socket:
         send(socket, {"type": "settings.update", "settings": settings})

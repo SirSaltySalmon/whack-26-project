@@ -75,6 +75,8 @@ class ReaderEngine:
         *,
         ocr: OcrWorker | None = None,
         in_gameplay: Callable[[], bool] = lambda: True,
+        # The player's vision setting. Blinded, the readers stop too and report nothing.
+        watching: Callable[[], bool] = lambda: True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._buffer = buffer
@@ -86,6 +88,7 @@ class ReaderEngine:
         self._failing_after_s = failing_after_s
         self._ocr = ocr
         self._in_gameplay = in_gameplay
+        self._watching = watching
         self._clock = clock
 
         self._game = ""
@@ -128,7 +131,7 @@ class ReaderEngine:
                 self._ocr_task.cancel()
 
     async def tick(self) -> None:
-        if not self._placed:
+        if not self._placed or not self._watching():
             return
         frame = self._buffer.latest()
         now = self._clock()
@@ -170,7 +173,7 @@ class ReaderEngine:
     def live_state(self) -> dict[str, str]:
         """Only values read in a recent frame. Masked and unreadable readers stay out."""
         frame = self._last_frame
-        if frame is None or self._clock() - frame.ts > MAX_FRAME_AGE_S:
+        if frame is None or self._clock() - frame.ts > MAX_FRAME_AGE_S or not self._watching():
             return {}
         state: dict[str, str] = {}
         for placed in self._placed:

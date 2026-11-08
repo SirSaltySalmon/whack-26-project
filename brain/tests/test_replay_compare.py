@@ -70,6 +70,8 @@ def test_normalize_drops_ids_and_geometry_at_any_depth_but_keeps_content() -> No
             "voice_style": "expressive",
             "memory_search": "keyword",
             "pacing": Pacing().model_dump(),
+            "paused": False,
+            "vision_enabled": True,
         },
         "personalities": ["supportive", "protective"],
         "voices": [{"name": "Ava"}],

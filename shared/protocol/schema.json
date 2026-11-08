@@ -1311,6 +1311,11 @@
         "pacing": {
           "$ref": "#/$defs/Pacing"
         },
+        "paused": {
+          "default": false,
+          "title": "Paused",
+          "type": "boolean"
+        },
         "personality": {
           "default": "supportive",
           "title": "Personality",
@@ -1319,6 +1324,11 @@
         "proactive": {
           "default": true,
           "title": "Proactive",
+          "type": "boolean"
+        },
+        "vision_enabled": {
+          "default": true,
+          "title": "Vision Enabled",
           "type": "boolean"
         },
         "voice_id": {

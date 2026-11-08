@@ -102,6 +102,11 @@
   color: var(--text-muted);
 }
 
+/* An action rather than a choice, so it reads as a sentence. */
+.option-plain {
+  text-transform: none;
+}
+
 .settings {
   position: absolute;
   inset: 0;
@@ -137,10 +142,78 @@
   right: 6px;
 }
 
-/* Beside settings rather than below it, so the smallest character still has room for the Wiki
-   button underneath. */
+/* Beside settings rather than below it, so the smallest character still has room for the pause,
+   mute and blind row underneath. */
 .avatar-chat {
   right: 36px;
+}
+
+/* Pause, mute and blind. Hidden like the other controls until hovered, except a pressed one, which
+   stays as a reminder of why the partner is quiet, deaf or blind. */
+.avatar-toggles {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  display: flex;
+  gap: 3px;
+  transform: translateX(-50%);
+}
+
+.avatar-toggle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+
+.avatar-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.avatar-hovered .avatar-toggle,
+.avatar-toggle[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.avatar-toggle[aria-pressed="true"] {
+  border-color: var(--reacting);
+  color: var(--reacting);
+}
+
+.avatar-toggle:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.avatar-hovered .avatar-toggle:disabled {
+  opacity: 0.6;
+}
+
+/* A small character would put the row over the resize corner, so it sits above it instead, and
+   narrower so it fits the smallest frame (75px). */
+@container (max-width: 116px) {
+  .avatar-toggles {
+    bottom: 22px;
+    gap: 2px;
+  }
+
+  .avatar-toggle {
+    width: 20px;
+  }
+}
+
+/* Dimmed while paused, so a quiet partner reads as paused rather than broken. */
+.avatar[data-paused] .avatar-art,
+.avatar[data-paused] .avatar-image {
+  opacity: 0.5;
 }
 
 /* Above cards, so a card dragged over the character can't bury a turn half typed. */

@@ -18,13 +18,7 @@ from pathlib import Path
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.events import Event, EventBus, ProfileUpdated, ReadersFailing
 from brain.learner.debug_samples import save_samples
-from brain.learner.regions import (
-    AgreedRegion,
-    RegionProposal,
-    agree,
-    build_spec,
-    region_prompt,
-)
+from brain.learner.regions import AgreedRegion, RegionProposal, agree, build_spec, region_prompt
 from brain.learner.validate import Sample, calibrate, propose_color, validate
 from brain.learner.zoom import Zoom, zoom_around, zoom_pass
 from brain.llm.base import LLMUnavailableError, VisionLLM
@@ -75,6 +69,7 @@ class GameLearner:
         *,
         ocr: OcrWorker | None = None,
         in_gameplay: Callable[[], bool] = lambda: True,
+        watching: Callable[[], bool] = lambda: True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._database = database
@@ -87,6 +82,8 @@ class GameLearner:
         self._config = config
         self._ocr = ocr
         self._in_gameplay = in_gameplay
+        # Off while the player has blinded the partner: then no frame goes to vision.
+        self._watching = watching
         self._clock = clock
         self.vision_calls = 0
         # The width and height of the images sent in the latest pass: boxes come back in them.
@@ -128,9 +125,9 @@ class GameLearner:
         if self.vision_calls >= self._config.max_vision_calls:
             return None
         frame = self._buffer.latest()
-        playing = frame is not None and now - frame.ts <= MAX_FRAME_AGE_S and self._in_gameplay()
-        if not playing:
-            # Nothing to learn from yet, such as before the game starts. Waiting costs nothing.
+        fresh = frame is not None and now - frame.ts <= MAX_FRAME_AGE_S
+        if not (fresh and self._watching() and self._in_gameplay()):
+            # Nothing to learn from, such as before play or while blinded. Waiting costs nothing.
             return None
         if self._readers_failing:
             return "readers keep failing"
@@ -207,6 +204,9 @@ class GameLearner:
 
     async def _ask(self, image: bytes, width: int, height: int) -> RegionProposal | None:
         """One vision call where the HUD is, or None once this session's budget is spent."""
+        if not self._watching():
+            # Blinded mid-pass, so not even the frames already taken are sent for a closer look.
+            return None
         if self.vision_calls >= self._config.max_vision_calls:
             log.info("Learner vision budget used up for this session")
             return None
@@ -236,7 +236,7 @@ class GameLearner:
 
     async def _gameplay_frame(self, previous: Frame | None) -> Frame | None:
         deadline = self._clock() + FRAME_WAIT_S
-        while self._clock() < deadline:
+        while self._clock() < deadline and self._watching():
             frame = self._buffer.latest()
             fresh = frame is not None and self._clock() - frame.ts <= MAX_FRAME_AGE_S
             new = frame is not None and (previous is None or frame.ts != previous.ts)

@@ -42,11 +42,11 @@ from brain.events import (
     PlayerSpeech,
     PlayerSpeechPartial,
     PlayerStartedSpeaking,
-    SettingsChanged,
 )
 from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.voice.barks import Bark
+from brain.voice.follow import follow_settings
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
@@ -160,22 +160,21 @@ class PipecatVoice:
             delta = ElevenLabsTTSService.Settings(**style_values(style))
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
-    async def _follow_style(self) -> None:
-        while True:
-            event = await self._settings_events.get()
-            if isinstance(event, SettingsChanged):
-                style = getattr(event.settings, "voice_style", None)
-                if isinstance(style, str):
-                    await self.set_style(style)
+    async def interrupt(self) -> None:
+        """Cuts off the line playing and any queued after it, as a barge-in does."""
+        await self._bridge.broadcast_interruption()
+        if self.bot_speaking:
+            await self.send(AvatarState(state="idle"))
 
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C
         await runner.add_workers(self._worker)
-        styles = asyncio.create_task(self._follow_style(), name="Voice style")
+        follow = follow_settings(self._settings_events, self)
+        settings = asyncio.create_task(follow, name="Voice settings")
         try:
             await runner.run()
         finally:
-            styles.cancel()
+            settings.cancel()
 
     async def send(self, message: BrainMessage) -> None:
         try:

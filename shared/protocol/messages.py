@@ -54,6 +54,12 @@ class Settings(BaseModel):
     # matches meaning with a local embedding model, and "hybrid" merges the two.
     memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
     pacing: Pacing = Field(default_factory=Pacing)
+    # Paused, the partner says nothing, but keeps listening, watching and taking notes. Never
+    # restored at startup, so a restart can't leave it silent with no idea why.
+    paused: bool = False
+    # Off, the partner stops watching the screen but keeps listening and talking. Never restored
+    # at startup, for the same reason as a pause.
+    vision_enabled: bool = True
 
 
 # --- Brain to overlay ---

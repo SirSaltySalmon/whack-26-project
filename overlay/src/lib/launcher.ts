@@ -30,6 +30,7 @@ export interface PartnerSettings {
   voice_id: string | null;
   /** Kept here so "Type instead" survives a restart, and changing another setting can't undo it. */
   mic_enabled: boolean;
+  /** Pausing and blinding are never kept here: the brain starts unpaused and seeing. */
   voice_style: VoiceStyle;
   memory_search: MemorySearch;
   pacing: FullPacing;

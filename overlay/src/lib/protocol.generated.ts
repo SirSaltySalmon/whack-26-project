@@ -63,8 +63,10 @@ export type AdviceQuietS = number;
 export type EventGapS = number;
 export type QuestionGapS = number;
 export type QuestionQuietS = number;
+export type Paused = boolean;
 export type Personality = string;
 export type Proactive = boolean;
+export type VisionEnabled = boolean;
 export type VoiceId = string | null;
 export type VoiceStyle = "expressive" | "classic";
 export type Type9 = "settings.state";
@@ -275,8 +277,10 @@ export interface Settings {
   memory_search?: MemorySearch;
   mic_enabled?: MicEnabled;
   pacing?: Pacing;
+  paused?: Paused;
   personality?: Personality;
   proactive?: Proactive;
+  vision_enabled?: VisionEnabled;
   voice_id?: VoiceId;
   voice_style?: VoiceStyle;
 }
