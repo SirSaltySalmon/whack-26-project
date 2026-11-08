@@ -61,6 +61,16 @@ class MacGameWindow:
                 found.append(AppWindow(owner, owner, str(window.get("kCGWindowName") or "")))
         return unique_apps(found)
 
+    def front_app(self) -> AppWindow | None:
+        """The app with the frontmost normal window, so the brain can spot the game as the player
+        switches to it."""
+        window = next((w for w in self._on_screen_windows() if self._is_normal(w)), None)
+        if window is None:
+            return None
+        owner = str(window.get("kCGWindowOwnerName") or "")
+        apps = unique_apps([AppWindow(owner, owner, str(window.get("kCGWindowName") or ""))])
+        return apps[0] if apps else None
+
     def _check(self) -> tuple[str, CropRegion | None]:
         if not self._process_name:
             return "GAME_PROCESS isn't set, so not capturing", None

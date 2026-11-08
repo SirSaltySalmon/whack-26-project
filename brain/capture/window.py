@@ -77,6 +77,17 @@ class GameWindow:
         self._user32.EnumWindows(callback, 0)
         return unique_apps(found)
 
+    def front_app(self) -> AppWindow | None:
+        """The app in front, so the brain can spot the game as the player switches to it."""
+        hwnd = self._user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        process_id = wintypes.DWORD()
+        self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        stem = self._process_stem(process_id.value)
+        apps = unique_apps([AppWindow(stem, stem, self._title(hwnd))]) if stem else []
+        return apps[0] if apps else None
+
     def _title(self, hwnd: int) -> str:
         length = self._user32.GetWindowTextLengthW(hwnd)
         if length <= 0:
@@ -180,5 +191,6 @@ def create_game_window(process_name: str) -> "GameWindow | MacGameWindow":
     return GameWindow(process_name)
 
 
-def list_app_windows() -> list[AppWindow]:
-    return create_game_window("").app_windows()
+def window_lister() -> "GameWindow | MacGameWindow":
+    """A window reader that watches no game, for listing apps and spotting the one in front."""
+    return create_game_window("")

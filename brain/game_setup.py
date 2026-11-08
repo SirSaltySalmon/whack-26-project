@@ -1,7 +1,8 @@
 """Works out which game is being played, so nothing in the brain has to assume one.
 
-GAME_PROCESS and GAME_TITLE still win when set. Without GAME_PROCESS, the player picks the game's
-window in the terminal before anything starts, since its frames go on to cloud models. Without
+GAME_PROCESS and GAME_TITLE still win when set. Without GAME_PROCESS, the game's window is found
+before anything starts (brain/game_detect.py): a game played here before if it's open, otherwise
+the window the player switches to. Without
 GAME_TITLE, the deep model names the game once per app, and the name is kept in `games_path` so
 memory stays filed under one title even when the window title changes each launch.
 """
@@ -15,8 +16,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ValidationError
 
 from brain.capture.apps import AppWindow
-from brain.capture.window import list_app_windows
+from brain.capture.window import window_lister
 from brain.config import Settings
+from brain.game_detect import DetectTiming, detect_game
 from brain.learner.brief import GameBrief, ask_brief
 from brain.llm.base import TextLLM
 from brain.memory.db import Database
@@ -48,62 +50,36 @@ def save_known(path: Path, known: KnownGames) -> None:
         log.exception("Couldn't save %s; the game will be picked or named again", path)
 
 
-def choose(
-    list_apps: Callable[[], list[AppWindow]],
-    last: str | None,
-    read_line: Callable[[], str],
-    write: Callable[[str], object],
-) -> AppWindow | None:
-    """Asks in the terminal until the player picks an app or skips. None means don't capture."""
-    while True:
-        apps = list_apps()
-        default = next((app for app in apps if app.process == last), None)
-        if apps:
-            write("\nWhich window is your game?\n")
-            for number, app in enumerate(apps, 1):
-                write(f"  {number}. {app.label}{'  (last time)' if app is default else ''}\n")
-            enter = f"Enter for {default.name}, " if default else "Enter to refresh, "
-            write(f"Type its number ({enter}r to refresh, q to skip capture): ")
-        else:
-            write("\nNo app windows found. Start the game, then press Enter (q to skip): ")
-        try:
-            answer = read_line().strip().lower()
-        except EOFError:
-            return None
-        if answer == "q":
-            return None
-        if answer == "" and default is not None:
-            return default
-        if answer.isdigit() and 1 <= int(answer) <= len(apps):
-            return apps[int(answer) - 1]
-        if answer not in ("", "r"):
-            write("That isn't one of the numbers.\n")
-
-
 def pick_game(
     settings: Settings,
-    list_apps: Callable[[], list[AppWindow]] = list_app_windows,
-    read_line: Callable[[], str] = input,
+    list_apps: Callable[[], list[AppWindow]] | None = None,
+    front_app: Callable[[], AppWindow | None] | None = None,
     write: Callable[[str], object] = sys.stdout.write,
     interactive: bool | None = None,
+    timing: DetectTiming | None = None,
 ) -> tuple[Settings, str]:
     """Settings with game_process set, and a hint that names the game to a model.
 
-    Blocking, so call it before the event loop starts: Ctrl+C can't interrupt input() on a thread.
+    Blocking, so call it before the event loop starts. In a terminal it waits for the player to
+    switch to the game. Without one, as when the Control Center starts the brain, it waits a
+    limited time and then falls back to the last pick, so the brain still comes up.
     """
     if settings.game_process:
         return settings, f'app "{settings.game_process}"'
+    if list_apps is None or front_app is None:
+        lister = window_lister()
+        list_apps, front_app = list_apps or lister.app_windows, front_app or lister.front_app
     known = load_known(settings.games_path)
-    if not (sys.stdin.isatty() if interactive is None else interactive):
-        # The Control Center starts the brain with stdin as a pipe, so nobody could answer.
-        if known.last:
+    remembered = list(dict.fromkeys([*([known.last] if known.last else []), *known.titles]))
+    in_terminal = sys.stdin.isatty() if interactive is None else interactive
+    if timing is None:
+        timing = DetectTiming(timeout_s=None if in_terminal else settings.game_detect_timeout_s)
+    app = detect_game(list_apps, front_app, remembered, write, timing)
+    if app is None:
+        if not in_terminal and known.last:
             log.info("Watching %s, the game picked last time", known.last)
             return settings.model_copy(update={"game_process": known.last}), f'app "{known.last}"'
-        log.warning("No game to watch: set the game process, or start the brain in a terminal")
-        return settings, ""
-    app = choose(list_apps, known.last, read_line, write)
-    if app is None:
-        log.warning("No game picked, so not capturing")
+        log.warning("No game found, so not capturing: set the game process, or switch to the game")
         return settings, ""
     known.last = app.process
     save_known(settings.games_path, known)

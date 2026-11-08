@@ -80,10 +80,14 @@ class Settings(BaseSettings):
     mic_device_index: int | None = None
     speaker_device_index: int | None = None
 
-    # The game's process name, such as Terraria. Unset, the player picks the game's window in the
-    # terminal at startup (brain/game_setup.py). Live capture stays off until there's one, because
-    # capturing without a window to crop to would send the whole desktop onward.
+    # The game's process name, such as Terraria. Unset, the brain finds the game's window at
+    # startup: one played before, or the one the player switches to (brain/game_detect.py). Live
+    # capture stays off until there's one, because capturing without a window to crop to would
+    # send the whole desktop onward.
     game_process: str = ""
+    # Without a terminal, how long to wait for the player to switch to the game before falling
+    # back to the last pick. The brain doesn't start until then.
+    game_detect_timeout_s: float = 60.0
     capture_fps: int = 5
     ring_buffer_seconds: int = 10
     ai_image_max_edge_px: int = 1280

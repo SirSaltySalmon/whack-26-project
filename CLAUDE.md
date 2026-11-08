@@ -97,7 +97,7 @@ Update this section as commands change. `uv` isn't installed on the main dev mac
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-python -m brain --live                     # run against the live game; asks which window if GAME_PROCESS is unset
+python -m brain --live                     # run against the live game; finds its window if GAME_PROCESS is unset
 python -m brain --live --type              # also take turns typed on stdin; `5: what's that` waits 5 s
 python -m brain --live --verbose           # same, with debug and library logs
 python -m brain --live --record            # also save a session to sessions/ for replay (screen data)
@@ -132,7 +132,7 @@ What to test next is in [docs/TEST_PLAN.md](docs/TEST_PLAN.md). Shared fakes are
 ## Environment Variables
 Keep these in a gitignored `.env`, and never hardcode keys.
 - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`. Without `ANTHROPIC_API_KEY` the brain doesn't watch the screen. Without `DEEPGRAM_API_KEY` it doesn't listen. Without the ElevenLabs two it replies in subtitles only.
-- `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` lists open app windows in the terminal and the player picks the game; the pick is kept in `data/games.json` and reused when there's no terminal, as when the Control Center starts the brain. Live capture stays off until there's a game.
+- `GAME_PROCESS`: the game's process name, such as `Terraria`. Unset, `--live` finds the game itself (`brain/game_detect.py`): a game picked before is taken at once if it's open, otherwise the brain takes the first window the player switches to that isn't a terminal, browser, launcher or the like. The pick is kept in `data/games.json`. Without a terminal, as when the Control Center starts the brain, it waits `game_detect_timeout_s` (60 s) for the switch, then falls back to the last pick. Live capture stays off until there's a game.
 - `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
 - Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
