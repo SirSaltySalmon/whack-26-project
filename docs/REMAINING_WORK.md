@@ -23,8 +23,8 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | **Done** in code and unit tests. The live 300 ms and barge-in checks are not run | 3 | WP0 |
 | [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | **Not done** | All | Keys, a game |
 | [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | **Done** in code and unit tests. Stage 1's live page checks are not run | 1, 3, 4 | WP0 |
-| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Not started** | 2, 3 | The WP4 merge, for the reader half |
-| [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Not started.** If time before freeze | Shared, 2 | Nothing |
+| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Done for barks** on `claude/night`: events carry `frame_ts`, and `Latency: frame to bark` splits noticing from speaking. Talker reactions aren't timed from the frame yet | 2, 3 | The WP4 merge, for the reader half |
+| [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Done** on `claude/night`: `look_back` in `brain/agent/rewind.py`. Not run live | Shared, 2 | Nothing |
 | [WP11](#wp11-proof-benchmarks-and-evals) | Latency report, loop-stall watch, accuracy evals | Numbers for the pitch, and regression checks | **Not started** | All | WP9, a live run |
 | [Conditional](#conditional-work) | Only if a test or a decision calls for it | — | **Don't start** | Various | Varies |
 

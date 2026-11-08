@@ -230,7 +230,7 @@ class Director:
         if bark is None:
             # Not generated yet, no ElevenLabs key, or no such line: react the slow way instead.
             await self._talk(event_prompt(action.event, action.data), query=action.event)
-        elif await play_bark(self._voice, bark, action.event, action.ts):
+        elif await play_bark(self._voice, bark, action):
             await self._said(bark.text)
 
     async def _speak(self, text: str, wait_s: float = 0.0) -> bool:
