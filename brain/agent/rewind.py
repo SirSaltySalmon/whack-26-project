@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from brain.agent.schemas import CANT_SEE, LOOK_BACK_PROMPT, LookBackInput, LookReply
+from brain.agent.schemas import BLINDED, CANT_SEE, LOOK_BACK_PROMPT, LookBackInput, LookReply
 from brain.agent.tools import Tool, TurnContext
 from brain.capture.ring_buffer import Frame, RingBuffer
 from brain.llm.base import VisionLLM
@@ -36,6 +36,9 @@ GAP_PX = 4
 BACKGROUND = 235
 LABEL_COLOR = (0, 0, 0)
 MAX_TOKENS = 1000  # The same room as look_closer's answer.
+# Claude shrinks an image past about 1.15 megapixels. A 2x2 sheet of 16:9 frames 1280 px wide
+# stays under that, so a wider one would only cost upload time, not show more.
+SHEET_MAX_EDGE_PX = 1280
 
 
 @dataclass(frozen=True)
@@ -129,12 +132,16 @@ class Rewind:
         vision: Callable[[], VisionLLM],
         padding_px: int,
         max_edge_px: int,
+        *,
+        watching: Callable[[], bool] = lambda: True,
     ) -> None:
         self._buffer = buffer
         self._display_scale = display_scale
         self._vision = vision
         self._padding_px = padding_px
-        self._max_edge_px = max_edge_px
+        self._max_edge_px = min(max_edge_px, SHEET_MAX_EDGE_PX)
+        # The player's vision setting. Blind means blind to the past few seconds as well.
+        self._watching = watching
 
     def tool(self, timeout_s: float) -> Tool:
         # Not quick: the filler line plays, and the turn survives a barge-in like look_closer.
@@ -149,6 +156,8 @@ class Rewind:
         )
 
     async def _look_back(self, arguments: LookBackInput, turn: TurnContext) -> str:
+        if not self._watching():
+            return BLINDED
         # From when they began speaking, because they ask after the moment, not during it.
         reference = turn.started_at if turn.started_at is not None else time.monotonic()
         moments = pick_moments(self._buffer, reference)

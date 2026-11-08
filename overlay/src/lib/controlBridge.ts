@@ -6,6 +6,12 @@ import type {
   MemoryAdminRequest,
   MemoryAdminResult,
   BrainDescription,
+  ContextPreview,
+  MemoryContext,
+  MemoryGames,
+  MemoryListGames,
+  MemoryQuery,
+  MemoryResults,
 } from "./protocol.generated.ts";
 
 export type ProcessState =
@@ -36,6 +42,34 @@ export interface KeyList {
 export type DescribeResult =
   { ok: true; description: BrainDescription } | { ok: false; error: string };
 
+// The generated types mark `type` optional because it has a default; here it's what routes.
+type Request<M extends { type?: string }> = Omit<M, "request_id" | "type"> & {
+  type: NonNullable<M["type"]>;
+};
+/** What memory can answer with the partner off. The main process adds the request id. */
+export type MemoryRequest =
+  Request<MemoryQuery> | Request<ContextPreview> | Request<MemoryListGames>;
+export type MemoryReply = MemoryResults | MemoryContext | MemoryGames;
+export type MemoryAnswer =
+  { ok: true; reply: MemoryReply } | { ok: false; error: string };
+
+/** The reply each memory request expects. */
+export const MEMORY_REPLY = {
+  "memory.query": "memory.results",
+  "memory.context_preview": "memory.context",
+  "memory.list_games": "memory.games",
+} as const satisfies Record<
+  MemoryRequest["type"],
+  NonNullable<MemoryReply["type"]>
+>;
+
+/** Checks the shape only; the brain validates every field again. */
+export function isMemoryRequest(value: unknown): value is MemoryRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const type: unknown = (value as { type?: unknown }).type;
+  return typeof type === "string" && Object.hasOwn(MEMORY_REPLY, type);
+}
+
 export interface ControlBridge {
   manageMemory(request: MemoryAdminRequest): Promise<MemoryAdminResult>;
   getConfig(): Promise<LauncherConfig>;
@@ -44,6 +78,8 @@ export interface ControlBridge {
   setKey(name: KeyName, value: string): Promise<KeyList>;
   clearKey(name: KeyName): Promise<KeyList>;
   describe(): Promise<DescribeResult>;
+  /** Reads memory with the partner off, through `python -m brain --memory`. */
+  memory(request: MemoryRequest): Promise<MemoryAnswer>;
   start(): Promise<ProcessSnapshot>;
   stop(): Promise<ProcessSnapshot>;
   getProcess(): Promise<ProcessSnapshot>;
@@ -62,6 +98,7 @@ export const CONTROL_IPC = {
   setKey: "control:set-key",
   clearKey: "control:clear-key",
   describe: "control:describe",
+  memory: "control:memory",
   start: "control:start",
   stop: "control:stop",
   getProcess: "control:get-process",

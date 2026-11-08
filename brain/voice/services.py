@@ -1,17 +1,31 @@
-"""Builds the vendor services PipecatVoice uses, so swapping one stays a change in one place."""
+"""Builds the vendor services PipecatVoice runs, so swapping a vendor stays a change in one place.
+
+Kept apart from pipecat_voice.py, which is at the file length limit.
+"""
 
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 
 from brain.config import Settings
 from brain.voice.style import style_values
 
 
-def make_stt(settings: Settings) -> DeepgramFluxSTTService:
-    if settings.deepgram_api_key is None:
-        raise ValueError("Speech recognition needs DEEPGRAM_API_KEY")
+def local_audio(settings: Settings, speaks: bool) -> LocalAudioTransport:
+    """The mic always; the speakers only when there's a voice to play."""
+    return LocalAudioTransport(
+        LocalAudioTransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=speaks,
+            input_device_index=settings.mic_device_index,
+            output_device_index=settings.speaker_device_index,
+        )
+    )
+
+
+def flux_stt(settings: Settings, api_key: str) -> DeepgramFluxSTTService:
     return DeepgramFluxSTTService(
-        api_key=settings.deepgram_api_key.get_secret_value(),
+        api_key=api_key,
         settings=DeepgramFluxSTTService.Settings(
             model=settings.stt_model,
             eot_threshold=settings.stt_eot_threshold,
@@ -21,11 +35,11 @@ def make_stt(settings: Settings) -> DeepgramFluxSTTService:
     )
 
 
-def make_tts(settings: Settings, voice_id: str, style: str) -> ElevenLabsTTSService:
-    if settings.elevenlabs_api_key is None:
-        raise ValueError("Speech needs ELEVENLABS_API_KEY")
+def elevenlabs_tts(
+    settings: Settings, api_key: str, voice_id: str, style: str
+) -> ElevenLabsTTSService:
     return ElevenLabsTTSService(
-        api_key=settings.elevenlabs_api_key.get_secret_value(),
+        api_key=api_key,
         settings=ElevenLabsTTSService.Settings(
             model=settings.tts_model, voice=voice_id, **style_values(style)
         ),

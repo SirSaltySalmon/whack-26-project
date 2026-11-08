@@ -37,7 +37,7 @@ export const SKINS = [
 
 export type SkinId = (typeof SKINS)[number]["id"];
 
-export const DEFAULT_SKIN: SkinId = "sticker";
+export const DEFAULT_SKIN: SkinId = "island";
 
 /** A saved value from another version, or a tampered one, falls back to the default. */
 export function parseSkin(value: unknown): SkinId {

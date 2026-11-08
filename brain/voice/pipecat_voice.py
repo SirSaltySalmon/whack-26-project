@@ -29,7 +29,6 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.workers.runner import WorkerRunner
 
 from brain.config import Settings
@@ -39,16 +38,16 @@ from brain.events import (
     PlayerSpeech,
     PlayerSpeechPartial,
     PlayerStartedSpeaking,
-    SettingsChanged,
 )
 from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.voice.barks import Bark
+from brain.voice.follow import follow_settings
 from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
-from brain.voice.services import make_stt, make_tts
+from brain.voice.services import elevenlabs_tts, flux_stt, local_audio
 from brain.voice.speech_fallback import SpeechFallback
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
@@ -91,15 +90,8 @@ class PipecatVoice:
         self._style: str = link.settings.voice_style
         # Subscribed now, so a style the Control Center sends on connect isn't missed.
         self._settings_events = bus.subscribe()
-        transport = LocalAudioTransport(
-            LocalAudioTransportParams(
-                audio_in_enabled=True,
-                audio_out_enabled=speaks,
-                input_device_index=settings.mic_device_index,
-                output_device_index=settings.speaker_device_index,
-            )
-        )
-        stt = make_stt(settings)
+        transport = local_audio(settings, speaks)
+        stt = flux_stt(settings, settings.deepgram_api_key.get_secret_value())
         self._bridge = TurnBridge(self)
         self._register_turn_events(stt)
 
@@ -109,8 +101,9 @@ class PipecatVoice:
             stt,
             self._bridge,
         ]
-        if speaks and voice_id:
-            tts = make_tts(settings, voice_id, self._style)
+        if settings.elevenlabs_api_key is not None and voice_id:
+            api_key = settings.elevenlabs_api_key.get_secret_value()
+            tts = elevenlabs_tts(settings, api_key, voice_id, self._style)
             processors += [tts, transport.output(), SpokenOutputTap(self)]
         pipeline = Pipeline(processors)
         self._worker = PipelineWorker(
@@ -166,22 +159,21 @@ class PipecatVoice:
             delta = ElevenLabsTTSService.Settings(**style_values(style))
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
-    async def _follow_style(self) -> None:
-        while True:
-            event = await self._settings_events.get()
-            if isinstance(event, SettingsChanged):
-                style = getattr(event.settings, "voice_style", None)
-                if isinstance(style, str):
-                    await self.set_style(style)
+    async def interrupt(self) -> None:
+        """Cuts off the line playing and any queued after it, as a barge-in does."""
+        await self._bridge.broadcast_interruption()
+        if self.bot_speaking:
+            await self.send(AvatarState(state="idle"))
 
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C
         await runner.add_workers(self._worker)
-        styles = asyncio.create_task(self._follow_style(), name="Voice style")
+        follow = follow_settings(self._settings_events, self)
+        settings = asyncio.create_task(follow, name="Voice settings")
         try:
             await runner.run()
         finally:
-            styles.cancel()
+            settings.cancel()
 
     async def send(self, message: BrainMessage) -> None:
         try:

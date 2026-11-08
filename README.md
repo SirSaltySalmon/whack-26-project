@@ -79,7 +79,9 @@ The **Console** tab shows the brain's log and the exact command it ran. **Memory
 
 Open the dashboard with `npm.cmd --prefix overlay run dev` in PowerShell. Leave **Start partner** unclicked to keep the brain off. Using `npm.cmd` also avoids PowerShell's script execution policy restriction.
 
-In **Memory**, with the brain stopped, you can add player facts, edit their values, or forget them. Corrections preserve the old fact's validity window; forgetting closes the fact and rejects the same guess in future. The list shows the newest 200 current facts across all games.
+In **Memory**, you can review saved facts, history, questions, session notes and the recall preview without starting the partner. Pick a game from the dropdown; the read-only helper uses no model, microphone or capture.
+
+Open **Add, edit or clear saved memory**, with the brain stopped, to add player facts, edit their values, or forget them. Corrections preserve the old fact's validity window; forgetting closes the fact and rejects the same guess in future. The list shows the newest 200 current facts across all games.
 
 **Clear all memory** requires typing `CLEAR`. It saves a database backup first, then clears all games' facts and history, questions, session notes, conversations/events, rejection records and derived vector indexes. Learned game profiles, dashboard settings and custom instructions are kept. Existing exported files, replay recordings and the backup still contain their original data; they are not used as live memory.
 

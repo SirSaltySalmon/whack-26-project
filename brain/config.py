@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Talker, player turns with tools, pointing and the progress scout. A model name starting with
     # "claude" runs on Anthropic, anything else on Gemini (brain/llm/factory.py).
     talker_model: str = "claude-haiku-5-5"
+    # Tips always think briefly first. This turns it on for replies and player turns too, which
+    # keeps reasoning out of what's said but costs time before the first word: measure it with
+    # scripts/latency_report.py before the demo.
+    talker_thinking: bool = False
     vision_model: str = "claude-haiku-5-5"
     # think_hard and session notes. Paid; falls back to deep_fallback_model without
     # ANTHROPIC_API_KEY. Effort is low, medium or high: medium keeps think_hard to a few seconds.
@@ -111,9 +115,8 @@ class Settings(BaseSettings):
     # Short, because the world may scroll away from whatever was pointed at.
     pointer_ttl_ms: int = 4000
 
-    # The question budget, so asking the player doesn't turn into nagging.
-    question_gap_s: float = 90.0
-    question_quiet_s: float = 20.0
+    # The gaps between event reactions, questions and tips are the player's pacing settings
+    # (Pacing in shared/protocol/messages.py), tuned in the Control Center's Pacing tab.
     # An asked question nobody answers is dropped for good: after this long with no reply started,
     # or after this many player turns that don't answer it. Typed replies get longer.
     question_answer_timeout_s: float = 20.0
@@ -121,12 +124,7 @@ class Settings(BaseSettings):
     question_max_turns: int = 2
     # Game-specific questions drafted once per game from the brief, then asked when unknown.
     planned_questions_max: int = 6
-    # Unasked-for tips on what to do next, only with hints on. 0 turns them off.
-    advice_gap_s: float = 180.0
-    advice_quiet_s: float = 20.0
-    # The first tip comes sooner than the gap, and sooner again once the partner learns where the
-    # player is up to.
-    advice_first_s: float = 90.0
+    # A tip comes this soon once the partner learns where the player is up to.
     advice_after_learning_s: float = 15.0
 
     # Names what memory is filed under. It's data, so the brain has no game-specific logic. Unset,

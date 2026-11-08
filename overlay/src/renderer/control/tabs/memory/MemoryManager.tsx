@@ -7,7 +7,7 @@ import type {
 import { Field, Notice, Section } from "../../components/ui.tsx";
 import { useControl } from "../../ControlContext.tsx";
 
-export function MemoryManager() {
+export function MemoryManager({ onUpdated }: { onUpdated: () => void }) {
   const { manageMemory, config } = useControl();
   const [data, setData] = useState<MemoryAdminResult | null>(null);
   const [error, setError] = useState("");
@@ -28,6 +28,7 @@ export function MemoryManager() {
         const result = await manageMemory(request);
         setData(result);
         if (request.operation !== "list") {
+          onUpdated();
           setMessage(
             result.backup
               ? `Memory cleared. Backup saved at ${result.backup}`
@@ -43,7 +44,7 @@ export function MemoryManager() {
         setBusy(false);
       }
     },
-    [manageMemory],
+    [manageMemory, onUpdated],
   );
   useEffect(() => {
     void run({ operation: "list" });

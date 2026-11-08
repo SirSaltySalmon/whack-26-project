@@ -1,64 +1,91 @@
-"""Tests the vision model's pointing (vision_model in config) on a real screenshot. One request.
+"""Evaluate pointing with one vision request per label.
 
-Usage: python scripts/check_pointing.py <screenshot.png> "the player's health" [out.png]
-Open the output image and check that the box lands on the target. Don't use a screenshot with
-anything private on it: free-tier content is used to improve Google's products.
+Usage: python scripts/check_pointing.py labels.json
+Use full-screen screenshots. Image paths are relative to the JSON file and points
+are [x, y] pixels measured from the top left of each original screenshot.
 """
 
+import argparse
 import asyncio
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import cv2  # noqa: E402
+from pydantic import BaseModel, Field, TypeAdapter  # noqa: E402
 
+from brain.agent.handlers import POINT_MAX_EDGE_PX, VISION_MAX_TOKENS  # noqa: E402
+from brain.agent.schemas import POINT_PROMPT, PointReply  # noqa: E402
+from brain.capture.ring_buffer import Frame  # noqa: E402
 from brain.config import Settings  # noqa: E402
-from brain.llm.base import PointTarget  # noqa: E402
 from brain.llm.factory import LLMFactory  # noqa: E402
-from brain.perception.coords import CropRegion, NormalizedBox, box_to_physical_rect  # noqa: E402
-
-PROMPT = (
-    "Locate this on the screenshot: {target}. Return label and box_2d as "
-    "[ymin, xmin, ymax, xmax], each from 0 to 1000 relative to the image size."
-)
+from brain.perception.closeup import Closeup, make_closeup  # noqa: E402
+from brain.perception.coords import box_to_physical_rect, pixel_box_to_normalized  # noqa: E402
 
 
-async def main(path: Path, target: str, out: Path) -> None:
-    settings = Settings()
-    image = cv2.imread(str(path))
+class Label(BaseModel):
+    image: Path
+    target: str = Field(min_length=1)
+    point: tuple[int, int]
+
+
+def load_labels(path: Path) -> list[Label]:
+    labels = TypeAdapter(list[Label]).validate_json(path.read_bytes())
+    if not labels:
+        raise ValueError("No labels in the input file")
+    for label in labels:
+        label.image = path.parent / label.image
+    return labels
+
+
+def prepare(label: Label, edge: int) -> Closeup:
+    image = cv2.imread(str(label.image))
     if image is None:
-        raise SystemExit(f"Could not read image: {path}")
+        raise ValueError(f"Could not read {label.image}")
     height, width = image.shape[:2]
+    x, y = label.point
+    if not (0 <= x < width and 0 <= y < height):
+        raise ValueError(f"{label.point} outside {width} x {height} screenshot {label.image}")
+    return make_closeup(Frame(0, image), 1, 0, edge)
 
-    scale = min(1.0, settings.ai_image_max_edge_px / max(height, width))
-    small = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    ok, encoded = cv2.imencode(".png", small)
-    if not ok:
-        raise SystemExit("Could not encode image")
 
-    started = time.monotonic()
-    result = (
-        await LLMFactory(settings)
-        .vision()
-        .vision_json(
-            PROMPT.format(target=target), encoded.tobytes(), "image/png", PointTarget, 2000
+def hits(reply: PointReply, image: Closeup, point: tuple[int, int]) -> bool:
+    if not reply.found:
+        return False
+    try:
+        box = pixel_box_to_normalized(reply.box_px, image.width, image.height)
+    except ValueError:
+        return False
+    rect = box_to_physical_rect(box, image.region)
+    x, y = point
+    return rect.x <= x <= rect.x + rect.width and rect.y <= y <= rect.y + rect.height
+
+
+async def main(path: Path) -> None:
+    labels = load_labels(path)
+    settings = Settings()
+    vision = LLMFactory(settings).vision()
+    edge = min(settings.closeup_max_edge_px, POINT_MAX_EDGE_PX)
+    count = 0
+    for label in labels:
+        image = await asyncio.to_thread(prepare, label, edge)
+        reply = await vision.vision_json(
+            POINT_PROMPT.format(width=image.width, height=image.height, target=label.target),
+            image.image,
+            "image/jpeg",
+            PointReply,
+            VISION_MAX_TOKENS,
+            detail="high",
         )
-    )
-    seconds = time.monotonic() - started
-
-    rect = box_to_physical_rect(NormalizedBox(*result.box_2d), CropRegion(0, 0, width, height))
-    top_left = (int(rect.x), int(rect.y))
-    bottom_right = (int(rect.x + rect.width), int(rect.y + rect.height))
-    cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), 3)
-    cv2.imwrite(str(out), image)
-    print(f"{result.label}: {result.box_2d} in {seconds:.2f}s. Saved {out}")
+        hit = hits(reply, image, label.point)
+        count += hit
+        print(f"{'hit' if hit else 'miss'} | {label.image.name} | {label.target} | {reply.box_px}")
+    print(f"Hit rate: {count}/{len(labels)} ({count / len(labels):.1%})")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        raise SystemExit(__doc__)
-    output = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("pointing_check.png")
-    asyncio.run(main(Path(sys.argv[1]), sys.argv[2], output))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("labels", type=Path)
+    asyncio.run(main(parser.parse_args().labels))

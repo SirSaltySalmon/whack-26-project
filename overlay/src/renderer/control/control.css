@@ -15,11 +15,11 @@
   --text: #e8e9ee;
   --text-muted: #8b8f9a;
   --text-faint: #5f636e;
-  --accent: #6ee7b7;
+  --accent: #f4f5f8;
   --accent-ink: #0b0d12;
-  --accent-soft: rgba(110, 231, 183, 0.1);
-  --accent-line: rgba(110, 231, 183, 0.45);
-  --focus-ring: 0 0 0 3px rgba(110, 231, 183, 0.16);
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-line: rgba(255, 255, 255, 0.45);
+  --focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.16);
   --info: #7cc7e8;
   --warn: #ffb84d;
   --danger: #f87171;
@@ -82,7 +82,7 @@ code {
 }
 
 ::selection {
-  background: rgba(110, 231, 183, 0.25);
+  background: rgba(255, 255, 255, 0.25);
 }
 
 :focus-visible {

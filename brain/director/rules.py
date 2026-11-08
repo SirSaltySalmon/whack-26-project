@@ -2,10 +2,16 @@
 
 An LLM never decides this. Models only choose what to do inside a turn these rules started.
 
-Questions and tips wait for a quiet stretch, measured from the player's last turn and the partner's
-last spoken line. Game events don't count by themselves: the observer reports them all through
-active play, so counting them meant the partner almost never found a moment to ask or advise. A
-reaction to one counts once it's actually said, which the director reports with PartnerSpoke.
+Tips, and questions if the player's pacing asks for it, wait for a quiet stretch, measured from
+the player's last turn and the partner's last spoken line. Game events don't count by themselves:
+the observer reports them all through active play, so counting them meant the partner almost never
+found a moment to ask or advise. A reaction counts once it's actually said, which the director
+reports with PartnerSpoke.
+
+Paused (`Settings.paused`), nothing starts speech except a voice preview the player asked for.
+Everything else still runs, so the partner keeps hearing, watching and taking notes. Questions stay
+in memory's queue rather than being asked into silence, and the first tick after unpausing asks the
+next one: unpausing is the player saying they're ready to talk again.
 """
 
 from collections.abc import Mapping
@@ -24,6 +30,7 @@ from brain.events import (
     VoicePreviewRequested,
 )
 from brain.latency import Origin
+from shared.protocol.messages import Pacing
 
 # Names the observer's tracker publishes. They describe any game, so this stays game-agnostic.
 _DANGER_RISING = frozenset({"danger_started", "danger_high"})
@@ -96,31 +103,50 @@ class CancelSpeech:
 
 
 @dataclass(frozen=True)
+class StopSpeaking:
+    """The player paused the partner. Unlike CancelSpeech, this also stops a turn running a tool."""
+
+
+@dataclass(frozen=True)
 class SetVoice:
     voice_id: str | None
 
 
 Action = (
-    Say | AskTalker | ReactToEvent | PlayBark | AskQuestion | GiveAdvice | CancelSpeech | SetVoice
+    Say
+    | AskTalker
+    | ReactToEvent
+    | PlayBark
+    | AskQuestion
+    | GiveAdvice
+    | CancelSpeech
+    | StopSpeaking
+    | SetVoice
 )
+
+
+_PACING = Pacing()
 
 
 @dataclass
 class DirectorState:
-    bark_cooldown_s: float = 8.0
-    question_gap_s: float = 90.0
-    question_quiet_s: float = 20.0
+    # The gaps and quiet stretches default to the player's pacing settings, which replace them
+    # whenever settings change.
+    bark_cooldown_s: float = _PACING.event_gap_s
+    question_gap_s: float = _PACING.question_gap_s
+    question_quiet_s: float = _PACING.question_quiet_s
     last_bark_at: float | None = None
     last_question_at: float | None = None
     # Tips get old faster than curiosity does, so they're rarer than questions. A 0 gap turns them
     # off. The first comes sooner than the gap, and sooner again once the partner learns where the
     # player stands, because that's when a tip can be about their game rather than generic.
-    advice_gap_s: float = 180.0
-    advice_quiet_s: float = 20.0
-    advice_first_s: float = 90.0
+    advice_gap_s: float = _PACING.advice_gap_s
+    advice_quiet_s: float = _PACING.advice_quiet_s
+    advice_first_s: float = _PACING.advice_first_s
     advice_after_learning_s: float = 15.0
     # When the next tip is due. None until the overlay connects.
     next_advice_at: float | None = None
+    last_advice_at: float | None = None
     # The player's last turn or the partner's last spoken line. Connecting sets it too, so nothing
     # is asked the moment the player arrives. Assigned rather than maxed, so it follows the latest.
     last_talk_at: float | None = None
@@ -130,6 +156,11 @@ class DirectorState:
     greeted: bool = False
     # GameEvent name -> LineKind. Events not listed here go to the talker.
     bark_events: Mapping[str, str] = field(default_factory=dict)
+    paused: bool = False
+    # The player turned the partner's vision off, so a tip can't point.
+    blind: bool = False
+    # Set by unpausing, and cleared once a question is asked.
+    ask_on_resume: bool = False
 
 
 def _quiet(ts: float, state: DirectorState, needed_s: float) -> bool:
@@ -139,6 +170,10 @@ def _quiet(ts: float, state: DirectorState, needed_s: float) -> bool:
 
 
 def _may_ask(ts: float, state: DirectorState) -> bool:
+    if state.ask_on_resume:
+        # No quiet stretch or gap needed: the player just asked it to talk again. Danger still
+        # waits, since a question then would distract them.
+        return state.greeted and not state.in_danger
     if not _quiet(ts, state, state.question_quiet_s):
         return False
     return state.last_question_at is None or ts - state.last_question_at >= state.question_gap_s
@@ -155,6 +190,22 @@ def _may_advise(ts: float, state: DirectorState) -> bool:
     return asked is None or ts - asked >= state.advice_quiet_s
 
 
+def apply_pacing(state: DirectorState, pacing: Pacing, ts: float | None = None) -> None:
+    """Takes the player's pacing settings. With `ts`, a tip already scheduled further out than
+    the new timing allows is brought forward, so a shorter gap is felt now rather than after the
+    old one. A longer gap leaves it be: like learning, a change only ever makes a tip sooner."""
+    state.bark_cooldown_s = pacing.event_gap_s
+    state.question_gap_s = pacing.question_gap_s
+    state.question_quiet_s = pacing.question_quiet_s
+    state.advice_gap_s = pacing.advice_gap_s
+    state.advice_quiet_s = pacing.advice_quiet_s
+    state.advice_first_s = pacing.advice_first_s
+    if ts is None or state.next_advice_at is None or pacing.advice_gap_s <= 0:
+        return
+    wait = pacing.advice_first_s if state.last_advice_at is None else pacing.advice_gap_s
+    state.next_advice_at = min(state.next_advice_at, ts + wait)
+
+
 def _learned_where_they_stand(event: FactLearned) -> bool:
     return event.subject.casefold() == _PROGRESS_SUBJECT or event.source == _PLAYER_SOURCE
 
@@ -169,7 +220,7 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 return []
             state.greeted = True
             state.next_advice_at = event.ts + state.advice_first_s
-            return [Say("Brain connected.")]
+            return [] if state.paused else [Say("Brain connected.")]
         case PlayerStartedSpeaking():
             state.last_talk_at = event.ts
             state.turn_started_at = event.ts
@@ -177,6 +228,9 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
         case PlayerSpeech():
             state.last_talk_at = event.ts
             started_at, state.turn_started_at = state.turn_started_at, None
+            if state.paused:
+                # Heard and noted by memory, which reads the bus itself, but not answered.
+                return []
             return [AskTalker(event.transcript, started_at)]
         case PartnerSpoke():
             state.last_talk_at = event.ts
@@ -192,6 +246,8 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 state.in_danger = True
             elif event.name == _DANGER_OVER:
                 state.in_danger = False
+            if state.paused:
+                return []
             cooling = (
                 state.last_bark_at is not None
                 and event.ts - state.last_bark_at < state.bark_cooldown_s
@@ -205,17 +261,35 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 return [PlayBark(kind, event.name, event.data, ts=event.ts, origin=origin)]
             return [ReactToEvent(event.name, event.data, origin=origin)]
         case Tick():
+            if state.paused:
+                return []
             # Questions first: an answer makes the next tip better.
             if _may_ask(event.ts, state):
                 state.last_question_at = event.ts
+                state.ask_on_resume = False
                 return [AskQuestion()]
             if _may_advise(event.ts, state):
+                state.last_advice_at = event.ts
                 state.next_advice_at = event.ts + state.advice_gap_s
                 return [GiveAdvice()]
             return []
         case SettingsChanged():
+            pacing = getattr(event.settings, "pacing", None)
+            if isinstance(pacing, Pacing):
+                apply_pacing(state, pacing, event.ts)
             # Sending the current voice again is harmless, so this needs no change tracking.
-            return [SetVoice(getattr(event.settings, "voice_id", None))]
+            actions: list[Action] = [SetVoice(getattr(event.settings, "voice_id", None))]
+            paused = bool(getattr(event.settings, "paused", False))
+            if paused and not state.paused:
+                actions.append(StopSpeaking())
+            elif state.paused and not paused:
+                state.ask_on_resume = True
+            state.paused = paused
+            state.blind = not getattr(event.settings, "vision_enabled", True)
+            if state.blind:
+                # Blind, it can't know a fight is still on, so it stops holding back for one.
+                state.in_danger = False
+            return actions
         case VoicePreviewRequested():
             # A plain Say, so it's skipped while the partner is talking and never interrupts.
             return [Say(event.text)]

@@ -17,6 +17,15 @@
   font-size: 13.5px;
 }
 
+/* Wide enough for "Title · 12 facts · playing now"; the search keeps the rest. */
+.mem-game.cc-input {
+  flex: 0 1 260px;
+  min-width: 160px;
+  height: 36px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
 .mem-meta,
 .mem-stats {
   font-family: var(--mono);

@@ -6,14 +6,32 @@ import type {
   MemorySearch,
   Settings,
   VoiceOption,
+  VoiceStyle,
 } from "../../lib/protocol.generated.ts";
+import { Dropdown, type DropdownOption } from "./Dropdown.tsx";
 
-const MEMORY_SEARCH_CHOICES: readonly { mode: MemorySearch; label: string }[] =
-  [
-    { mode: "keyword", label: "Keywords" },
-    { mode: "hybrid", label: "Both" },
-    { mode: "semantic", label: "Meaning" },
-  ];
+type OnOff = "on" | "off";
+
+const HINT_CHOICES: readonly DropdownOption<OnOff>[] = [
+  { value: "on", label: "Offer hints" },
+  { value: "off", label: "Just chat" },
+];
+
+const MIC_CHOICES: readonly DropdownOption<OnOff>[] = [
+  { value: "on", label: "Listen" },
+  { value: "off", label: "Type instead" },
+];
+
+const VOICE_STYLE_CHOICES: readonly DropdownOption<VoiceStyle>[] = [
+  { value: "expressive", label: "Expressive" },
+  { value: "classic", label: "Classic" },
+];
+
+const MEMORY_SEARCH_CHOICES: readonly DropdownOption<MemorySearch>[] = [
+  { value: "keyword", label: "Keywords" },
+  { value: "hybrid", label: "Both" },
+  { value: "semantic", label: "Meaning" },
+];
 
 export interface SettingsChoices {
   settings: Settings;
@@ -24,8 +42,6 @@ export interface SettingsChoices {
 interface SettingsFieldsProps {
   choices: SettingsChoices;
   onChange(settings: Settings): void;
-  /** The Control Center offers "default", which leaves the voice to ELEVENLABS_VOICE_ID. */
-  allowDefaultVoice?: boolean;
 }
 
 export function Choice({
@@ -50,14 +66,10 @@ export function Choice({
 }
 
 /**
- * Buttons only, so changing a setting in the overlay never takes the keyboard from the game.
- * Shared by the overlay's settings card and the Control Center's Agent tab.
+ * Dropdowns built from buttons, so changing a setting in the overlay never takes the keyboard
+ * from the game. Shared by the overlay's settings card and the Control Center's Agent tab.
  */
-export function SettingsFields({
-  choices,
-  onChange,
-  allowDefaultVoice = false,
-}: SettingsFieldsProps) {
+export function SettingsFields({ choices, onChange }: SettingsFieldsProps) {
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
   const micEnabled = settings.mic_enabled ?? true;
@@ -67,91 +79,69 @@ export function SettingsFields({
     <>
       <h3 className="settings-heading">Hints</h3>
       <div className="settings-row">
-        <Choice
-          label="Offer hints"
-          on={proactive}
-          onClick={() => onChange({ ...settings, proactive: true })}
-        />
-        <Choice
-          label="Just chat"
-          on={!proactive}
-          onClick={() => onChange({ ...settings, proactive: false })}
+        <Dropdown
+          label="Hints"
+          value={proactive ? "on" : "off"}
+          options={HINT_CHOICES}
+          onChange={(hints) =>
+            onChange({ ...settings, proactive: hints === "on" })
+          }
         />
       </div>
       {/* Off, the partner still watches and talks; the player answers in the overlay's text box. */}
       <h3 className="settings-heading">Microphone</h3>
       <div className="settings-row">
-        <Choice
-          label="Listen"
-          on={micEnabled}
-          onClick={() => onChange({ ...settings, mic_enabled: true })}
-        />
-        <Choice
-          label="Type instead"
-          on={!micEnabled}
-          onClick={() => onChange({ ...settings, mic_enabled: false })}
+        <Dropdown
+          label="Microphone"
+          value={micEnabled ? "on" : "off"}
+          options={MIC_CHOICES}
+          onChange={(mic) =>
+            onChange({ ...settings, mic_enabled: mic === "on" })
+          }
         />
       </div>
       <h3 className="settings-heading">Personality</h3>
       <div className="settings-row">
-        {personalities.map((name) => (
-          <Choice
-            key={name}
-            label={name}
-            on={settings.personality === name}
-            onClick={() => onChange({ ...settings, personality: name })}
-          />
-        ))}
+        <Dropdown
+          label="Personality"
+          value={settings.personality}
+          options={personalities.map((name) => ({ value: name, label: name }))}
+          onChange={(personality) => onChange({ ...settings, personality })}
+        />
       </div>
-      {(voices.length > 0 || allowDefaultVoice) && (
+      {voices.length > 0 && (
         <>
           <h3 className="settings-heading">Voice</h3>
           <div className="settings-row">
-            {allowDefaultVoice && (
-              <Choice
-                label="Default"
-                on={!settings.voice_id}
-                onClick={() => onChange({ ...settings, voice_id: null })}
-              />
-            )}
-            {voices.map((voice) => (
-              <Choice
-                key={voice.id}
-                label={voice.name}
-                on={settings.voice_id === voice.id}
-                onClick={() => onChange({ ...settings, voice_id: voice.id })}
-              />
-            ))}
+            <Dropdown
+              label="Voice"
+              value={settings.voice_id}
+              options={voices.map((voice) => ({
+                value: voice.id,
+                label: voice.name,
+              }))}
+              onChange={(voice_id) => onChange({ ...settings, voice_id })}
+            />
           </div>
         </>
       )}
       <h3 className="settings-heading">Voice tone</h3>
       <div className="settings-row">
-        <Choice
-          label="Expressive"
-          on={style === "expressive"}
-          onClick={() => onChange({ ...settings, voice_style: "expressive" })}
-        />
-        <Choice
-          label="Classic"
-          on={style === "classic"}
-          onClick={() => onChange({ ...settings, voice_style: "classic" })}
+        <Dropdown
+          label="Voice tone"
+          value={style}
+          options={VOICE_STYLE_CHOICES}
+          onChange={(voice_style) => onChange({ ...settings, voice_style })}
         />
       </div>
-      <p className="settings-hint">
-        Expressive varies pitch and pace with what's said. Classic is the
-        original steadier voice. Applies from the next line.
-      </p>
       <h3 className="settings-heading">Memory search</h3>
       <div className="settings-row">
-        {MEMORY_SEARCH_CHOICES.map(({ mode, label }) => (
-          <Choice
-            key={mode}
-            label={label}
-            on={memorySearch === mode}
-            onClick={() => onChange({ ...settings, memory_search: mode })}
-          />
-        ))}
+        <Dropdown
+          label="Memory search"
+          value={memorySearch}
+          options={MEMORY_SEARCH_CHOICES}
+          onChange={(memory_search) => onChange({ ...settings, memory_search })}
+        />
       </div>
       <p className="settings-hint">
         How the partner finds what it remembers about your words. Meaning also

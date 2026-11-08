@@ -3,7 +3,7 @@ import { Notice, Section } from "../../components/ui.tsx";
 import { useControl } from "../../ControlContext.tsx";
 
 export function InstructionsEditor() {
-  const { config, changeSettings, connected } = useControl();
+  const { config, choices, changeSettings, connected } = useControl();
   const saved = config.settings.custom_instructions;
   const [draft, setDraft] = useState(saved);
   const [done, setDone] = useState(false);
@@ -30,7 +30,7 @@ export function InstructionsEditor() {
         className="cc-button"
         type="button"
         onClick={() => {
-          changeSettings({ ...config.settings, custom_instructions: draft });
+          changeSettings({ ...choices.settings, custom_instructions: draft });
           setDone(true);
         }}
       >

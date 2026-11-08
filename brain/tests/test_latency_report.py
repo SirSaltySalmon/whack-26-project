@@ -37,6 +37,7 @@ MESSAGES = [
 EVERY_KIND = {
     Kind("player turn"): [1430.0],
     Kind("event to bark"): [150.0],
+    Kind("event to bark", "health_low"): [150.0],
     Kind("end of turn to first audio"): [820.0],
     Kind("frame to bark", "reader"): [840.0],
     Kind("frame to bark", "reader", "noticed"): [690.0],
@@ -81,8 +82,52 @@ def test_frame_times_split_by_source_with_their_parts() -> None:
 
 def test_rows_follow_the_kind_order_whatever_order_the_log_is_in() -> None:
     labels = [row[0] for row in table_rows(parse_lines(reversed(MESSAGES)))]
-    assert labels[:3] == ["player turn", "event to bark", "end of turn to first audio"]
-    assert labels[3].startswith("frame to bark") and labels[-1].startswith("frame to first audio")
+    assert labels[:4] == [
+        "player turn",
+        "event to bark",
+        "event to bark (health_low)",
+        "end of turn to first audio",
+    ]
+    assert labels[4].startswith("frame to bark") and labels[-1].startswith("frame to first audio")
+
+
+def test_barks_get_a_row_per_event_after_their_total() -> None:
+    samples = parse_lines(
+        [
+            "Latency: event to bark 0 ms (danger_started)",
+            "Latency: event to bark 26 ms (health_low)",
+            "Latency: event to bark 40 ms (health_low)",
+        ]
+    )
+    assert [row[0] for row in table_rows(samples)] == [
+        "event to bark",
+        "event to bark (danger_started)",
+        "event to bark (health_low)",
+    ]
+    assert samples.latency[Kind("event to bark")] == [0.0, 26.0, 40.0]
+    assert samples.latency[Kind("event to bark", "health_low")] == [26.0, 40.0]
+
+
+def test_a_measurement_the_console_wrapped_still_counts() -> None:
+    # Windows PowerShell 5 wraps long lines at the console width, around noisy stderr.
+    log = """02:44:05 Latency: event to
+    bark 0 ms
+    (danger_started)
+    Latency: event to bark UNKNOWN ms
+    noisy stderr
+    02:44:06 Latency: frame to first audio 2950 ms (danger_started from observer: noticed in
+    2400, spoke in 550)
+    Event loop
+    stalled 340 ms"""
+    samples = parse_lines(log.splitlines())
+    assert samples.latency == {
+        Kind("event to bark"): [0.0],
+        Kind("event to bark", "danger_started"): [0.0],
+        Kind("frame to first audio", "observer"): [2950.0],
+        Kind("frame to first audio", "observer", "noticed"): [2400.0],
+        Kind("frame to first audio", "observer", "spoke"): [550.0],
+    }
+    assert samples.stalls == [340.0]
 
 
 def test_nearest_rank_percentiles_on_a_known_list() -> None:

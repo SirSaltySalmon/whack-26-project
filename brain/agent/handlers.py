@@ -17,6 +17,7 @@ from typing import Protocol
 from brain.agent.memory_tools import PlayerMemory, memory_tools
 from brain.agent.rewind import Rewind
 from brain.agent.schemas import (
+    BLINDED,
     CANT_SEE,
     DEEP_SYSTEM,
     LOOK_PROMPT,
@@ -40,7 +41,7 @@ from brain.perception.coords import box_to_dip_rect, pixel_box_to_normalized
 from brain.research import WikiResearch, card_message
 from brain.research.open_page import NOTHING_OPEN, OpenPage
 from shared.protocol import BrainMessage
-from shared.protocol.messages import CardShow, PointerFly
+from shared.protocol.messages import CardShow, PointerFly, Settings
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ DEEP_TIMEOUT_S = 25.0
 class Overlay(Protocol):
     @property
     def display_scale(self) -> float: ...
+
+    # The player's settings, for whether they've turned the partner's vision off.
+    @property
+    def settings(self) -> Settings: ...
 
     async def send(self, message: BrainMessage) -> None: ...
 
@@ -121,6 +126,7 @@ class AgentTools:
                     self._look_vision,
                     self._limits.mask_padding_px,
                     self._limits.closeup_max_edge_px,
+                    watching=self._watching,
                 ).tool(VISION_TIMEOUT_S),
                 Tool(
                     "point_at",
@@ -166,6 +172,10 @@ class AgentTools:
             ]
         )
 
+    def _watching(self) -> bool:
+        """Off when the player blinds the partner: then no tool sends a frame to vision."""
+        return self._overlay.settings.vision_enabled
+
     def _fresh(self, frame: Frame | None) -> Frame | None:
         latest = self._buffer.latest()
         if frame is None or latest is None:
@@ -187,6 +197,8 @@ class AgentTools:
         )
 
     async def _look_closer(self, arguments: LookInput, turn: TurnContext) -> str:
+        if not self._watching():
+            return BLINDED
         wanted = (
             self._buffer.nearest(turn.started_at)
             if turn.started_at is not None
@@ -207,6 +219,8 @@ class AgentTools:
         return reply.as_result()
 
     async def _point_at(self, arguments: PointInput, _turn: TurnContext) -> str:
+        if not self._watching():
+            return BLINDED
         # The newest frame, not the one from when they spoke: the pointer lands on the screen now.
         frame = self._fresh(self._buffer.latest())
         if frame is None:

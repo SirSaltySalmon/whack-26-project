@@ -1,6 +1,11 @@
 import { useCallback, useReducer, useRef, useState } from "react";
 import { logger } from "../lib/logger.ts";
-import type { Brain, CardShow, State } from "../lib/protocol.generated.ts";
+import type {
+  Brain,
+  CardShow,
+  Settings,
+  State,
+} from "../lib/protocol.generated.ts";
 import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
@@ -177,6 +182,10 @@ export function App() {
           })
       : null;
 
+  const sendSettings = (settings: Settings): void => {
+    link.socket?.send({ type: "settings.update", settings });
+  };
+
   return (
     <>
       <DebugRegions regions={feed.debugRegions} viewport={viewport} />
@@ -186,9 +195,11 @@ export function App() {
         look={avatars.look}
         onFrame={setAvatarFrame}
         onFrameEnd={savedAvatarFrame.save}
-        onOpenWiki={reopenWiki}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenChat={link.connected ? () => setChatOpen(true) : null}
+        // The last state stays in the feed after a disconnect, but nothing would hear a click.
+        settings={link.connected ? (feed.settings?.settings ?? null) : null}
+        onSettings={sendSettings}
       />
 
       {cards.map((card) => {
@@ -250,9 +261,8 @@ export function App() {
           skin={skin}
           frame={clampFrame(settingsFrame, viewport)}
           onFrame={setSettingsFrame}
-          onChange={(settings) =>
-            link.socket?.send({ type: "settings.update", settings })
-          }
+          onChange={sendSettings}
+          onReopenWiki={reopenWiki}
           onClose={() => setSettingsOpen(false)}
         />
       )}

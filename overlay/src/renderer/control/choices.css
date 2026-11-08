@@ -146,6 +146,24 @@
   grid-column: 2;
 }
 
+/* Here a dropdown reads as a field, like the text boxes in the tabs, rather than a pill. */
+.cc-settings .dropdown {
+  width: 240px;
+}
+
+.cc-settings .dropdown-trigger,
+.cc-settings .dropdown-trigger:hover {
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+}
+
+.cc-settings .dropdown-trigger:hover,
+.cc-settings .dropdown-trigger[aria-expanded="true"] {
+  border-color: var(--border-hover);
+}
+
 .settings-hint {
   max-width: 68ch;
   color: var(--text-muted);

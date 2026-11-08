@@ -172,6 +172,15 @@ def test_narration_about_the_player_is_never_spoken() -> None:
     # "player" on its own, such as another player, is fine; only "the player" is narration.
     assert drop_narration("Another player built that.") == "Another player built that."
     assert drop_narration("The player is low on health.") == ""
+    # Facts in the wiki's own words are kept, even as the whole answer.
+    wiki = "The player can craft a workbench from wood. You'll need ten."
+    assert drop_narration(wiki) == wiki
+    assert drop_narration("The player must defeat the boss first.") != ""
+    # Only the opening is checked, where reasoning leaks; later lines are the answer.
+    later = "Good news. The player is immune to lava with that charm."
+    assert drop_narration(later) == later
+    opening = "The player is new. The player has no gear yet. Grab some wood first."
+    assert drop_narration(opening) == "Grab some wood first."
 
 
 async def test_a_reply_that_is_only_narration_stays_quiet() -> None:

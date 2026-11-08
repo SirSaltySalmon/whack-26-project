@@ -44,6 +44,16 @@ def test_two_frames_in_a_row_confirm_danger() -> None:
     assert changes[0].data == {"level": "medium", "threats": ["Skeleton"]}
 
 
+def test_forgetting_drops_a_fight_so_one_still_going_is_confirmed_again() -> None:
+    # Called when the partner is blinded: what it saw before doesn't hold once it looks again.
+    tracker = ObservationTracker()
+    assert feed(tracker, fight(), fight()) == ["danger_started"]
+    tracker.forget()
+    assert tracker.danger is None
+    assert tracker.live_state(2.0) == {"screen": "can't see the game right now"}
+    assert feed(tracker, fight(), fight(), start=3.0) == ["danger_started"]
+
+
 def test_low_danger_never_raises_an_event() -> None:
     low = frame(danger_level="low", threats=["jellyfish in the water"])
     assert feed(ObservationTracker(), low, low, low, low) == []

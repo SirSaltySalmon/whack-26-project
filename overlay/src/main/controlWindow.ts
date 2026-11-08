@@ -5,12 +5,18 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from "electron";
-import { CONTROL_IPC } from "../lib/controlBridge.ts";
+import { CONTROL_IPC, isMemoryRequest } from "../lib/controlBridge.ts";
 import { isKeyName } from "../lib/launcher.ts";
 import { logger } from "../lib/logger.ts";
-import { BrainProcess, describeBrain } from "./brainProcess.ts";
+import {
+  BrainProcess,
+  describeBrain,
+  pythonFor,
+  repoRoot,
+} from "./brainProcess.ts";
 import { manageMemory } from "./memoryAdmin.ts";
 import { ConfigStore } from "./configStore.ts";
+import { MemoryReader } from "./memoryReader.ts";
 import { KeyStore } from "./secrets.ts";
 
 export interface ControlCenter {
@@ -58,6 +64,10 @@ export function createControlWindow(): ControlCenter {
 function wireIpc(win: BrowserWindow, brain: BrainProcess): void {
   const config = new ConfigStore();
   const keys = new KeyStore();
+  const memory = new MemoryReader(() => ({
+    python: pythonFor(config.get()),
+    cwd: repoRoot(),
+  }));
   const ours = (event: IpcMainInvokeEvent | IpcMainEvent): boolean =>
     event.sender === win.webContents;
 
@@ -95,6 +105,11 @@ function wireIpc(win: BrowserWindow, brain: BrainProcess): void {
     isKeyName(name) ? keys.clear(name) : keys.list(),
   );
   handle(CONTROL_IPC.describe, () => describeBrain(config.get()));
+  handle(CONTROL_IPC.memory, (request) =>
+    isMemoryRequest(request)
+      ? memory.ask(request)
+      : { ok: false, error: "Not a memory request" },
+  );
   handle(CONTROL_IPC.start, async () => {
     if (maintaining) throw new Error("Wait for memory maintenance to finish");
     const current = config.get();
@@ -119,6 +134,7 @@ function wireIpc(win: BrowserWindow, brain: BrainProcess): void {
   brain.onLines = (lines) => toWindow(CONTROL_IPC.logs, lines);
 
   win.on("closed", () => {
+    memory.stop();
     for (const channel of Object.values(CONTROL_IPC)) {
       ipcMain.removeHandler(channel);
       ipcMain.removeAllListeners(channel);

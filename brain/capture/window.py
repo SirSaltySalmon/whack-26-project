@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from brain.capture.apps import AppWindow, unique_apps
+from brain.capture.apps import AppWindow, title_names_game, unique_apps
 from brain.capture.window_mac import MacGameWindow
 from brain.perception.coords import CropRegion
 
@@ -113,24 +113,39 @@ class GameWindow:
         return f"capturing {region.width}x{region.height}", region
 
     def _find_window(self) -> int | None:
-        found: list[int] = []
+        """The game's window by its exe's stem, else by a title that starts with the same name."""
+        by_process: list[int] = []
+        by_title: list[tuple[int, AppWindow]] = []
 
         def check(hwnd: int, _: int) -> bool:
-            if self._is_game_window(hwnd):
-                found.append(hwnd)
+            if not self._user32.IsWindowVisible(hwnd) or self._user32.GetWindow(hwnd, _GW_OWNER):
+                return True
+            process_id = wintypes.DWORD()
+            self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+            stem = self._process_stem(process_id.value)
+            if stem == self._process_name:
+                by_process.append(hwnd)
                 return False
+            app = AppWindow(stem, stem, self._title(hwnd)) if stem else None
+            if app and not by_title and title_names_game(self._process_name, app):
+                by_title.append((hwnd, app))
             return True
 
         callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(check)
         self._user32.EnumWindows(callback, 0)
-        return found[0] if found else None
-
-    def _is_game_window(self, hwnd: int) -> bool:
-        if not self._user32.IsWindowVisible(hwnd) or self._user32.GetWindow(hwnd, _GW_OWNER):
-            return False
-        process_id = wintypes.DWORD()
-        self._user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
-        return self._process_stem(process_id.value) == self._process_name
+        if by_process:
+            return by_process[0]
+        if by_title:
+            hwnd, app = by_title[0]
+            log.info(
+                "No %s.exe is running; watching %s, whose title starts with that name. "
+                "GAME_PROCESS=%s matches it directly",
+                self._process_name,
+                app.label,
+                app.process,
+            )
+            return hwnd
+        return None
 
     def _process_stem(self, process_id: int) -> str | None:
         handle = self._kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, process_id)

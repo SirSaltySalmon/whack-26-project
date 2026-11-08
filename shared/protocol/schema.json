@@ -401,8 +401,21 @@
       "type": "object"
     },
     "ContextPreview": {
-      "description": "Asks for the exact context the talker would get for this query.",
+      "description": "Asks for the exact context the talker would get for this query. For a game other than the\none being played, that's the context the next session of it would start with.",
       "properties": {
+        "game": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Game"
+        },
         "request_id": {
           "title": "Request Id",
           "type": "string"
@@ -658,6 +671,47 @@
       "title": "FactView",
       "type": "object"
     },
+    "GameView": {
+      "description": "One game memory has something filed under.",
+      "properties": {
+        "facts": {
+          "title": "Facts",
+          "type": "integer"
+        },
+        "last_played": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Played"
+        },
+        "questions": {
+          "title": "Questions",
+          "type": "integer"
+        },
+        "sessions": {
+          "title": "Sessions",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "facts",
+        "questions",
+        "sessions"
+      ],
+      "title": "GameView",
+      "type": "object"
+    },
     "MemoryAdminRequest": {
       "properties": {
         "attribute": {
@@ -806,9 +860,86 @@
       "title": "MemoryContext",
       "type": "object"
     },
+    "MemoryGames": {
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current"
+        },
+        "games": {
+          "items": {
+            "$ref": "#/$defs/GameView"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "live": {
+          "title": "Live",
+          "type": "boolean"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.games",
+          "default": "memory.games",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "games",
+        "live"
+      ],
+      "title": "MemoryGames",
+      "type": "object"
+    },
+    "MemoryListGames": {
+      "description": "Asks which games memory holds anything for.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "memory.list_games",
+          "default": "memory.list_games",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "title": "MemoryListGames",
+      "type": "object"
+    },
     "MemoryQuery": {
       "description": "Empty text lists the newest facts instead of searching.",
       "properties": {
+        "game": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Game"
+        },
         "include_history": {
           "default": false,
           "title": "Include History",
@@ -1008,6 +1139,49 @@
         "rects"
       ],
       "title": "OverlayRects",
+      "type": "object"
+    },
+    "Pacing": {
+      "description": "How often the partner may speak up unasked, in seconds. The director's rules apply it.\n\nA player setting rather than config, so it can be tuned while playing.",
+      "properties": {
+        "advice_first_s": {
+          "default": 45.0,
+          "minimum": 0,
+          "title": "Advice First S",
+          "type": "number"
+        },
+        "advice_gap_s": {
+          "default": 90.0,
+          "minimum": 0,
+          "title": "Advice Gap S",
+          "type": "number"
+        },
+        "advice_quiet_s": {
+          "default": 10.0,
+          "minimum": 0,
+          "title": "Advice Quiet S",
+          "type": "number"
+        },
+        "event_gap_s": {
+          "default": 8.0,
+          "minimum": 0,
+          "title": "Event Gap S",
+          "type": "number"
+        },
+        "question_gap_s": {
+          "default": 45.0,
+          "minimum": 0,
+          "title": "Question Gap S",
+          "type": "number"
+        },
+        "question_quiet_s": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Question Quiet S",
+          "type": "number"
+        }
+      },
+      "title": "Pacing",
       "type": "object"
     },
     "PageContent": {
@@ -1336,6 +1510,14 @@
           "title": "Mic Enabled",
           "type": "boolean"
         },
+        "pacing": {
+          "$ref": "#/$defs/Pacing"
+        },
+        "paused": {
+          "default": false,
+          "title": "Paused",
+          "type": "boolean"
+        },
         "personality": {
           "default": "supportive",
           "title": "Personality",
@@ -1344,6 +1526,11 @@
         "proactive": {
           "default": true,
           "title": "Proactive",
+          "type": "boolean"
+        },
+        "vision_enabled": {
+          "default": true,
+          "title": "Vision Enabled",
           "type": "boolean"
         },
         "voice_id": {
@@ -1561,6 +1748,7 @@
           "control.hello": "#/$defs/ControlHello",
           "control.shutdown": "#/$defs/ControlShutdown",
           "memory.context_preview": "#/$defs/ContextPreview",
+          "memory.list_games": "#/$defs/MemoryListGames",
           "memory.query": "#/$defs/MemoryQuery",
           "settings.update": "#/$defs/SettingsUpdate",
           "voice.preview": "#/$defs/VoicePreview"
@@ -1576,6 +1764,9 @@
         },
         {
           "$ref": "#/$defs/ContextPreview"
+        },
+        {
+          "$ref": "#/$defs/MemoryListGames"
         },
         {
           "$ref": "#/$defs/SettingsUpdate"
@@ -1595,6 +1786,7 @@
           "brain.status": "#/$defs/BrainStatus",
           "control.error": "#/$defs/ControlError",
           "memory.context": "#/$defs/MemoryContext",
+          "memory.games": "#/$defs/MemoryGames",
           "memory.results": "#/$defs/MemoryResults",
           "settings.state": "#/$defs/SettingsState",
           "toast.memory": "#/$defs/MemoryToast"
@@ -1607,6 +1799,9 @@
         },
         {
           "$ref": "#/$defs/MemoryContext"
+        },
+        {
+          "$ref": "#/$defs/MemoryGames"
         },
         {
           "$ref": "#/$defs/BrainStatus"

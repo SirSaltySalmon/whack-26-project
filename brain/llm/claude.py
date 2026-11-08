@@ -21,8 +21,8 @@ from brain.llm.claude_tools import ClaudeToolChat
 log = logging.getLogger(__name__)
 
 Effort = Literal["low", "medium", "high"]
-# Thinking tokens count against max_tokens, so stream_text adds this on top of the caller's cap,
-# which is meant for the visible answer.
+# Thinking tokens count against max_tokens, so a thinking call adds this on top of the caller's
+# cap, which is meant for the visible answer.
 THINKING_HEADROOM_TOKENS = 4000
 # On a policy decline the API reruns the request on a model it picks, inside the same call.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -69,6 +69,7 @@ class ClaudeClient:
         effort: Effort = "low",
         timeout_s: float = 10.0,
         think: bool = True,
+        fallback: bool = True,
     ) -> None:
         self._model = model
         # No retries: a retried frame arrives too late to describe what's on screen now, and a
@@ -78,6 +79,8 @@ class ClaudeClient:
         self._effort = effort
         # Off for the talker: thinking costs time on the voice path.
         self._think = think
+        # Server-side fallback on a refusal. Haiku has none, so its clients turn it off.
+        self._fallback = fallback
 
     def _acquire(self) -> None:
         if not self._limiter.try_acquire():
@@ -93,50 +96,41 @@ class ClaudeClient:
             return LLMUnavailableError(f"Anthropic rate limit hit for {self._model}")
         return None
 
+    def _reasoning(self, max_tokens: int) -> dict[str, Any]:
+        """Thinking keeps the model's reasoning out of its reply, as the API documents: with it
+        off, a tip once opened by describing the player's screen. Off is faster."""
+        if not self._think:
+            return {
+                "max_tokens": max_tokens,
+                "thinking": {"type": "disabled"},
+                "output_config": {"effort": "low"},
+            }
+        return {
+            "max_tokens": max_tokens + THINKING_HEADROOM_TOKENS,
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": self._effort},
+        }
+
     async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
         """With thinking on, effort sets how much; with it off, this is a fast plain reply."""
-        if not self._think:
-            async for text in self._stream_fast(system, prompt, max_tokens):
-                yield text
-            return
         self._acquire()
+        params: dict[str, Any] = {
+            "model": self._model,
+            "system": system,
+            "messages": [{"role": "user", "content": prompt}],
+            **self._reasoning(max_tokens),
+        }
         try:
-            async with self._client.beta.messages.stream(
-                model=self._model,
-                max_tokens=max_tokens + THINKING_HEADROOM_TOKENS,
-                system=system,
-                thinking={"type": "adaptive"},
-                output_config={"effort": self._effort},
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
-                messages=[{"role": "user", "content": prompt}],
-            ) as stream:
-                async for text in stream.text_stream:
+            if self._think and self._fallback:
+                stream = self._client.beta.messages.stream(
+                    **params, betas=[FALLBACK_BETA], fallbacks="default"
+                )
+            else:
+                stream = self._client.messages.stream(**params)
+            async with stream as replies:
+                async for text in replies.text_stream:
                     yield text
-                message = await stream.get_final_message()
-        except anthropic.APIStatusError as exc:
-            unavailable = self._unavailable(exc)
-            if unavailable is None:
-                raise
-            raise unavailable from exc
-        if message.stop_reason in ("refusal", "max_tokens"):
-            log.warning("%s stopped early: %s", self._model, message.stop_reason)
-
-    async def _stream_fast(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
-        # No server-side fallback: Haiku has none, and the talker would rather stay quiet.
-        self._acquire()
-        try:
-            async with self._client.messages.stream(
-                model=self._model,
-                max_tokens=max_tokens,
-                system=system,
-                thinking={"type": "disabled"},
-                output_config={"effort": "low"},
-                messages=[{"role": "user", "content": prompt}],
-            ) as stream:
-                async for text in stream.text_stream:
-                    yield text
-                message = await stream.get_final_message()
+                message = await replies.get_final_message()
         except anthropic.APIStatusError as exc:
             unavailable = self._unavailable(exc)
             if unavailable is None:
@@ -161,12 +155,11 @@ class ClaudeClient:
         """Tools run in our own loop, so the director can cancel them and every call is logged."""
         self._acquire()
         try:
+            # Thinking blocks come back in message.content, which the tool chat replays as is.
             message = await self._client.messages.create(
                 model=self._model,
-                max_tokens=max_tokens,
                 system=system,
-                thinking={"type": "disabled"},
-                output_config={"effort": "low"},
+                **self._reasoning(max_tokens),
                 tools=tools,
                 tool_choice={"type": "auto"} if allow_tools else {"type": "none"},
                 messages=messages,

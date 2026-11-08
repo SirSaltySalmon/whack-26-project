@@ -49,6 +49,8 @@ button {
 .avatar {
   position: absolute;
   z-index: 5;
+  /* For the toggle row's narrow layout. */
+  container-type: inline-size;
 }
 
 .avatar-art {
@@ -188,17 +190,6 @@ button {
 
 .avatar-grip:active {
   cursor: grabbing;
-}
-
-.avatar-wiki {
-  position: absolute;
-  bottom: 6px;
-  left: 6px;
-  padding: 1px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  cursor: pointer;
 }
 
 .resize-corner {

@@ -26,6 +26,7 @@ import type {
 import { PROTOCOL_VERSION } from "../lib/brainSocket.ts";
 import { brainUrl, JsonSocket } from "../lib/jsonSocket.ts";
 import type { ControlApi, ReplyOf } from "./api.ts";
+import { readMemory } from "./logic/readMemory.ts";
 import { RequestTracker } from "./logic/requests.ts";
 
 export type { Askable, ControlApi, ReplyOf, ReplyType } from "./api.ts";
@@ -157,6 +158,23 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     if (config) save(config);
   }, [config, save]);
 
+  // There's no "default" voice to pick, so with none saved the first one on offer is chosen. The
+  // launcher passes it as ELEVENLABS_VOICE_ID, so the voice shown as picked is the one that plays.
+  const firstVoice = config
+    ? allVoices(description?.voices ?? [], config.customVoices)[0]?.id
+    : undefined;
+  const savedVoice = config?.settings.voice_id ?? null;
+  useEffect(() => {
+    if (!firstVoice || savedVoice) return;
+    setConfig(
+      (current) =>
+        current && {
+          ...current,
+          settings: { ...current.settings, voice_id: firstVoice },
+        },
+    );
+  }, [firstVoice, savedVoice]);
+
   // Stable for the window's life, so tabs can list them as effect dependencies.
   const send = useCallback(
     (message: Control): void => socket.current?.send(message),
@@ -165,12 +183,12 @@ export function ControlProvider({ children }: { children: ReactNode }) {
   const request = useCallback<ControlApi["request"]>(
     async (message, expect) => {
       if (!socket.current?.connected)
-        throw new Error("The brain isn't connected");
+        return readMemory(bridge, message, expect);
       const { id, reply } = requests.current.open(expect);
       send({ ...message, request_id: id } as Control);
       return (await reply) as ReplyOf<typeof expect>;
     },
-    [send],
+    [send, bridge],
   );
   const onPush = useCallback<ControlApi["onPush"]>((listener) => {
     pushListeners.current.add(listener);

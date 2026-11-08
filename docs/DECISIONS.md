@@ -2,6 +2,38 @@
 
 Architectural decisions that change the plan. Add new entries at the top. Don't rewrite old ones: if a decision changes, add a new entry that replaces it, and mark the old one as replaced.
 
+## 2026-11-08: Memory can be read with the partner off, for any game
+
+**Status:** built, tested, and checked in the Control Center against the real `data/brain.sqlite3`. Applies to `brain/memory/reader.py`, `brain/memory/browse.py`, `shared/protocol/control.py` (additive) and the Control Center's Memory tab.
+
+- **A read-only reader process.** `python -m brain --memory` answers `memory.query`, `memory.context_preview` and the new `memory.list_games`, one JSON line each on stdin and stdout. It opens SQLite with `mode=ro`, so it never changes memory and can run beside a partner that's writing (WAL). It starts nothing else: no capture, voice or model. The Electron main process starts it on the first memory request made with no brain connected, and stops it after 5 idle minutes or when the window closes.
+- **Same requests, either way.** With a brain connected, the Memory tab asks it over `/control` as before. Without one, `ControlContext.request` sends memory requests to the reader. The tab no longer needs the partner running.
+- **Pick a game.** `memory.list_games` lists every game with sessions, facts, questions or a profile, played last first. `MemoryQuery` and `ContextPreview` take an optional `game`; none means the game being played, or the one played last. For a game other than the one being played, the recall preview is what its next session would start with: its last session's note, its facts, and no live state or turns.
+- **Options rejected.** Reading SQLite from Node would duplicate the browse and recall logic in TypeScript, and the brain owns memory. A memory-only brain on the same port would look like a running partner to the other tabs, and would hold the port Start partner needs.
+
+## 2026-11-08: Tips think briefly first, and the narration filter only trims an opening
+
+**Status:** built on `main`, not yet run live. Applies to `brain/llm/claude.py`, `brain/llm/factory.py`, `brain/director/turns.py` and `brain/director/talker.py`.
+
+- **The problem.** With thinking off, a live tip opened with the model's reasoning: "The player's on the character select screen, so there's no progress to build on yet." Anthropic documents this: with thinking disabled, the model may write its reasoning into the visible reply. Assistant prefill, the old way to force the reply's opening, returns a 400 on Haiku 5.5.
+- **Tips think.** `LLMFactory.tips()` is the talker's model with adaptive thinking at low effort, in both the plain reply and the tool loop, which already sends thinking blocks back unchanged. Nobody waits on a tip, so the time doesn't matter. Haiku has no server-side fallback, so its clients never ask for one.
+- **Player turns stay fast.** `TALKER_THINKING=true` turns thinking on for replies and player turns too. It costs time before the first word, so measure it with `scripts/latency_report.py` before choosing it for the demo.
+- **The filter is a safety net, not the fix.** The first version dropped every sentence containing "the player", which would cut wiki answers phrased "The player can craft...". It now drops only the sentences a reply opens with, and only when they state the player's condition or intent ("The player's...", "The player is...", "The player wants..."). Later sentences, and facts phrased "can", "must" or "needs", are always kept.
+
+## 2026-11-08: The character has pause, mute and blind buttons, and Reopen wiki moves to settings
+
+**Status:** built on `main`, not yet run live. Applies to `overlay/`, `brain/director/`, `brain/voice/`, `brain/perception/` (observer, tracker, readers), `brain/agent/` (`look_closer`, `look_back`, `point_at`), `brain/learner/learner.py`, `brain/danger_feed.py`, `brain/hud.py`, `brain/parts.py`, `brain/server.py`, `brain/app.py`, and additively to `shared/protocol/` (`Settings.paused`, `Settings.vision_enabled`).
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Three buttons under the character: pause, mute (`mic_enabled`) and blind (`vision_enabled`)**. One that's pressed stays visible without hovering, and pausing dims the character | The player needs a quick way to quiet the partner or stop it watching without opening settings, and a partner that's quiet or blind for no visible reason looks broken |
+| 2 | **Paused, the director starts no speech** (except a voice preview the player asked for), and pausing cancels the speech slot even mid-tool. Listening, watching, memory and notes carry on | Pausing means "stop talking", not "stop paying attention", so the partner hasn't lost the thread when it resumes |
+| 3 | **Unpausing asks the next open question at the next tick**, skipping the quiet stretch and the gap, but not danger. Questions aren't asked while paused, so none are dropped unheard | Unpausing is the player saying they're ready to talk, which is the best moment to ask |
+| 4 | **Blinded, nothing reads the screen or sends it to a model.** The observer sends no frames and drops replies that land after the press, the local readers stop and report nothing, and the talker is told it isn't watching. `look_closer`, `look_back` and `point_at` return "your vision is off" without a vision call, and a tip isn't offered the pointer, so it's said without one. The learner starts no pass, and one under way stops before its next call, without a closer look at the frames it already has. A deafen button (subtitles only) was built and then dropped | Blind should mean blind, paid or local, with no tool or background pass as an exception. Deafen was dropped because mute already covers "the partner can't hear me", and the two were easy to confuse |
+| 4a | **Blinding ends danger.** The director stops holding back questions and tips for a fight, the overlay's danger alert clears, and the tracker forgets what it saw, so a fight still going when vision returns is confirmed and announced afresh | It can't know a fight it can't see is still on. Without forgetting, the tracker would think the old fight continued and never announce it again |
+| 5 | **Pause and blind are never restored at startup**, and a settings update without one keeps the current value | The Control Center sends its saved settings on connect, so without this, opening it would unpause the partner or let it see again |
+| 6 | **Reopen wiki moves from the character to the settings panel** | The character's Wiki button only reopened the last page visited, which looked hardcoded to one game. Keeping it in settings means a closed wiki window can still come back |
+
 ## 2026-11-08: The overlay has swappable skins, and danger has one quiet look
 
 **Status:** built on `main`, not yet run live. Applies to `overlay/src/renderer/skins/`, `brain/danger_feed.py` and `shared/protocol/messages.py`.
@@ -43,7 +75,7 @@ Playtesting showed seven problems: questions came up as a popup, spoken answers 
 | 5 | **A player claim replaces an observed or wiki one.** Only the screen disputing the player opens a conflict question | Asking the player to choose between their own words and our guess was wrong. Authority is still player > observed > wiki |
 | 6 | **Guesses from gear are stored tentative**, and the observer names things only when they're written on screen | Small icons in a downscaled frame are easy to misread, so the talker says "looks like" |
 | 7 | **Each game gets planned questions**, drafted once by the deep model from the brief and kept in the profile | Questions in the game's own terms ("Have you beaten X yet?") instead of a generic fallback. Still data, so `brain/` stays game-agnostic |
-| 8 | **Tips come sooner and more often**: the first after 90 s, then every 180 s, and 15 s after the partner learns where the player is. Quiet means no player turn and no partner line; game events no longer count | Game events arrive constantly in active play, so the old quiet window almost never opened |
+| 8 | **Tips come sooner and more often**: the first after 90 s, then every 180 s, and 15 s after the partner learns where the player is (halved again, and made a setting, in "Pacing is a player setting" below). Quiet means no player turn and no partner line; game events no longer count | Game events arrive constantly in active play, so the old quiet window almost never opened |
 | 9 | **A tip may point.** Advice runs through the agent with only `point_at` | Exception to "tools only on player turns": at most one vision call per tip, still bounded by the advice budget, and it never opens a page, so `page_url` stays player-requested |
 | 10 | **The mic can be turned off** (`Settings.mic_enabled`), and the overlay has a text box that sends `player.text` | The brain treats a typed line exactly like speech, so watching, reacting and memory carry on |
 
@@ -426,3 +458,23 @@ The original comparison of memory stores assumed a single game. Its ranking stil
 **Measured on the main dev machine:** model load about 0.2-0.4 s once cached, a question about 4-20 ms, `context()` about 4.5 ms in Both against 1 ms in Keywords. The first use downloads about 90 MB into `data/models`, so run it once before the demo.
 
 **Limit:** the talker already gets the newest 8 facts, and recall skips those, so this only adds anything once memory holds more than that, or for older session notes.
+
+## 2026-11-08: Pacing is a player setting, and questions and tips come about twice as often
+**Change:** the gaps that decide when the partner speaks unasked moved from `brain/config.py` into the player's settings, as `Settings.pacing` (`Pacing` in `shared/protocol/messages.py`, an additive change). The Control Center has a Pacing tab to edit them, with Lively, Default and Calm presets. Reactions keep their 8 s gap; questions and tips come about twice as often:
+
+| Setting | Was | Now |
+|---|---|---|
+| Between event reactions (`event_gap_s`, the director's bark cooldown) | 8 s | 8 s |
+| Between questions (`question_gap_s`) | 90 s | 45 s |
+| Quiet before a question (`question_quiet_s`) | 20 s | 0 s, so only the 45 s gap applies |
+| First tip (`advice_first_s`) | 90 s | 45 s |
+| Between tips (`advice_gap_s`, 0 turns tips off) | 180 s | 90 s |
+| Quiet before a tip (`advice_quiet_s`) | 20 s | 10 s |
+
+**Why:** the partner should ask and advise more often, and the right pace is easier to find by trying it while playing than by editing config and restarting.
+
+**How:** the director's rules take the new pacing on `SettingsChanged`. A shorter tip gap brings a tip already scheduled forward, so the change is felt at once; a longer one never pushes a due tip back. Rules stay deterministic and tested (`brain/tests/test_pacing.py`). Calm keeps the old values. `advice_after_learning_s` stays in config.
+
+**Without a quiet stretch,** a question is still never asked over the partner (ticks skip a busy speech slot), is held while the player is mid-sentence, and waits out danger. The first can come right after the greeting, since only the gap between questions applies.
+
+**Watch for:** tips still wait for quiet since anyone last spoke, so a shorter event gap would mean more reactions and fewer tips.

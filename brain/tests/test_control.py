@@ -14,7 +14,7 @@ from brain.memory.browse import Browse
 from brain.server import OverlayLink, create_app
 from brain.tests.fakes import drain
 from shared.protocol import PROTOCOL_VERSION
-from shared.protocol.control import BrainStatus, FactView
+from shared.protocol.control import BrainStatus, FactView, GameView
 from shared.protocol.messages import AvatarState, MemoryToast
 
 FACT = FactView(
@@ -45,7 +45,7 @@ class Rig:
     link: OverlayLink
     control: ControlLink
     bus: EventBus
-    browsed: list[tuple[str, bool, int]] = field(default_factory=list)
+    browsed: list[tuple[str, bool, int, str | None]] = field(default_factory=list)
     stopped: list[bool] = field(default_factory=list)
 
 
@@ -53,23 +53,27 @@ def make(fail_browse: bool = False) -> Rig:
     bus = EventBus()
     link = OverlayLink(bus)
     link.personalities = ["supportive"]
-    browsed: list[tuple[str, bool, int]] = []
+    browsed: list[tuple[str, bool, int, str | None]] = []
     stopped: list[bool] = []
 
-    async def browse(text: str, history: bool, limit: int) -> Browse:
+    async def browse(text: str, history: bool, limit: int, game: str | None) -> Browse:
         if fail_browse:
             raise RuntimeError("database is locked")
-        browsed.append((text, history, limit))
+        browsed.append((text, history, limit, game))
         return Browse([FACT], [], [])
 
-    async def recall(text: str) -> str:
-        return f"Known: {text}"
+    async def recall(text: str, game: str | None) -> str:
+        return f"Known: {text}" if game is None else f"Next {game} session: {text}"
+
+    async def games() -> list[GameView]:
+        return [GameView(title="Some Game", facts=1, questions=0, sessions=2, last_played=9.0)]
 
     control = ControlLink(
         link,
         bus,
         browse=browse,
         recall=recall,
+        games=games,
         status=lambda: STATUS,
         shutdown=lambda: stopped.append(True),
     )
@@ -112,7 +116,25 @@ def test_memory_query_answers_by_request_id() -> None:
     assert reply["facts"][0]["value"] == "Summoner"
     assert reply["facts"][0]["source"] == "player"
     assert reply["elapsed_ms"] >= 0
-    assert rig.browsed == [("class", True, 50)]
+    assert rig.browsed == [("class", True, 50, None)]
+
+
+def test_memory_can_be_read_for_another_game() -> None:
+    rig = make()
+    with rig.client.websocket_connect("/control") as socket:
+        send(socket, {"type": "memory.list_games", "request_id": "g1"})
+        listed = socket.receive_json()
+        send(socket, {"type": "memory.query", "request_id": "g2", "game": "Minecraft"})
+        socket.receive_json()
+        preview = {"type": "memory.context_preview", "request_id": "g3", "text": "bed"}
+        send(socket, {**preview, "game": "Minecraft"})
+        context = socket.receive_json()
+    assert listed["type"] == "memory.games"
+    assert [game["title"] for game in listed["games"]] == ["Some Game"]
+    # The game being played, so the Control Center starts on it.
+    assert listed["current"] == "Some Game" and listed["live"] is True
+    assert rig.browsed == [("", False, 50, "Minecraft")]
+    assert context["context"] == "Next Minecraft session: bed"
 
 
 def test_context_preview_shows_what_the_talker_gets() -> None:
@@ -139,6 +161,16 @@ def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
         "voice_style": "classic",
         "memory_search": "hybrid",
         "custom_instructions": "Avoid spoilers",
+        "pacing": {
+            "event_gap_s": 2.0,
+            "question_gap_s": 30.0,
+            "question_quiet_s": 5.0,
+            "advice_first_s": 20.0,
+            "advice_gap_s": 60.0,
+            "advice_quiet_s": 5.0,
+        },
+        "paused": False,
+        "vision_enabled": False,
     }
     with rig.client.websocket_connect("/control") as socket:
         send(socket, {"type": "settings.update", "settings": settings})

@@ -29,7 +29,7 @@ export function VoicesTab() {
   const [id, setId] = useState("");
   const [sample, setSample] = useState(SAMPLE);
 
-  const pick = (voiceId: string | null): void =>
+  const pick = (voiceId: string): void =>
     control.changeSettings({ ...control.choices.settings, voice_id: voiceId });
 
   const add = (): void => {
@@ -49,18 +49,13 @@ export function VoicesTab() {
         title="Voice"
         hint="ElevenLabs voices. Picking one applies right away while the partner runs."
       >
+        {control.voices.length === 0 && (
+          <p className="cc-hint">
+            No voices yet: add one below, or list them in VOICE_OPTIONS in .env.
+            Until then the partner uses ELEVENLABS_VOICE_ID.
+          </p>
+        )}
         <div className="voice-list">
-          <label
-            className={`voice-row${chosen === null ? " voice-row-on" : ""}`}
-          >
-            <input
-              type="radio"
-              checked={chosen === null}
-              onChange={() => pick(null)}
-            />
-            <span className="voice-name">Default</span>
-            <span className="cc-hint">ELEVENLABS_VOICE_ID from .env</span>
-          </label>
           {control.voices.map((voice) => (
             <label
               key={voice.id}

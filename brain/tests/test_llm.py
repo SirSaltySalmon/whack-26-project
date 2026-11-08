@@ -66,4 +66,21 @@ def test_deep_uses_claude_at_the_configured_effort_when_its_key_is_set() -> None
     )
     deep = LLMFactory(settings).deep()
     assert isinstance(deep, ClaudeClient)
-    assert deep._model == "claude-test" and deep._effort == "low"
+    assert deep._model == "claude-test" and deep._effort == "low" and deep._fallback
+
+
+def test_tips_think_briefly_on_the_talker_model_without_a_fallback() -> None:
+    settings = Settings(_env_file=None, anthropic_api_key=SecretStr("test"))  # type: ignore[call-arg]
+    tips = LLMFactory(settings).tips()
+    assert isinstance(tips, ClaudeClient)
+    assert tips._model == "claude-haiku-5-5" and tips._think and tips._effort == "low"
+    # Haiku has no server-side fallback, so asking for one would fail every tip.
+    assert not tips._fallback
+
+
+def test_talker_thinking_turns_it_on_for_replies_and_player_turns() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        _env_file=None, anthropic_api_key=SecretStr("test"), talker_thinking=True
+    )
+    talker = LLMFactory(settings).talker()
+    assert isinstance(talker, ClaudeClient) and talker._think and not talker._fallback

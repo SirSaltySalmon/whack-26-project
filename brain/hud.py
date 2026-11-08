@@ -59,6 +59,10 @@ def build_hud(
         # Without the observer there's no way to tell menus from play, so assume play.
         return observer is None or observer.live_state().get("screen") == "gameplay"
 
+    def watching() -> bool:
+        # Blinded by the player, nothing here reads the screen or sends it to vision.
+        return link.settings.vision_enabled
+
     async def load_profile() -> GameProfile:
         return await database.run(lambda conn: ProfileStore(conn).get(game))
 
@@ -73,6 +77,7 @@ def build_hud(
         settings.reader_failing_after_s,
         ocr=ocr,
         in_gameplay=in_gameplay,
+        watching=watching,
     )
     if observer is not None:
         observer.suppressed_events = readers.provides
@@ -107,6 +112,7 @@ def build_hud(
             config,
             ocr=ocr,
             in_gameplay=in_gameplay,
+            watching=watching,
         )
     return Hud(readers, learner, ocr)
 

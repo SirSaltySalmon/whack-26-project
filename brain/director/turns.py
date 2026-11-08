@@ -90,6 +90,24 @@ async def tip_reply(
     return None if not text or is_skip(text) else text
 
 
+async def give_tip(
+    agent: ToolLLM | None,
+    talker: TextLLM | None,
+    tools: ToolRegistry | None,
+    persona: Persona,
+    context: str,
+) -> str | None:
+    """A tip from the agent when it can point, else from the plain talker, else none."""
+    pointing = tip_tools(tools)
+    if agent is not None and pointing is not None:
+        return await tip_reply(agent, pointing, persona, context)
+    if talker is None:
+        log.warning("No talker LLM configured; no tip")
+        return None
+    # Replays have no agent, and a tip that can't point is still worth saying.
+    return await talker_reply(talker, ADVICE_PROMPT, persona, context)
+
+
 async def player_reply(
     agent: ToolLLM,
     tools: ToolRegistry,

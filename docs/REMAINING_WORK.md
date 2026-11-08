@@ -23,8 +23,8 @@ Names, signatures and numbers marked as starting values are proposals. If you fi
 | [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | **Done** in code and unit tests. The live 300 ms and barge-in checks are not run | 3 | WP0 |
 | [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | **Not done** | All | Keys, a game |
 | [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | **Done** in code and unit tests. Stage 1's live page checks are not run | 1, 3, 4 | WP0 |
-| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Built**, not yet run live. Reader events still don't carry `frame_ts` | 2, 3 | Nothing |
-| [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Not started.** If time before freeze | Shared, 2 | Nothing |
+| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Built**, not yet run live. Observer and reader events both carry `frame_ts` | 2, 3 | Nothing |
+| [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Built** in code and unit tests, not yet run live | Shared, 2 | Nothing |
 | [WP11](#wp11-proof-benchmarks-and-evals) | Latency report, loop-stall watch, accuracy evals | Numbers for the pitch, and regression checks | **Partly built:** latency report, loop-stall watch and the Control Center's Latency tab. The evals aren't started | All | WP9, a live run |
 | [Conditional](#conditional-work) | Only if a test or a decision calls for it | — | **Don't start** | Various | Varies |
 
@@ -975,7 +975,7 @@ tasks.create_task(_survive("Open page", open_page.run()))
 
 ## WP9: Frame-to-voice latency
 
-**Status: not started.** `GameEvent` has no `frame_ts`. The observer passes a frame time into the tracker, and that time is not copied onto the event.
+**Status: built, not yet run live.** `GameEvent.frame_ts` is set from the first of the observer's agreeing frames, or the frame a reader read. `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke.
 
 **Purpose:** measure from the moment something shows on screen, which is what the prompt judges. `Latency: event to bark` starts at `GameEvent.ts`, which `Event` sets when the event is published (`brain/events.py`). For observer events that leaves out the seconds spent noticing, and it stops when audio is queued, not played (`brain/director/lines.py`). An "under 300 ms" figure from it would be true but misleading.
 
@@ -1000,7 +1000,7 @@ tasks.create_task(_survive("Open page", open_page.run()))
 
 ## WP10: Rewind
 
-**Status: not started.** There is no `look_back` tool.
+**Status: built in code and unit tests, not yet run live.** `look_back` in `brain/agent/rewind.py` tiles masked frames from 6, 4 and 2 s before the player spoke, and the moment itself, into one sheet of at most 1280 px, built in a worker thread, for one vision call. The tool guidance in `turn.py` says when to use it.
 
 **Purpose:** answer "what just hit me?" after the moment has passed, because the prompt says the most interesting moments are over before you could type a prompt about them. The ring buffer already holds 10 s of full-resolution frames (`ring_buffer_seconds` at `capture_fps` 5), and `look_closer` already uses the frame from when the player started talking. This looks further back.
 

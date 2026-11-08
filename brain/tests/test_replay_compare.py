@@ -9,6 +9,7 @@ from shared.protocol import BrainMessage
 from shared.protocol.messages import (
     AvatarState,
     CardShow,
+    Pacing,
     PointerFly,
     PointerHide,
     QuestionAsk,
@@ -69,6 +70,9 @@ def test_normalize_drops_ids_and_geometry_at_any_depth_but_keeps_content() -> No
             "voice_style": "expressive",
             "memory_search": "keyword",
             "custom_instructions": "",
+            "pacing": Pacing().model_dump(),
+            "paused": False,
+            "vision_enabled": True,
         },
         "personalities": ["supportive", "protective"],
         "voices": [{"name": "Ava"}],

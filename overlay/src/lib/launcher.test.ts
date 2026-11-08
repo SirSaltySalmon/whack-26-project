@@ -9,6 +9,7 @@ import {
   toEnv,
   type LauncherConfig,
 } from "./launcher.ts";
+import { DEFAULT_PACING } from "./pacing.ts";
 
 const config = (change: Partial<LauncherConfig> = {}): LauncherConfig => ({
   ...DEFAULT_CONFIG,
@@ -43,6 +44,7 @@ test("keys, game and voice choices reach the environment", () => {
         voice_style: "classic",
         memory_search: "hybrid",
         custom_instructions: "Avoid spoilers",
+        pacing: DEFAULT_PACING,
       },
     }),
     { GEMINI_API_KEY: "g-key", ANTHROPIC_API_KEY: "a-key" },
@@ -100,6 +102,7 @@ test("saved files are repaired field by field", () => {
       mic_enabled: "no",
       voice_style: "loud",
       memory_search: "telepathy",
+      pacing: { event_gap_s: "soon", question_gap_s: 12 },
     },
   });
   assert.equal(repaired.mode, "live");
@@ -120,6 +123,7 @@ test("saved files are repaired field by field", () => {
     voice_style: "expressive",
     memory_search: "keyword",
     custom_instructions: "",
+    pacing: { ...DEFAULT_PACING, question_gap_s: 12 },
   });
   assert.deepEqual(sanitizeConfig(null), DEFAULT_CONFIG);
 });
@@ -131,6 +135,13 @@ test("the memory search choice survives a save and a restart", () => {
     "semantic",
   );
   assert.equal(partnerSettings({}).memory_search, "keyword");
+});
+
+test("a pause or a blinded partner is never saved", () => {
+  const saved = partnerSettings({ paused: true, vision_enabled: false });
+  // Sent on connect without them, so the brain keeps its own: unpaused and seeing at startup.
+  assert.equal("paused" in saved, false);
+  assert.equal("vision_enabled" in saved, false);
 });
 
 test("typing instead of talking survives a save and a restart", () => {
