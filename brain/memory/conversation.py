@@ -67,7 +67,9 @@ def _rows(
     return sorted([*turns, *notes], key=lambda row: (row["ts"], row["id"]))
 
 
-def _keep_newest_runs(entries: list[ConversationItem | NoteRun]) -> list[ConversationItem | NoteRun]:
+def _keep_newest_runs(
+    entries: list[ConversationItem | NoteRun],
+) -> list[ConversationItem | NoteRun]:
     """Only the newest few runs of each game event, so a reader firing all session can't fill the
     conversation. Tool notes are all kept: each one is something the partner did."""
     seen: Counter[str] = Counter()

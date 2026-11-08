@@ -13,7 +13,6 @@ from collections.abc import Callable, Sequence
 from brain.llm.base import TextLLM
 from brain.memory.context import format_fact
 from brain.memory.models import Fact, LoggedEvent, NoteKind, Question
-from brain.memory.sessions import TOOL_PREFIX
 from brain.memory.note_reply import (
     DEFAULT_CONFIDENCE,
     MAX_UNKNOWNS_PER_NOTE,
@@ -23,6 +22,7 @@ from brain.memory.note_reply import (
     NoteDraft,
     parse_note_reply,
 )
+from brain.memory.sessions import TOOL_PREFIX
 
 # Parsing lives in note_reply.py. Re-exported so callers keep one import for notes.
 __all__ = [
