@@ -19,12 +19,19 @@ MAX_TOOL_ROUNDS = 2
 # Higher than the talker's, because tool arguments count toward this too.
 MAX_TOKENS = 400
 
+# Every turn starts a fresh chat, so tool use can only drift through the context. Once the
+# partner's own line saying it couldn't see is under TURNS, later turns copy it and stop looking.
 _TOOL_GUIDANCE = """You can't see the screen yourself. Anything under NOW is a rough, \
-low-resolution report from your eyes. Use a tool only when the request needs one. For chat, just \
-reply, without any tool.
-- The player asks about something on screen that the report doesn't answer: look_closer. Also \
-look_closer before you state a specific on-screen detail, such as an item name, a number or \
-written text, that NOW doesn't clearly give.
+low-resolution report from your eyes, and it often leaves things out. For plain chat, just reply \
+without any tool.
+- The player asks about something on screen that NOW doesn't clearly answer, such as what they're \
+holding, what a card or item says, or a number: look_closer. Also look_closer before you state a \
+specific on-screen detail that NOW doesn't clearly give. Never say you can't see something until \
+look_closer has tried this turn. Your earlier lines under TURNS may say you couldn't see or \
+couldn't help, but that was then, so look again now.
+- The player asks about something that just happened and may be gone, such as what hit or killed \
+them, or did you see that: look_back. Never say you missed it or can't tell what happened until \
+look_back has tried this turn, even if your earlier lines under TURNS said so.
 - The player asks where something is, or to be shown it: point_at. Also point_at when you suggest \
 what to do or where to go and the thing is likely on screen, such as a crafting station, an NPC, \
 an item in the hotbar or inventory, ore, a door or an enemy, in the same round as any other tool.
