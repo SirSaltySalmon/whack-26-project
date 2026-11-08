@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    ErrorFrame,
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
@@ -14,6 +15,7 @@ from pipecat.frames.frames import (
     TTSTextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.services.tts_service import TTSService
 
 from brain.voice.barks import Bark, split_pcm
 from shared.protocol.messages import AvatarState, SubtitleChunk
@@ -57,7 +59,10 @@ class EchoGate(FrameProcessor):
 
 
 class TurnBridge(FrameProcessor):
-    """Starts interruptions from inside the pipeline, and passes on partial transcripts."""
+    """Starts interruptions from inside the pipeline, and passes on partial transcripts.
+
+    It sits just before the TTS service, so the service's errors pass it on their way upstream.
+    """
 
     def __init__(self, voice: "PipecatVoice") -> None:
         super().__init__()
@@ -67,6 +72,8 @@ class TurnBridge(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, InterimTranscriptionFrame):
             self._voice.on_partial_transcript(frame.text)
+        elif isinstance(frame, ErrorFrame) and isinstance(frame.processor, TTSService):
+            await self._voice.speech.failed(frame)
         await self.push_frame(frame, direction)
 
 

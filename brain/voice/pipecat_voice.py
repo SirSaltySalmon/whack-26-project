@@ -10,16 +10,12 @@ module only turns speech into bus events and text into speech:
 Flux does its own turn detection, so there is no Silero VAD and no user aggregator. The aggregator
 would normally own barge-in, so TurnBridge does it instead when Flux reports a start of turn.
 
-Without headphones the mic hears the speakers and the partner interrupts itself. Half-duplex mode
-(VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
-barge-in.
+Without headphones the mic hears the speakers. Half-duplex mode (VOICE_HALF_DUPLEX=true) has
+EchoGate feed Flux silence while the partner talks, at the cost of barge-in. With the mic off in
+settings it feeds silence all the time and drops any turn Flux still reports; typed turns reach
+the bus from the overlay without passing through here.
 
-With the mic off in settings, EchoGate feeds Flux silence all the time, and any turn Flux still
-reports is dropped, so speech starts no turn and no barge-in. The partner still talks and reacts,
-and typed turns reach the bus from the overlay without passing through here.
-
-Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
-subtitles only.
+Without ElevenLabs keys, or once speech fails, it still listens and replies in subtitles only.
 """
 
 import asyncio
@@ -52,6 +48,8 @@ from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
+from brain.voice.services import make_stt, make_tts
+from brain.voice.speech_fallback import SpeechFallback
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
@@ -69,6 +67,7 @@ class PipecatVoice:
         self._bus = bus
         self._link = link
         self._subtitles = SubtitleOnlyVoice(link)
+        self.speech = SpeechFallback(self._subtitles)
         self._mood = MoodTracker()
         self._echo = SelfEcho()
         self._last_partial = ""
@@ -100,15 +99,7 @@ class PipecatVoice:
                 output_device_index=settings.speaker_device_index,
             )
         )
-        stt = DeepgramFluxSTTService(
-            api_key=settings.deepgram_api_key.get_secret_value(),
-            settings=DeepgramFluxSTTService.Settings(
-                model=settings.stt_model,
-                eot_threshold=settings.stt_eot_threshold,
-                eot_timeout_ms=settings.stt_eot_timeout_ms,
-                keyterm=list(settings.stt_keyterms),
-            ),
-        )
+        stt = make_stt(settings)
         self._bridge = TurnBridge(self)
         self._register_turn_events(stt)
 
@@ -118,15 +109,8 @@ class PipecatVoice:
             stt,
             self._bridge,
         ]
-        if settings.elevenlabs_api_key is not None and voice_id:
-            tts = ElevenLabsTTSService(
-                api_key=settings.elevenlabs_api_key.get_secret_value(),
-                settings=ElevenLabsTTSService.Settings(
-                    model=settings.tts_model,
-                    voice=voice_id,
-                    **style_values(self._style),
-                ),
-            )
+        if speaks and voice_id:
+            tts = make_tts(settings, voice_id, self._style)
             processors += [tts, transport.output(), SpokenOutputTap(self)]
         pipeline = Pipeline(processors)
         self._worker = PipelineWorker(
@@ -142,10 +126,11 @@ class PipecatVoice:
             # Debug, because the director retries results it still owes the player.
             log.debug("Player is talking; not saying: %s", text)
             return False
-        if not self._speaks:
+        if not self._speaks or self.speech.given_up:
             return await self._subtitles.say(text)
         log.info("Say: %s", text)
         self._echo.said(text)
+        self.speech.queued(text)
         self._first_audio.queued(origin, self.bot_speaking)
         await self._worker.queue_frame(TTSSpeakFrame(text))
         return True
@@ -236,6 +221,7 @@ class PipecatVoice:
     def on_bot_stopped(self) -> None:
         self.bot_speaking = False
         self._bot_stopped_at = time.monotonic()
+        self.speech.played()
 
     def mic_on(self) -> bool:
         """The player's setting, read live so turning it off takes effect on the next frame."""
@@ -279,6 +265,7 @@ class PipecatVoice:
                 log.info("Barge-in: player started speaking")
             # Also clears speech that's queued but not yet playing.
             await self._bridge.broadcast_interruption()
+            self.speech.interrupted()
             self._bus.publish(PlayerStartedSpeaking())
             await self.send(AvatarState(state="listening"))
 

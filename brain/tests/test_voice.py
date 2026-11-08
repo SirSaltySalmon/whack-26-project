@@ -11,6 +11,7 @@ from brain.tests.fakes import FakeOverlay
 from brain.voice.barks import Bark
 from brain.voice.pipeline import SubtitleOnlyVoice, create_voice
 from brain.voice.sentiment import MoodTracker
+from brain.voice.speech_fallback import SpeechFallback
 from shared.protocol.messages import AvatarState, SubtitleChunk
 
 pytest.importorskip("pyaudio")
@@ -33,6 +34,7 @@ def _voice(half_duplex: bool) -> "PipecatVoice":
     voice._bot_stopped_at = None
     voice.bot_speaking = False
     voice._first_audio = FirstAudio()
+    voice.speech = SpeechFallback(SubtitleOnlyVoice(None))  # type: ignore[arg-type]
     return voice
 
 
@@ -64,6 +66,7 @@ def _listening_voice() -> tuple["PipecatVoice", EventBus]:
     voice._echo = SelfEcho()
     voice._link = FakeOverlay()  # type: ignore[assignment]
     voice._first_audio = FirstAudio()
+    voice.speech = SpeechFallback(SubtitleOnlyVoice(None))  # type: ignore[arg-type]
     voice.user_speaking = True
     return voice, bus
 
@@ -160,6 +163,7 @@ def _speaking_voice(
     voice.user_speaking = user_speaking
     voice.bot_speaking = False
     voice._first_audio = FirstAudio()
+    voice.speech = SpeechFallback(SubtitleOnlyVoice(None))  # type: ignore[arg-type]
     return voice, worker
 
 
@@ -219,3 +223,24 @@ async def test_the_partners_own_voice_isnt_taken_as_a_player_turn() -> None:
         published.append(events.get_nowait())
     turns = [e.transcript for e in published if isinstance(e, PlayerSpeech)]
     assert turns == ["What's that glowing thing over there?"]
+
+
+async def test_once_speech_has_failed_lines_go_to_subtitles_and_barks_keep_their_audio() -> None:
+    from pipecat.frames.frames import ErrorFrame
+    from pipecat.utils.errors import ErrorCategory
+
+    overlay = FakeOverlay()
+    voice, worker = _speaking_voice(user_speaking=False, overlay=overlay)
+    voice._subtitles = SubtitleOnlyVoice(overlay)  # type: ignore[arg-type]
+    voice.speech = SpeechFallback(voice._subtitles)
+    assert await voice.say("This one goes to TTS.") is True
+    error = ErrorFrame(error="401")
+    error.category = ErrorCategory.AUTHENTICATION
+    await voice.speech.failed(error)
+    assert await voice.say("This one never tries.") is True
+    assert await voice.play(BARK) is True
+    shown = [m.text for m in overlay.sent if isinstance(m, SubtitleChunk)]
+    assert shown == ["This one goes to TTS.", "This one never tries.", BARK.text]
+    # Only the first line reached TTS; the bark's audio is local, so it still plays.
+    assert sum(type(frame).__name__ == "TTSSpeakFrame" for frame in worker.queued) == 1
+    assert any(type(frame).__name__ == "OutputAudioRawFrame" for frame in worker.queued)
