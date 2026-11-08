@@ -29,9 +29,13 @@ class RingBuffer:
 
     def push(self, frame: Frame) -> None:
         # dxcam can hand out zero-copy views that later captures overwrite.
-        owned = replace(frame, image=frame.image.copy())
+        self.push_owned(replace(frame, image=frame.image.copy()))
+
+    def push_owned(self, frame: Frame) -> None:
+        """For an image nothing else holds, already copied off the event loop: a full-frame copy
+        here would block it for milliseconds at every frame."""
         with self._lock:
-            self._frames.append(owned)
+            self._frames.append(frame)
 
     def latest(self) -> Frame | None:
         with self._lock:

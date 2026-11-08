@@ -32,10 +32,10 @@ Don't propose: Tauri, an LLM deciding when to speak, an LLM inside the Pipecat p
 
 **Data ingestion**
 - Capture locally at about 5 fps into a full-resolution, 10-second ring buffer in RAM.
-- Haiku reports on the newest frame every 1.3 s while the game is in front, or every 0.8 s or 0.6 s for 5 s after a boost (`brain/perception/focus.py`). Danger boosts it by rule and keeps it boosted while it lasts; a player turn can boost it with `watch_closely`. See [docs/DECISIONS.md](docs/DECISIONS.md). A report counts only once consecutive frames agree (`brain/perception/tracker.py`), and even then it's an observation, not a fact.
-- Call Gemini vision only on a trigger: learning the game, the player asking, or an event. Free-tier quotas won't sustain streaming.
+- Haiku reports on the newest frame every 1.3 s while the game is in front, or every 0.8 s or 0.6 s for 5 s after a boost (`brain/perception/focus.py`). Danger boosts it by rule and keeps it boosted while it lasts; a player turn can boost it with `watch_closely`. See [docs/DECISIONS.md](docs/DECISIONS.md). A report counts only once consecutive frames agree (`brain/perception/tracker.py`), and even then it's an observation, not a fact. At low focus, a frame that looks like the last one sent is skipped for up to 3 s (`brain/perception/still.py`), which keeps menus and idle screens cheap. Its image size, `observer_max_edge_px`, is separate from close looks.
+- Outside the observer's timed reports, call a vision model only on a trigger: learning the game, the player asking, or an event. Gemini's free tier, the fallback, won't sustain streaming at all.
 - Send downscaled frames at `media_resolution` low by default. Send full-resolution crops only when the player asks or an event fires.
-- Send every LLM call through a local per-model rate limiter that refuses rather than waits. When over quota, fall back to cached barks or stay quiet.
+- Send every LLM call through a local per-model rate limiter that refuses rather than waits. When over quota, fall back to cached barks or stay quiet. Calls nobody waits on (observer, tips, learner, progress scout, notes, brief) use `factory` roles with `background=True`, which leave 10% of each model's minute to the player's turns.
 
 **Game-agnostic**
 - No game-specific logic in `brain/`. Terraria knowledge is learned into the game profile as data.
@@ -160,6 +160,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Echo:** Pipecat's local audio transport has no documented echo cancellation, so speaker output can trigger barge-in. Use headphones. Without them, set `VOICE_HALF_DUPLEX=true`, which mutes the mic while the partner talks but gives up barge-in.
 - **Recording:** record with OBS Display Capture. Game Capture and Window Capture are likely to miss the overlay.
 - **`<webview>`:** Electron's docs warn it can be unstable, so test it over the game. Hide it with `visibility: hidden`: `display: none` can reload the page. Set `pointer-events: none` on it during a drag, or it swallows the drag.
+- **Timestamps in tests:** don't compare events whole. `ts` comes from `time.monotonic()`, which ticks about every 15 ms on Windows, so such a test passes there and fails on macOS.
 - **Frame privacy:** frames are cropped to the game window and only captured while it's in front. The Steam overlay draws inside that window, so cropping can't remove friend lists and chats: turn it off while playing. Keep replay sessions out of git; they contain screen and mic data.
 
 ### Terraria (test these; don't hardcode them)
@@ -170,7 +171,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - **Learned regions:** store positions as normalized coordinates and relearn them when resolution or UI scale changes.
 
 ## Current Sprint Focus
-**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers, learned regions, WP9 and memory search are merged. From `perf/voice-path-stalls`, only the vault-export fix was kept: every role runs on Claude now, so sharing SDK clients no longer matters. Next, run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
+**Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers, learned regions, WP9 and memory search are merged. From `perf/voice-path-stalls`, only the vault-export fix was kept. All Claude roles share one HTTP pool (`shared_http_client` in `brain/llm/claude.py`), so a player turn reuses the observer's warm connection instead of opening a new one. Next, run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
 - [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. Observer and reader events both carry `frame_ts`
@@ -184,7 +185,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - [ ] Memory search (Settings: Keywords, Both, Meaning). Both and Meaning load a local embedding model and add sqlite-vec recall. Check it finds what keywords miss in a real session, and pick it once before the demo so the model is downloaded
 - [ ] Personality tone and lines come from data, and `Settings.voice_id` reaches TTS
 - [ ] One `LLMFactory`, and the wiki is found in the background at startup
-- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, Gemini Flash guesses from their gear (at most 3 calls a session) and stores it as a tentative observed `playthrough / progress` fact. It asks the game's planned progress question if there is one. Check the guesses on real Terraria hotbars
+- [ ] Progress scout (`brain/learner/progress.py`): if memory doesn't know how far the player is, the vision model (Haiku) guesses from their gear (at most 3 calls a session) and stores it as a tentative observed `playthrough / progress` fact. It asks the game's planned progress question if there is one. Check the guesses on real Terraria hotbars
 - [ ] Planned questions (`brain/learner/questions.py`): once per game, the deep model drafts up to 6 questions in the game's own terms from the brief and keeps them in the profile. Each session queues the ones memory doesn't know. Check them on Terraria
 - [ ] Mic off (`Settings.mic_enabled`) and the overlay's text box (`player.text`). Check that the game gets the keyboard back after Enter
 - [ ] Pacing (`Settings.pacing`, the Control Center's Pacing tab): the gaps between event reactions (8 s), questions (45 s, with no quiet stretch) and tips, editable live, with Lively, Default and Calm presets. Calm is the old pacing

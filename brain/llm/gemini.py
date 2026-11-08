@@ -9,9 +9,9 @@ from google.genai import errors, types
 
 from brain.llm.base import (
     Detail,
+    Limiter,
     LLMEmptyResponseError,
     LLMUnavailableError,
-    RateLimiter,
     SchemaT,
     ToolCall,
     ToolDeclaration,
@@ -32,7 +32,7 @@ class GeminiClient:
         self,
         model: str,
         api_key: str,
-        limiter: RateLimiter,
+        limiter: Limiter,
         thinking_level: types.ThinkingLevel = types.ThinkingLevel.LOW,
     ) -> None:
         self._model = model

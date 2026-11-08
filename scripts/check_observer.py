@@ -86,7 +86,7 @@ async def main() -> int:
             ),
             settings.focus_hold_s,
         ),
-        settings.ai_image_max_edge_px,
+        settings.observer_max_edge_px,
         settings.mask_padding_px,
         on_observation=show,
     )

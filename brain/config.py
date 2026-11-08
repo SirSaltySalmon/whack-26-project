@@ -107,6 +107,10 @@ class Settings(BaseSettings):
     capture_fps: int = 5
     ring_buffer_seconds: int = 10
     ai_image_max_edge_px: int = 1280
+    # The continuous reports' own size, so they can be made cheaper without touching close looks
+    # or the learner. About 960 would cut each image's tokens by ~40%; check it with
+    # scripts/check_observer.py before relying on it.
+    observer_max_edge_px: int = 1280
     mask_padding_px: int = 8
     # For when the player asks for a closer look, which can afford more than the continuous reports.
     closeup_max_edge_px: int = 1920

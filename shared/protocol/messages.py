@@ -8,21 +8,15 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-# Re-exported, so imports from this module keep working.
-from shared.protocol.debug import DebugBrain as DebugBrain
+# Re-exported, so imports from this module keep working after the split.
+from shared.protocol.debug import DebugBrain, DebugRegions, DebugSightings
 from shared.protocol.debug import DebugLatency as DebugLatency
 from shared.protocol.debug import DebugRegion as DebugRegion
-from shared.protocol.debug import DebugRegions as DebugRegions
 from shared.protocol.debug import DebugSighting as DebugSighting
-from shared.protocol.debug import DebugSightings as DebugSightings
+from shared.protocol.geometry import ElementRect as ElementRect
 from shared.protocol.geometry import Rect as Rect
 
 PROTOCOL_VERSION = 1
-
-
-class ElementRect(BaseModel):
-    element_id: str
-    rect: Rect
 
 
 class Pacing(BaseModel):
@@ -165,6 +159,7 @@ class PageRead(BaseModel):
     request_id: str
 
 
+# --- Overlay to brain ---
 class OverlayReady(BaseModel):
     type: Literal["overlay.ready"] = "overlay.ready"
     protocol_version: int
@@ -259,5 +254,6 @@ OverlayMessage = Annotated[
 BrainMessageAdapter: TypeAdapter[BrainMessage] = TypeAdapter(BrainMessage)
 OverlayMessageAdapter: TypeAdapter[OverlayMessage] = TypeAdapter(OverlayMessage)
 
-# The debug view's messages are in debug.py and the Control Center's in control.py. Protocol,
-# which lists every direction for the generated TypeScript, is in __init__.py.
+# Rect and ElementRect are in geometry.py and the debug view's messages in debug.py, both
+# re-exported here. The Control Center's messages are in control.py, and Protocol, which lists
+# every direction for the generated TypeScript, is in __init__.py.

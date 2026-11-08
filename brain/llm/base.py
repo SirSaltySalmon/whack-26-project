@@ -87,6 +87,15 @@ class PointTarget(BaseModel):
     box_2d: list[float]  # [ymin, xmin, ymax, xmax], 0-1000, relative to the image sent
 
 
+# The share of each model's budget that only calls the player is waiting on may use, so a busy
+# observer or a background note is never why the player's own turn gets refused.
+PLAYER_SHARE = 0.1
+
+
+class Limiter(Protocol):
+    def try_acquire(self) -> bool: ...
+
+
 class RateLimiter:
     """Refuses instead of waiting: on the voice path a late reply is worse than a bark."""
 
@@ -97,11 +106,26 @@ class RateLimiter:
         self._clock = clock
         self._calls: deque[float] = deque()
 
-    def try_acquire(self) -> bool:
+    def try_acquire(self, headroom: int = 0) -> bool:
+        """`headroom` is how many of the minute's calls to leave unused for others."""
         now = self._clock()
         while self._calls and now - self._calls[0] >= 60.0:
             self._calls.popleft()
-        if len(self._calls) >= self._limit:
+        if len(self._calls) >= self._limit - headroom:
             return False
         self._calls.append(now)
         return True
+
+    def for_background(self) -> "BackgroundLimiter":
+        return BackgroundLimiter(self, self._limit)
+
+
+class BackgroundLimiter:
+    """The same budget, less the player's share. A model allowed one call a minute keeps none."""
+
+    def __init__(self, shared: RateLimiter, limit: int) -> None:
+        self._shared = shared
+        self._headroom = max(1, round(limit * PLAYER_SHARE)) if limit > 1 else 0
+
+    def try_acquire(self) -> bool:
+        return self._shared.try_acquire(self._headroom)

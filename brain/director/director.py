@@ -73,8 +73,7 @@ class Director:
         personalities: PersonalityBook | None = None,
         take_question: Callable[[], Awaitable[QuestionAsk | None]] | None = None,
         release_question: Callable[[str], Awaitable[None]] | None = None,
-        # The player's pacing settings at startup. Later changes arrive as SettingsChanged.
-        pacing: Pacing | None = None,
+        pacing: Pacing | None = None,  # At startup; later changes arrive as SettingsChanged
         advice_after_learning_s: float = 15.0,
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
@@ -82,8 +81,7 @@ class Director:
         custom_instructions: Callable[[], str] = lambda: "",
         bark_events: Mapping[str, str] | None = None,
         on_decision: DecisionHook = ignore_decision,  # For the debug panel
-        # Stamps ticks and spoken lines, so they share a clock with the events the rules see.
-        clock: Callable[[], float] = time.monotonic,
+        clock: Callable[[], float] = time.monotonic,  # Shared with the events the rules see
     ) -> None:
         self._events = bus.subscribe()
         self._voice = voice
@@ -131,13 +129,15 @@ class Director:
 
     def _handle(self, event: Event) -> None:
         if isinstance(event, Tick) and self._slot.busy():
-            # A tick only brings up questions and tips, which a busy slot would skip, and deciding
-            # one would spend its budget on nothing. The next tick tries again.
+            # A busy slot would skip a tick's question or tip, and deciding one would waste budget.
             return
-        actions = decide(event, self._state)
-        self._on_decision(event, actions, self._slot.busy(), self._state)
-        for action in actions:
-            self._dispatch(action)
+        try:
+            actions = decide(event, self._state)
+            self._on_decision(event, actions, self._slot.busy(), self._state)
+            for action in actions:
+                self._dispatch(action)
+        except Exception:  # One bad event mustn't end the brain, or stop the ticker unseen.
+            log.exception("Director failed to handle %s", type(event).__name__)
 
     def _dispatch(self, action: Action) -> None:
         match action:

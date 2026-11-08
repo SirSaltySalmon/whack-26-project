@@ -24,6 +24,7 @@ from brain.memory.service import MemoryService
 from brain.perception.focus import Focus, FocusIntervals
 from brain.perception.observation import Observation
 from brain.perception.observer import Observer
+from brain.perception.still import StillFrames
 from brain.perception.tracker import ObservationTracker
 from brain.research import ExaSearch, WikiResearch
 from brain.research.open_page import OpenPage
@@ -119,11 +120,13 @@ def make_observer(
             ),
             settings.focus_hold_s,
         ),
-        settings.ai_image_max_edge_px,
+        settings.observer_max_edge_px,
         settings.mask_padding_px,
         on_observation,
         watching=lambda: link.settings.vision_enabled,
         debug_send=link.send if settings.debug_regions else None,
+        # Not while debugging regions: then each report also redraws its boxes.
+        still=None if settings.debug_regions else StillFrames(),
     )
 
 
@@ -139,7 +142,7 @@ def make_progress_scout(
         log.warning("Not guessing the player's progress: turned off for this run")
         return None
     try:
-        vision = factory.vision()
+        vision = factory.vision(background=True)
     except LLMUnavailableError as exc:
         log.warning("Not guessing the player's progress: %s", exc)
         return None

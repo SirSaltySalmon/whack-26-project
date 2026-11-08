@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from functools import partial
 from pathlib import Path
 
 import uvicorn
@@ -71,9 +72,11 @@ async def run(
     link = OverlayLink(bus)
     # One factory, because limiters are per model and vision and deep notes can share a model.
     factory = LLMFactory(settings)
+    # Nobody waits on these, so they leave the player's share of the deep model's budget alone.
+    background_deep = partial(factory.deep, background=True)
     # Before memory opens, because memory is filed under the game's title.
     settings, written = (
-        (settings, None) if replay_dir else await name_game(settings, factory.deep, game_hint)
+        (settings, None) if replay_dir else await name_game(settings, background_deep, game_hint)
     )
     personalities = load_personalities()
     link.personalities = personalities.names
@@ -97,7 +100,7 @@ async def run(
         bus,
         link.send,
         settings.game_title,
-        NoteWriter(no_note_model if replay_dir else factory.deep),
+        NoteWriter(no_note_model if replay_dir else background_deep),
         vault_dir=None if replay_dir else settings.vault_dir,
         note_interval_s=settings.note_interval_s,
         note_min_new_events=settings.note_min_new_events,
@@ -247,7 +250,7 @@ async def run(
                     await ensure_brief(
                         database,
                         settings.game_title,
-                        factory.deep,
+                        background_deep,
                         game_hint,
                         written,
                         settings.brief_timeout_s,
@@ -256,7 +259,7 @@ async def run(
                         database,
                         memory,
                         settings.game_title,
-                        factory.deep,
+                        background_deep,
                         settings.planned_questions_max,
                         settings.brief_timeout_s,
                     )

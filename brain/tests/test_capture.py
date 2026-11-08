@@ -102,3 +102,11 @@ def test_ring_buffer_keeps_the_region() -> None:
     buffer.push(Frame(1.0, screen(), (), REGION))
     latest = buffer.latest()
     assert latest is not None and latest.region == REGION
+
+
+def test_a_captured_frame_owns_its_pixels_so_the_buffer_needs_no_copy() -> None:
+    # The copy happens on the capture thread, so pushing on the event loop can skip it.
+    image = screen()
+    for window in (FakeWindow(REGION), None):
+        frame = loop_with(FakeSource(image), window)._capture(())
+        assert frame is not None and not np.shares_memory(frame.image, image)

@@ -1,7 +1,4 @@
-"""Brain to overlay messages for the debug view, shown only with --debug-regions.
-
-TypeScript types are generated from these models with the rest of the protocol.
-"""
+"""The debug view drawn over the game with --debug-regions. Coordinates are Electron DIPs."""
 
 from typing import Literal
 

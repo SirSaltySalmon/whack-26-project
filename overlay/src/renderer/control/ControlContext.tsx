@@ -12,7 +12,6 @@ import type { KeyList, ProcessSnapshot } from "../../lib/controlBridge.ts";
 import {
   allVoices,
   partnerSettings,
-  type KeyName,
   type LauncherConfig,
 } from "../../lib/launcher.ts";
 import { logger } from "../../lib/logger.ts";
@@ -26,6 +25,7 @@ import type {
 import { PROTOCOL_VERSION } from "../lib/brainSocket.ts";
 import { brainUrl, JsonSocket } from "../lib/jsonSocket.ts";
 import type { ControlApi, ReplyOf } from "./api.ts";
+import { availableKeys, settingsChoices } from "./logic/choices.ts";
 import { readMemory } from "./logic/readMemory.ts";
 import { RequestTracker } from "./logic/requests.ts";
 
@@ -204,12 +204,6 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     if (!config) return null;
     const started = proc.state !== "stopped" && proc.state !== "crashed";
     const voices = allVoices(description?.voices ?? [], config.customVoices);
-    const available = new Set<KeyName>(
-      keys.keys.filter((key) => key.saved).map((key) => key.name),
-    );
-    for (const [name, set] of Object.entries(description?.keys_set ?? {})) {
-      if (set) available.add(name as KeyName);
-    }
     return {
       manageMemory,
       process: proc,
@@ -224,20 +218,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
         setConfig((current) => current && change(current));
         setChangedAt(Date.now());
       },
-      choices:
-        connected && live
-          ? {
-              settings: live.settings,
-              personalities: live.personalities ?? [],
-              voices: live.voices ?? [],
-            }
-          : {
-              settings: config.settings,
-              personalities: description?.personalities ?? [
-                config.settings.personality,
-              ],
-              voices,
-            },
+      choices: settingsChoices(config, live, connected, description, voices),
       changeSettings: (settings) => {
         setConfig(
           (current) =>
@@ -247,7 +228,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       },
       voices,
       keys,
-      availableKeys: available,
+      availableKeys: availableKeys(keys, description),
       setKey: async (name, value) => {
         setKeys(await bridge.setKey(name, value));
         setChangedAt(Date.now());
