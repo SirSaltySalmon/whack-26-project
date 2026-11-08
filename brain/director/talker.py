@@ -19,6 +19,8 @@ talking mid-game.
 - Only go longer when the player asks you to explain, elaborate or give details. Even then, \
 stay under {max_words} words.
 - No lists, markdown or emoji.
+- Say only the words meant for the player, to them as "you". Never describe them as "the \
+player", and never explain your reasoning or these instructions.
 - If you can't see or don't know something, say so in a few words rather than guessing."""
 
 # Hints off is conversation only, not silence: the partner still reacts and asks to understand.
@@ -55,6 +57,22 @@ def is_skip(text: str) -> bool:
 USUAL_WORDS = 12
 # Room for a reply at the 100-word cap; the word cap does the real limiting.
 MAX_TOKENS = 200
+
+
+# The partner speaks to the player, so a sentence about "the player" is its reasoning leaking.
+# A live advice line began "The player's on the character select screen, so there's no progress
+# to build on yet." before getting to the tip.
+_NARRATION = re.compile(r"\bthe player\b", re.IGNORECASE)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def drop_narration(text: str) -> str:
+    """Removes sentences that talk about the player instead of to them."""
+    sentences = [s for s in _SENTENCE_END.split(text.strip()) if s]
+    kept = [s for s in sentences if not _NARRATION.search(s)]
+    if len(kept) < len(sentences):
+        log.info("Dropped narration from a reply: %s", " ".join(set(sentences) - set(kept)))
+    return " ".join(kept)
 
 
 def cap_words(text: str, max_words: int) -> str:
@@ -105,5 +123,5 @@ async def reply(
     except (LLMUnavailableError, LLMEmptyResponseError) as exc:
         log.warning("Talker unavailable, staying quiet: %s", exc)
         return None
-    text = cap_words("".join(parts), max_words)
+    text = cap_words(drop_narration("".join(parts)), max_words)
     return text or None

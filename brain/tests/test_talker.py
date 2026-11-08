@@ -156,3 +156,23 @@ def test_the_tip_prompt_never_asks_and_grounds_the_tip_in_what_memory_knows() ->
 )
 def test_only_a_bare_skip_counts_as_skipping(text: str, skips: bool) -> None:
     assert is_skip(text) is skips
+
+
+def test_narration_about_the_player_is_never_spoken() -> None:
+    from brain.director.talker import drop_narration
+
+    # From a live run: the advice line opened with the model's reasoning.
+    leaked = (
+        "The player's on the character select screen, so there's no progress to build on yet. "
+        "Pick a character from the list and hit Play to dive in."
+    )
+    assert drop_narration(leaked) == "Pick a character from the list and hit Play to dive in."
+    assert drop_narration("Nice dodge! Watch that slime.") == "Nice dodge! Watch that slime."
+    # "player" on its own, such as another player, is fine; only "the player" is narration.
+    assert drop_narration("Another player built that.") == "Another player built that."
+    assert drop_narration("The player is low on health.") == ""
+
+
+async def test_a_reply_that_is_only_narration_stays_quiet() -> None:
+    llm = FakeLLM(["The player seems to be exploring."])
+    assert await reply(llm, "hi", "supportive", 12) is None
