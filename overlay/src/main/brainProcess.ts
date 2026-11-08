@@ -30,7 +30,7 @@ export function repoRoot(): string {
   return resolve(app.getAppPath(), "..");
 }
 
-function pythonFor(config: LauncherConfig): string {
+export function pythonFor(config: LauncherConfig): string {
   if (config.pythonPath.trim()) return config.pythonPath.trim();
   const venv =
     process.platform === "win32"
@@ -74,7 +74,7 @@ export function describeBrain(config: LauncherConfig): Promise<DescribeResult> {
 }
 
 /** Ends the whole tree: on Windows a venv's python.exe starts the real interpreter as a child. */
-function killTree(child: ChildProcess): void {
+export function killTree(child: ChildProcess): void {
   if (child.pid === undefined) return;
   if (process.platform === "win32") {
     spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {

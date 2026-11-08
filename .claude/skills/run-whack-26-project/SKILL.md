@@ -69,7 +69,7 @@ node $D text .mem-stats
 node $D ss 02-memory
 ```
 
-The brain must be running under the same game title, or the tab shows 0 facts.
+The tab works with the partner off (it reads memory through `python -m brain --memory`) and opens on the game being played, or the one played last. Pick another with the game picker, a `<select class="mem-game">`. `fill` doesn't drive a select, so use `eval` with the native value setter and a bubbling `change` event.
 
 ### Finish
 
@@ -106,7 +106,7 @@ npm --prefix overlay run typecheck
 - **The window reopens on the last tab used** (localStorage). Forget `tab Agent` and `field "Game title"` returns `NOT_FOUND`.
 - **Choices persist** in `%APPDATA%\overlay\launcher.json`, game title included, and saved keys go in `keys.json`, encrypted with DPAPI. That's why Finish clears the test title.
 - **React inputs ignore `.value =`.** `field` and `fill` use the native setter plus an `input` event; plain DOM assignment does nothing.
-- **Memory is filed by game title.** A brain started with an empty title files under "Unknown game", so facts seeded for "Control Center Test" don't show.
+- **Memory is filed by game title.** A brain started with an empty title files under "Unknown game". The Memory tab's game picker shows any title in memory.
 - **Console lines exist in the DOM only while the Console tab is open.** `logs` reads the brain's log through the window's bridge instead, from any tab.
 - **The brain log shows a dxcam `COMError` traceback** on this machine, then "falling back to mss". That's expected (see CLAUDE.md).
 - **`electron.log` shows `safeStorage ... is deprecated` warnings.** They're harmless on Electron 45.
@@ -117,4 +117,4 @@ npm --prefix overlay run typecheck
 - **`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c`, exit code 127**: Node on Windows was forced out with `process.exit()` while a WebSocket or fetch handle was still closing. The driver awaits each socket's close and lets Node exit by itself; do the same in any new CDP script.
 - **`text .mem-stats` prints `(not found)`**: the tab hadn't finished its query. Run `wait .mem-stats` first.
 - **`NOT_FOUND: Game title`**: the Agent tab isn't open. Run `node $D tab Agent`.
-- **Memory shows `0 facts` after seeding**: the running brain uses a different title. `stop`, set `field "Game title"`, then `start`.
+- **Memory shows `0 facts` after seeding**: the picker is on another game. Pick "Control Center Test".

@@ -29,18 +29,29 @@ class LLMFactory:
             raise LLMUnavailableError("GEMINI_API_KEY isn't set")
         return GeminiClient(model, key.get_secret_value(), self._limiter(model), thinking)
 
-    def _fast(self, model: str, thinking: types.ThinkingLevel) -> ClaudeClient | GeminiClient:
+    def _fast(
+        self, model: str, thinking: types.ThinkingLevel, think: bool = False
+    ) -> ClaudeClient | GeminiClient:
         """The vendor follows the model's name, so switching back is a config change."""
         if not model.startswith("claude"):
             return self._build(model, thinking)
         key = self._settings.anthropic_api_key
         if key is None:
             raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
-        return ClaudeClient(model, key.get_secret_value(), self._limiter(model), think=False)
+        limiter = self._limiter(model)
+        # The fast roles run on Haiku, which has no server-side fallback.
+        return ClaudeClient(model, key.get_secret_value(), limiter, think=think, fallback=False)
 
     def talker(self) -> ClaudeClient | GeminiClient:
-        # Thinking costs time on the voice path.
-        return self._fast(self._settings.talker_model, types.ThinkingLevel.MINIMAL)
+        # Thinking costs time on the voice path, so it's off unless talker_thinking turns it on.
+        think = self._settings.talker_thinking
+        level = types.ThinkingLevel.LOW if think else types.ThinkingLevel.MINIMAL
+        return self._fast(self._settings.talker_model, level, think)
+
+    def tips(self) -> ClaudeClient | GeminiClient:
+        """The talker's model, thinking briefly first. Nobody waits on a tip, and with thinking
+        off a tip once opened by describing the player's screen."""
+        return self._fast(self._settings.talker_model, types.ThinkingLevel.LOW, think=True)
 
     def vision(self) -> ClaudeClient | GeminiClient:
         return self._fast(self._settings.vision_model, types.ThinkingLevel.LOW)

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
-from brain.capture.apps import AppWindow, unique_apps
+from brain.capture.apps import AppWindow, title_names_game, unique_apps
 from brain.config import Settings
 from brain.game_detect import DetectTiming, wait_for_front
 from brain.game_setup import (
@@ -45,6 +45,21 @@ def detect(tmp_path: Path, running: list[AppWindow], front, **kwargs: object):  
 def test_unique_apps_keeps_one_per_app_and_never_offers_the_overlay() -> None:
     windows = [CHROME, AppWindow("Chrome", "chrome", "Other tab"), AppWindow("electron", "x", "y")]
     assert unique_apps(windows) == [CHROME]
+
+
+def test_a_game_name_finds_its_window_by_title_when_the_exe_is_generic() -> None:
+    minecraft = AppWindow("javaw", "javaw", "Minecraft 1.12.2")
+    assert title_names_game("Minecraft", minecraft)
+    assert title_names_game(" minecraft 1.12.2 ", minecraft)
+    # Only a whole word counts, and the name must start the title.
+    assert not title_names_game("Mine", minecraft)
+    assert not title_names_game("1.12.2", minecraft)
+    assert not title_names_game("", minecraft)
+
+
+def test_a_page_about_the_game_is_never_the_game() -> None:
+    for process in ("msedge", "discord", "code", "explorer"):
+        assert not title_names_game("Minecraft", AppWindow(process, process, "Minecraft Wiki"))
 
 
 def test_pick_game_uses_game_process_without_asking(tmp_path: Path) -> None:

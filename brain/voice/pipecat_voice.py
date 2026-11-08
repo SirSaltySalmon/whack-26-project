@@ -51,8 +51,8 @@ from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge, bark_frames
 from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
-from brain.voice.speech_fallback import SpeechFallback
 from brain.voice.services import elevenlabs_tts, flux_stt, local_audio
+from brain.voice.speech_fallback import SpeechFallback
 from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 

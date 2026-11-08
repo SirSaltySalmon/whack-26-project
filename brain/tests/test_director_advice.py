@@ -11,7 +11,7 @@ from brain.events import OverlayConnected, SettingsChanged, Tick
 from brain.llm.base import LLMUnavailableError, ToolCall, ToolStep
 from brain.tests.director_rig import LOOKING, Rig
 from brain.tests.fakes import FakeTextLLM, ScriptedToolLLM
-from shared.protocol.messages import Settings
+from shared.protocol.messages import Pacing, Settings
 
 FIRST_S = 90.0
 GREETING = "Brain connected."
@@ -150,8 +150,11 @@ async def test_a_blinded_partner_tips_without_offering_the_pointer() -> None:
     agent = ScriptedToolLLM([points_at("workbench"), ToolStep(TIP)])
     tools = Tools()
     rig = tip_rig(talker=talker, agent=agent, tools=tools.all())
+    # Settings carry pacing too, so these keep tip_rig's: a tip due at FIRST_S and no questions.
+    pacing = Pacing(advice_gap_s=180.0, advice_first_s=FIRST_S, question_quiet_s=1e9)
+    blind = Settings(vision_enabled=False, pacing=pacing)
     async with rig.running():
-        await rig.publish(SettingsChanged(settings=Settings(vision_enabled=False), ts=0.0))
+        await rig.publish(SettingsChanged(settings=blind, ts=0.0))
         await due_tip(rig)
     assert agent.model_calls == 0 and tools.pointed == []
     assert talker.prompts == [ADVICE_PROMPT]
@@ -185,3 +188,23 @@ async def test_a_spoken_tip_restarts_the_quiet_stretch() -> None:
         await rig.publish(Tick(ts=FIRST_S + 20.0))
     assert rig.voice.said == [GREETING, TIP, TIP]
     assert talker.prompts == [ADVICE_PROMPT, ADVICE_PROMPT]
+
+
+async def test_a_tip_comes_from_the_thinking_model_when_there_is_one() -> None:
+    agent = ScriptedToolLLM([])
+    tip_llm = ScriptedToolLLM([ToolStep(TIP)])
+    rig = tip_rig(agent=agent, tip_llm=tip_llm, tools=Tools().all())
+    async with rig.running():
+        await due_tip(rig)
+    assert agent.model_calls == 0 and tip_llm.model_calls == 1
+    assert rig.voice.said == [GREETING, TIP]
+
+
+async def test_a_tip_that_cant_point_comes_from_the_thinking_model_too() -> None:
+    talker = FakeTextLLM(["Not this one."])
+    tip_llm = FakeTextLLM([TIP])
+    rig = tip_rig(talker=talker, tip_llm=tip_llm)
+    async with rig.running():
+        await due_tip(rig)
+    assert talker.prompts == [] and tip_llm.prompts == [ADVICE_PROMPT]
+    assert rig.voice.said == [GREETING, TIP]

@@ -22,7 +22,10 @@ from shared.protocol.control import (
     ControlError,
     ControlHello,
     ControlShutdown,
+    GameView,
     MemoryContext,
+    MemoryGames,
+    MemoryListGames,
     MemoryQuery,
     MemoryResults,
     VoicePreview,
@@ -31,7 +34,9 @@ from shared.protocol.messages import MemoryToast, SettingsState, SettingsUpdate
 
 log = logging.getLogger(__name__)
 
-BrowseFn = Callable[[str, bool, int], Awaitable[Browse]]
+# Text, include history, limit, and the game: None for the one being played.
+BrowseFn = Callable[[str, bool, int, str | None], Awaitable[Browse]]
+RecallFn = Callable[[str, str | None], Awaitable[str]]
 
 
 class ShutdownRequested(Exception):
@@ -54,7 +59,8 @@ class ControlLink:
         bus: EventBus,
         *,
         browse: BrowseFn,
-        recall: Callable[[str], Awaitable[str]],
+        recall: RecallFn,
+        games: Callable[[], Awaitable[list[GameView]]],
         status: Callable[[], BrainStatus],
         shutdown: Callable[[], None],
     ) -> None:
@@ -62,6 +68,7 @@ class ControlLink:
         self._bus = bus
         self._browse = browse
         self._recall = recall
+        self._games = games
         self._status = status
         self._shutdown = shutdown
         self._socket: WebSocket | None = None
@@ -130,7 +137,9 @@ class ControlLink:
                 await self.push_status()
             case MemoryQuery():
                 started = time.perf_counter()
-                found = await self._browse(message.text, message.include_history, message.limit)
+                found = await self._browse(
+                    message.text, message.include_history, message.limit, message.game
+                )
                 await self.send(
                     MemoryResults(
                         request_id=message.request_id,
@@ -142,12 +151,21 @@ class ControlLink:
                 )
             case ContextPreview():
                 started = time.perf_counter()
-                context = await self._recall(message.text)
+                context = await self._recall(message.text, message.game)
                 await self.send(
                     MemoryContext(
                         request_id=message.request_id,
                         context=context,
                         elapsed_ms=_elapsed_ms(started),
+                    )
+                )
+            case MemoryListGames():
+                await self.send(
+                    MemoryGames(
+                        request_id=message.request_id,
+                        games=await self._games(),
+                        current=self._status().game_title,
+                        live=True,
                     )
                 )
             case SettingsUpdate():

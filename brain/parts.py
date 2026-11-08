@@ -3,9 +3,10 @@
 import logging
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
+from urllib.parse import urlparse
 
 from brain.agent.focus_tool import watch_tool
-from brain.agent.handlers import AgentLimits, AgentTools
+from brain.agent.handlers import AgentLimits, AgentMemory, AgentTools
 from brain.agent.tools import ToolRegistry
 from brain.capture.ring_buffer import RingBuffer
 from brain.config import Settings
@@ -25,6 +26,7 @@ from brain.perception.observation import Observation
 from brain.perception.observer import Observer
 from brain.perception.tracker import ObservationTracker
 from brain.research import ExaSearch, WikiResearch
+from brain.research.open_page import OpenPage
 from brain.research.wiki_cache import WikiCache
 from brain.server import OverlayLink
 from brain.switches import is_off
@@ -39,6 +41,52 @@ def make_talker(factory: LLMFactory) -> ClaudeClient | GeminiClient | None:
     except LLMUnavailableError as exc:
         log.warning("Talker disabled: %s", exc)
         return None
+
+
+def make_tips(factory: LLMFactory) -> ClaudeClient | GeminiClient | None:
+    """None means tips use the talker, which doesn't think first."""
+    try:
+        return factory.tips()
+    except LLMUnavailableError as exc:
+        log.warning("Tips use the talker: %s", exc)
+        return None
+
+
+def make_agent_tools(
+    settings: Settings,
+    factory: LLMFactory,
+    buffer: RingBuffer,
+    link: OverlayLink,
+    bus: EventBus,
+    memory: AgentMemory,
+    context: Callable[[str], Awaitable[str]],
+) -> tuple[AgentTools, OpenPage]:
+    """The player-turn tools, and the open wiki page they may read, on the game's wiki only."""
+    tools = AgentTools(
+        buffer,
+        link,
+        factory.vision,
+        factory.deep,
+        memory,
+        context,
+        AgentLimits(
+            settings.mask_padding_px,
+            settings.closeup_max_edge_px,
+            settings.look_max_frame_age_s,
+            settings.pointer_ttl_ms,
+            show_sightings=settings.debug_regions,
+        ),
+        look_vision=factory.closeup,
+    )
+
+    def wiki_host() -> str | None:
+        # None until the wiki is found in the background, and then no page is read.
+        research = tools.research
+        return urlparse(research.site.info.server).hostname if research else None
+
+    open_page = OpenPage(bus, link.send, wiki_host)
+    tools.open_page = open_page
+    return tools, open_page
 
 
 def make_observer(
@@ -76,33 +124,6 @@ def make_observer(
         on_observation,
         watching=lambda: link.settings.vision_enabled,
         debug_send=link.send if settings.debug_regions else None,
-    )
-
-
-def make_agent_tools(
-    settings: Settings,
-    factory: LLMFactory,
-    buffer: RingBuffer,
-    link: OverlayLink,
-    memory: MemoryService,
-    context: Callable[[str], Awaitable[str]],
-) -> AgentTools:
-    limits = AgentLimits(
-        settings.mask_padding_px,
-        settings.closeup_max_edge_px,
-        settings.look_max_frame_age_s,
-        settings.pointer_ttl_ms,
-        show_sightings=settings.debug_regions,
-    )
-    return AgentTools(
-        buffer,
-        link,
-        factory.vision,
-        factory.deep,
-        memory,
-        context,
-        limits,
-        look_vision=factory.closeup,
     )
 
 

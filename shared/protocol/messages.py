@@ -23,6 +23,24 @@ class ElementRect(BaseModel):
     rect: Rect
 
 
+class Pacing(BaseModel):
+    """How often the partner may speak up unasked, in seconds. The director's rules apply it.
+
+    A player setting rather than config, so it can be tuned while playing.
+    """
+
+    # Between two reactions to game events.
+    event_gap_s: float = Field(default=8.0, ge=0)
+    # Between two questions. The quiet stretch after anyone talks is off by default: a question
+    # still never interrupts the partner, and is held while the player is mid-sentence.
+    question_gap_s: float = Field(default=45.0, ge=0)
+    question_quiet_s: float = Field(default=0.0, ge=0)
+    # Tips, with hints on: the first after arriving, then one per gap. A 0 gap turns them off.
+    advice_first_s: float = Field(default=45.0, ge=0)
+    advice_gap_s: float = Field(default=90.0, ge=0)
+    advice_quiet_s: float = Field(default=10.0, ge=0)
+
+
 class Settings(BaseModel):
     proactive: bool = True
     personality: str = "supportive"
@@ -35,6 +53,7 @@ class Settings(BaseModel):
     # How memory finds what the player's words are about. "keyword" matches words, "semantic"
     # matches meaning with a local embedding model, and "hybrid" merges the two.
     memory_search: Literal["keyword", "hybrid", "semantic"] = "keyword"
+    pacing: Pacing = Field(default_factory=Pacing)
     # Paused, the partner says nothing, but keeps listening, watching and taking notes. Never
     # restored at startup, so a restart can't leave it silent with no idea why.
     paused: bool = False

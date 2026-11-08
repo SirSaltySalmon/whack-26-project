@@ -28,6 +28,16 @@ def connect(path: Path | str) -> sqlite3.Connection:
     return conn
 
 
+def connect_readonly(path: Path) -> sqlite3.Connection:
+    """For reading memory with the partner off, or beside one that's writing: WAL lets both run.
+    Never creates the file or touches the schema. The file must exist."""
+    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    _check_version(conn, path)
+    return conn
+
+
 def _check_version(conn: sqlite3.Connection, path: Path | str) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     has_tables = conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is not None

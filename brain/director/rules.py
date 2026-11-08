@@ -2,10 +2,11 @@
 
 An LLM never decides this. Models only choose what to do inside a turn these rules started.
 
-Questions and tips wait for a quiet stretch, measured from the player's last turn and the partner's
-last spoken line. Game events don't count by themselves: the observer reports them all through
-active play, so counting them meant the partner almost never found a moment to ask or advise. A
-reaction to one counts once it's actually said, which the director reports with PartnerSpoke.
+Tips, and questions if the player's pacing asks for it, wait for a quiet stretch, measured from
+the player's last turn and the partner's last spoken line. Game events don't count by themselves:
+the observer reports them all through active play, so counting them meant the partner almost never
+found a moment to ask or advise. A reaction counts once it's actually said, which the director
+reports with PartnerSpoke.
 
 Paused (`Settings.paused`), nothing starts speech except a voice preview the player asked for.
 Everything else still runs, so the partner keeps hearing, watching and taking notes. Questions stay
@@ -29,6 +30,7 @@ from brain.events import (
     VoicePreviewRequested,
 )
 from brain.latency import Origin
+from shared.protocol.messages import Pacing
 
 # Names the observer's tracker publishes. They describe any game, so this stays game-agnostic.
 _DANGER_RISING = frozenset({"danger_started", "danger_high"})
@@ -123,22 +125,28 @@ Action = (
 )
 
 
+_PACING = Pacing()
+
+
 @dataclass
 class DirectorState:
-    bark_cooldown_s: float = 8.0
-    question_gap_s: float = 90.0
-    question_quiet_s: float = 20.0
+    # The gaps and quiet stretches default to the player's pacing settings, which replace them
+    # whenever settings change.
+    bark_cooldown_s: float = _PACING.event_gap_s
+    question_gap_s: float = _PACING.question_gap_s
+    question_quiet_s: float = _PACING.question_quiet_s
     last_bark_at: float | None = None
     last_question_at: float | None = None
     # Tips get old faster than curiosity does, so they're rarer than questions. A 0 gap turns them
     # off. The first comes sooner than the gap, and sooner again once the partner learns where the
     # player stands, because that's when a tip can be about their game rather than generic.
-    advice_gap_s: float = 180.0
-    advice_quiet_s: float = 20.0
-    advice_first_s: float = 90.0
+    advice_gap_s: float = _PACING.advice_gap_s
+    advice_quiet_s: float = _PACING.advice_quiet_s
+    advice_first_s: float = _PACING.advice_first_s
     advice_after_learning_s: float = 15.0
     # When the next tip is due. None until the overlay connects.
     next_advice_at: float | None = None
+    last_advice_at: float | None = None
     # The player's last turn or the partner's last spoken line. Connecting sets it too, so nothing
     # is asked the moment the player arrives. Assigned rather than maxed, so it follows the latest.
     last_talk_at: float | None = None
@@ -180,6 +188,22 @@ def _may_advise(ts: float, state: DirectorState) -> bool:
     # Right after a question, a tip would talk over the player's answer.
     asked = state.last_question_at
     return asked is None or ts - asked >= state.advice_quiet_s
+
+
+def apply_pacing(state: DirectorState, pacing: Pacing, ts: float | None = None) -> None:
+    """Takes the player's pacing settings. With `ts`, a tip already scheduled further out than
+    the new timing allows is brought forward, so a shorter gap is felt now rather than after the
+    old one. A longer gap leaves it be: like learning, a change only ever makes a tip sooner."""
+    state.bark_cooldown_s = pacing.event_gap_s
+    state.question_gap_s = pacing.question_gap_s
+    state.question_quiet_s = pacing.question_quiet_s
+    state.advice_gap_s = pacing.advice_gap_s
+    state.advice_quiet_s = pacing.advice_quiet_s
+    state.advice_first_s = pacing.advice_first_s
+    if ts is None or state.next_advice_at is None or pacing.advice_gap_s <= 0:
+        return
+    wait = pacing.advice_first_s if state.last_advice_at is None else pacing.advice_gap_s
+    state.next_advice_at = min(state.next_advice_at, ts + wait)
 
 
 def _learned_where_they_stand(event: FactLearned) -> bool:
@@ -245,10 +269,14 @@ def decide(event: Event, state: DirectorState) -> list[Action]:
                 state.ask_on_resume = False
                 return [AskQuestion()]
             if _may_advise(event.ts, state):
+                state.last_advice_at = event.ts
                 state.next_advice_at = event.ts + state.advice_gap_s
                 return [GiveAdvice()]
             return []
         case SettingsChanged():
+            pacing = getattr(event.settings, "pacing", None)
+            if isinstance(pacing, Pacing):
+                apply_pacing(state, pacing, event.ts)
             # Sending the current voice again is harmless, so this needs no change tracking.
             actions: list[Action] = [SetVoice(getattr(event.settings, "voice_id", None))]
             paused = bool(getattr(event.settings, "paused", False))

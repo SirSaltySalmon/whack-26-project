@@ -33,6 +33,20 @@ def is_not_a_game(app: "AppWindow") -> bool:
     return app.process.strip().lower() in NOT_A_GAME
 
 
+def title_names_game(wanted: str, app: "AppWindow") -> bool:
+    """True when the window's title starts with `wanted` as a whole word.
+
+    Players type the game's name where the exe's stem belongs, and some games share a generic
+    exe: Minecraft Java runs as javaw, titled "Minecraft 1.12.2". Apps from NOT_A_GAME never
+    count, because a browser tab or an editor file about the game isn't the game.
+    """
+    wanted, title = wanted.strip().lower(), app.title.strip().lower()
+    if not wanted or is_not_a_game(app) or not title.startswith(wanted):
+        return False
+    rest = title[len(wanted) :]
+    return not rest or not rest[0].isalnum()
+
+
 @dataclass(frozen=True)
 class AppWindow:
     process: str  # What GameWindow matches: the exe's stem on Windows, the app's name on macOS

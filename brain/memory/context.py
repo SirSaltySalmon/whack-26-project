@@ -16,8 +16,9 @@ CONTEXT_PREAMBLE = (
     ' are guesses: say "looks like", and when the player contradicts one, they\'re right.'
     " UNSURE is what you don't know: don't guess, say you don't know, and don't quiz the player"
     " about it, because questions get asked at quiet moments."
-    " ASKED is the question you just asked: if their words answer it, record that with"
-    " answer_question."
+    " ASKED is the question you just asked: if their words, or their lines just before under TURNS,"
+    " answer it, record that with answer_question. Never ask it again unless they ask you to"
+    " repeat it: questions have their own budget, and repeating one nags."
 )
 
 _ELLIPSIS = "…"

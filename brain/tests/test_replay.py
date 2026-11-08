@@ -23,7 +23,7 @@ from brain.replay.format import EVENTS, FRAMES_DIR, MANIFEST, PARTNER_SAID
 from brain.replay.source import ReplayLoop
 from brain.tests.fakes import FakeOverlay, drain
 from brain.tests.replay_rig import RigFrame, RigSession, event, message, solid_image, write_session
-from shared.protocol.messages import Rect
+from shared.protocol.messages import Pacing, Rect
 
 START = 100.0
 
@@ -175,6 +175,7 @@ async def test_scale_and_settings_come_from_the_manifest(tmp_path: Path) -> None
         "voice_style": "classic",
         "mic_enabled": True,
         "memory_search": "semantic",
+        "pacing": Pacing(advice_gap_s=0.0).model_dump(),
         "paused": False,
         "vision_enabled": True,
     }
