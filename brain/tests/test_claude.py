@@ -134,3 +134,21 @@ async def test_streaming_refuses_over_the_local_limit() -> None:
     with pytest.raises(LLMUnavailableError):
         _ = [chunk async for chunk in built.stream_text("Plan.", "Next?", 100)]
     assert messages.kwargs == {}
+
+
+def test_number_and_string_limits_are_dropped_but_fields_named_like_them_kept() -> None:
+    from pydantic import Field
+
+    from brain.learner.progress import ProgressEstimate
+
+    class Limits(BaseModel):
+        confidence: float = Field(ge=0.0, le=1.0)
+        label: str = Field(max_length=20)
+        maximum: int  # A field that happens to share a keyword's name
+
+    schema = strict_schema(Limits.model_json_schema())
+    assert set(schema["properties"]) == {"confidence", "label", "maximum"}
+    flat = str(schema)
+    assert "'minimum'" not in flat and "'maxLength'" not in flat
+    # The progress scout's reply failed live with a 400 over exactly these.
+    assert "'maximum': " not in str(strict_schema(ProgressEstimate.model_json_schema()))

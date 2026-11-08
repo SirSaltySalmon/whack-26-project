@@ -28,16 +28,36 @@ THINKING_HEADROOM_TOKENS = 4000
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+# Anthropic's structured output rejects these with a 400. The reply is still validated against
+# the full pydantic model, so dropping them here loosens nothing.
+_UNSUPPORTED = frozenset(
+    {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"}
+    | {"minLength", "maxLength"}
+)
+# Their values map field names to schemas, so a field called "maximum" must survive.
+_NAMED = frozenset({"properties", "$defs", "definitions"})
+
+
 def strict_schema(schema: Any) -> Any:
-    """Anthropic's structured output rejects any object that doesn't forbid extra fields."""
-    if isinstance(schema, dict):
-        fixed = {key: strict_schema(value) for key, value in schema.items()}
-        if fixed.get("type") == "object":
-            fixed["additionalProperties"] = False
-        return fixed
+    """Fits a pydantic JSON schema to what Anthropic's structured output accepts.
+
+    Every object must forbid extra fields, and number and string limits aren't supported.
+    """
     if isinstance(schema, list):
         return [strict_schema(item) for item in schema]
-    return schema
+    if not isinstance(schema, dict):
+        return schema
+    fixed: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in _UNSUPPORTED:
+            continue
+        if key in _NAMED and isinstance(value, dict):
+            fixed[key] = {name: strict_schema(sub) for name, sub in value.items()}
+        else:
+            fixed[key] = strict_schema(value)
+    if fixed.get("type") == "object":
+        fixed["additionalProperties"] = False
+    return fixed
 
 
 class ClaudeClient:
