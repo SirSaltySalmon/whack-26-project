@@ -106,6 +106,8 @@ python -m brain --replay <session-dir>     # run from a recorded session
 python -m brain --describe                 # JSON for the Control Center: personalities, voices, which keys are set: no game, mic, keys or network
 python -m brain --replay <session-dir> --speed 4 --exit-when-done --write-messages run.jsonl
 python scripts/compare_replay.py a.jsonl b.jsonl   # compare two runs' messages, ignoring timing and IDs
+python -m brain --live --record 2>&1 | Tee-Object run.log   # keep the log for the latency report
+python scripts/latency_report.py run.log  # p50/p95/max per latency kind, as a Markdown table
 pytest brain/tests
 python scripts/check_observer.py          # print live vision reports (paid, about 3 cents a minute)
 python scripts/export_profile.py          # save the learned HUD as a fixture for PROFILE_FIXTURE
@@ -166,8 +168,8 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 **Now (2026-11-08 02:30, freeze about 04:30): measure, then run it live.** Readers and learned regions are merged. `perf/voice-path-stalls` is still local only. Then build WP9 so latency is measured from the frame, and run [docs/TEST_PLAN.md](docs/TEST_PLAN.md) Stages 1-3 over the game with the log saved. Order, reasons and demo beats: [Before feature freeze](docs/REMAINING_WORK.md#before-feature-freeze).
 
 **Next, for the prompt** (incident.io: react to a live feed as it happens, with personality)
-- [ ] WP9: log latency from the frame that showed the event, not from when it was published
-- [ ] WP11: latency report, event-loop stall watch, and observer, tool-choice and pointer evals. Results go in the test plan's Benchmarks table
+- [ ] WP9, built and not yet run live: `brain/latency.py` logs `frame to bark` and `frame to first audio`, split into noticed and spoke. After the WP4 merge, reader events need `frame_ts`
+- [ ] WP11: the latency report (`scripts/latency_report.py`), the event-loop stall watch (`brain/loop_watch.py`) and the Control Center's Latency tab are built. Observer, tool-choice and pointer evals aren't. Results go in the test plan's Benchmarks table
 - [ ] WP10, if there's time before freeze: `look_back` answers "what just hit me?" from the last few seconds of frames
 
 **Wired, not yet run live**

@@ -10,14 +10,25 @@ from pipecat.frames.frames import (
     InputAudioRawFrame,
     InterimTranscriptionFrame,
     InterruptionFrame,
+    OutputAudioRawFrame,
     TTSTextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from brain.voice.barks import Bark, split_pcm
 from shared.protocol.messages import AvatarState, SubtitleChunk
 
 if TYPE_CHECKING:
     from brain.voice.pipecat_voice import PipecatVoice
+
+
+def bark_frames(bark: Bark) -> list[OutputAudioRawFrame]:
+    """Data frames, so they queue behind any speech already in the TTS service, the output
+    transport treats them as speech (bot-speaking state), and an interruption drops the rest."""
+    return [
+        OutputAudioRawFrame(audio=chunk, sample_rate=bark.sample_rate, num_channels=1)
+        for chunk in split_pcm(bark.pcm, bark.sample_rate)
+    ]
 
 
 class EchoGate(FrameProcessor):

@@ -5,6 +5,7 @@ import pytest
 
 from brain.config import Settings
 from brain.events import EventBus, PlayerMood, PlayerSpeechPartial
+from brain.latency import FirstAudio, Origin
 from brain.server import OverlayLink
 from brain.tests.fakes import FakeOverlay
 from brain.voice.barks import Bark
@@ -30,6 +31,7 @@ def _voice(half_duplex: bool) -> "PipecatVoice":
     voice._echo_tail_s = 0.4
     voice._bot_stopped_at = None
     voice.bot_speaking = False
+    voice._first_audio = FirstAudio()
     return voice
 
 
@@ -151,6 +153,8 @@ def _speaking_voice(
     voice._link = overlay or FakeOverlay()  # type: ignore[assignment]
     voice._speaks = True
     voice.user_speaking = user_speaking
+    voice.bot_speaking = False
+    voice._first_audio = FirstAudio()
     return voice, worker
 
 
@@ -158,6 +162,20 @@ async def test_pipecat_voice_drops_a_bark_while_the_player_is_talking() -> None:
     voice, worker = _speaking_voice(user_speaking=True)
     assert await voice.play(BARK) is False
     assert worker.queued == []
+
+
+async def test_pipecat_voice_times_a_reaction_from_its_frame_to_first_audio(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("INFO")
+    voice, _worker = _speaking_voice(user_speaking=False)
+    now = time.monotonic()
+    origin = Origin("danger_started", "observer", frame_ts=now - 3.0, event_ts=now - 0.5)
+    assert await voice.say("Look out!", origin=origin) is True
+    assert "frame to first audio" not in caplog.text
+    voice.on_bot_started()
+    assert "Latency: frame to first audio" in caplog.text
+    assert "danger_started from observer" in caplog.text
 
 
 async def test_pipecat_voice_queues_a_bark_as_20_ms_audio_chunks() -> None:

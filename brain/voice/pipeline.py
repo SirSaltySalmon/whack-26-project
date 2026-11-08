@@ -10,6 +10,7 @@ from typing import Protocol
 
 from brain.config import Settings
 from brain.events import EventBus
+from brain.latency import Origin
 from brain.server import OverlayLink
 from brain.voice.barks import Bark
 from shared.protocol.messages import AvatarState, SubtitleChunk
@@ -18,11 +19,13 @@ log = logging.getLogger(__name__)
 
 
 class Voice(Protocol):
-    async def say(self, text: str) -> bool:
+    """`origin` is the game event a line reacts to, so the voice can time its first audio."""
+
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
         """Returns whether the text was accepted to be spoken."""
         ...
 
-    async def play(self, bark: Bark) -> bool:
+    async def play(self, bark: Bark, *, origin: Origin | None = None) -> bool:
         """Plays pre-generated audio. Returns whether it was accepted."""
         ...
 
@@ -37,14 +40,15 @@ class SubtitleOnlyVoice:
     def __init__(self, link: OverlayLink) -> None:
         self._link = link
 
-    async def say(self, text: str) -> bool:
+    # No audio here, so there's no first audio to time, and `origin` goes unused.
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
         log.info("Say: %s", text)
         await self._link.send(AvatarState(state="talking"))
         await self._link.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=text, final=True))
         await self._link.send(AvatarState(state="idle"))
         return True
 
-    async def play(self, bark: Bark) -> bool:
+    async def play(self, bark: Bark, *, origin: Origin | None = None) -> bool:
         return await self.say(bark.text)
 
     async def set_voice(self, voice_id: str | None) -> None:

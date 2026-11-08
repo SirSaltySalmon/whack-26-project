@@ -6,6 +6,7 @@ import pytest
 
 from brain.director import director as director_module
 from brain.events import OverlayConnected, PlayerSpeech, PlayerStartedSpeaking, Tick
+from brain.latency import Origin
 from brain.llm.base import ToolStep
 from brain.tests.director_rig import QUIET_S, Rig, Stuck, settle, until
 from brain.tests.fakes import FakeMemory, FakeVoice, ScriptedToolLLM
@@ -136,8 +137,8 @@ async def test_ticks_while_the_slot_is_busy_spend_no_question_budget() -> None:
 class RefusesQuestions(FakeVoice):
     """Acts as if the player is talking whenever the question comes up, and only then."""
 
-    async def say(self, text: str) -> bool:
-        await super().say(text)
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
+        await super().say(text, origin=origin)
         return text != QUESTION.text
 
 

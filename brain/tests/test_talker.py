@@ -6,6 +6,7 @@ from brain.director.director import Director
 from brain.director.rules import AskTalker, ReactToEvent
 from brain.director.talker import ADVICE_PROMPT, SKIP, build_system, cap_words, is_skip, reply
 from brain.events import EventBus
+from brain.latency import Origin
 from brain.llm.base import LLMUnavailableError
 from brain.memory.context import CONTEXT_PREAMBLE
 
@@ -28,7 +29,7 @@ class FakeVoice:
     def __init__(self) -> None:
         self.said: list[str] = []
 
-    async def say(self, text: str) -> bool:
+    async def say(self, text: str, *, origin: Origin | None = None) -> bool:
         self.said.append(text)
         return True
 
