@@ -19,7 +19,12 @@ EXPECTED_ARGUMENTS = {
     "read_open_page": {"question"},
     "note_unknown": {"subject", "attribute", "question"},
     "think_hard": {"question"},
+    "answer_question": {"question_id", "answer", "correction"},
+    "remember_fact": {"subject", "attribute", "value"},
+    "forget_fact": {"subject", "attribute"},
 }
+# Database writes that finish at once, so they play no filler and don't hold off a barge-in.
+QUICK_TOOLS = {"answer_question", "remember_fact", "forget_fact"}
 Handler = Callable[["ValueInput", TurnContext], Awaitable[str]]
 
 
@@ -121,7 +126,58 @@ async def test_cancelling_a_tool_isnt_swallowed_because_barge_in_depends_on_it()
         await task
 
 
-def test_the_six_tools_are_declared_each_with_a_json_schema() -> None:
+def test_only_the_memory_tools_are_quick() -> None:
+    registry = rig().tools.registry()
+    quick = {name for name in registry.names if registry.is_quick(ToolCall(name, {}))}
+    assert quick == QUICK_TOOLS
+
+
+def test_only_offers_just_the_tools_named() -> None:
+    registry = rig().tools.registry()
+    assert registry.only("point_at").names == ("point_at",)
+    assert [d.name for d in registry.only("point_at").declarations()] == ["point_at"]
+    assert registry.only("no_such_tool").names == ()
+
+
+async def test_a_tool_left_out_by_only_cant_be_run() -> None:
+    ran: list[int] = []
+
+    async def handler(arguments: ValueInput, _: TurnContext) -> str:
+        ran.append(arguments.value)
+        return "ran"
+
+    narrowed = registry_with(handler).only("other")
+    output = await narrowed.run(ToolCall("demo", {"value": 1}), TurnContext())
+    assert output == "There's no tool called demo." and ran == []
+
+
+async def test_once_runs_each_tool_one_time_even_when_asked_twice_together() -> None:
+    ran: list[int] = []
+
+    async def handler(arguments: ValueInput, _: TurnContext) -> str:
+        await asyncio.sleep(0)
+        ran.append(arguments.value)
+        return "ran"
+
+    once = registry_with(handler).once()
+    outputs = await asyncio.gather(
+        once.run(ToolCall("demo", {"value": 1}), TurnContext()),
+        once.run(ToolCall("demo", {"value": 2}), TurnContext()),
+    )
+    assert ran == [1]
+    assert outputs == ["ran", "demo already ran, so reply with what you have."]
+
+
+async def test_each_once_registry_has_its_own_count() -> None:
+    async def handler(_: ValueInput, __: TurnContext) -> str:
+        return "ran"
+
+    registry = registry_with(handler)
+    for _ in range(2):
+        assert await registry.once().run(ToolCall("demo", {"value": 1}), TurnContext()) == "ran"
+
+
+def test_every_tool_is_declared_with_a_json_schema() -> None:
     declarations = {d.name: d for d in rig().tools.registry().declarations()}
     assert set(declarations) == set(EXPECTED_ARGUMENTS)
     for name, arguments in EXPECTED_ARGUMENTS.items():

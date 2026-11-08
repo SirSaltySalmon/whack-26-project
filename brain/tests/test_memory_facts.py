@@ -141,10 +141,9 @@ def test_same_source_latest_wins(store: FactStore, source: str) -> None:
     assert current_values(store) == ["ranger"]
 
 
-@pytest.mark.parametrize(("first", "second"), [("player", "observed"), ("observed", "player")])
-def test_player_and_observed_disagreeing_asks(store: FactStore, first: str, second: str) -> None:
-    existing = remember(store, "mage", first)
-    result = remember(store, "ranger", second)
+def test_the_screen_disagreeing_with_the_player_asks(store: FactStore) -> None:
+    existing = remember(store, "mage", "player")
+    result = remember(store, "ranger", "observed")
     assert result.outcome == "conflict"
     assert result.fact is not None and existing.fact is not None
     assert result.fact.tentative is True
@@ -153,6 +152,19 @@ def test_player_and_observed_disagreeing_asks(store: FactStore, first: str, seco
     assert set(result.question.fact_ids) == {existing.fact.id, result.fact.id}
     assert result.question.text == "Is your class mage, or ranger?"
     assert set(current_values(store)) == {"mage", "ranger"}
+
+
+def test_the_player_overrules_what_was_observed_without_asking(store: FactStore) -> None:
+    # Asking the player to choose between their own words and our guess would be wrong.
+    existing = remember(store, "mage", "observed")
+    result = remember(store, "ranger", "player")
+    assert result.outcome == "replaced"
+    assert result.question is None
+    assert result.fact is not None and result.fact.tentative is False
+    assert existing.fact is not None
+    assert [fact.id for fact in result.closed] == [existing.fact.id]
+    assert current_values(store) == ["ranger"]
+    assert store.next_question(GAME) is None
 
 
 def test_further_disagreement_extends_the_open_question(
@@ -181,8 +193,8 @@ def test_repeating_a_disputed_value_doesnt_add_a_question(
 def test_uncertain_question_becomes_a_conflict_when_disputed(
     store: FactStore, conn: sqlite3.Connection
 ) -> None:
-    uncertain = remember(store, "mage", "observed", 0.3)
-    result = remember(store, "ranger", "player")
+    uncertain = remember(store, "mage", "player", 0.3)
+    result = remember(store, "ranger", "observed")
     assert result.outcome == "conflict"
     assert uncertain.question is not None and result.question is not None
     assert result.question.id == uncertain.question.id

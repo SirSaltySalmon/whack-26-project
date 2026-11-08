@@ -3,10 +3,13 @@
 Other tracks call:
 - `context()` for the talker's small block, with `CONTEXT_PREAMBLE` in its system prompt
 - `record_partner_turn()` whenever the partner finishes speaking
-- `take_question()` when the director's question budget allows asking one
+- `take_question()` when the director's question budget allows asking one, and
+  `release_question()` if it then couldn't say it
+- `answer_question()`, `remember()` and `forget()` from player-turn tools
 - `wonder()` when something about the game is unclear and there's no guess to store
-- `remember()` to store a claim about the player or playthrough
 - `current_fact()` for the most trusted current value, before spending a model call on it
+
+It publishes `FactLearned` whenever a fact is stored, replaced or confirmed.
 """
 
 import asyncio
@@ -21,22 +24,25 @@ from pydantic import BaseModel
 from brain.events import (
     Event,
     EventBus,
+    FactLearned,
     GameEvent,
     PlayerSpeech,
+    PlayerStartedSpeaking,
     QuestionAnswered,
     SettingsChanged,
 )
+from brain.memory.asking import AnswerWatch, Asking
 from brain.memory.context import render_context
 from brain.memory.db import Database
-from brain.memory.export import export_quietly
 from brain.memory.facts import FactStore
 from brain.memory.gather import gather_context
 from brain.memory.models import Fact, NoteKind, Question, RememberResult, Session, Source
-from brain.memory.notes import NoteDraft, NoteWriter
+from brain.memory.note_flow import NoteFlow
+from brain.memory.notes import NoteWriter
 from brain.memory.profile import PlayerStore, ProfileStore
 from brain.memory.sessions import SessionStore
 from brain.memory.toasts import toast_for
-from brain.memory.unknowns import MAX_OPEN_QUESTIONS_IN_PROMPT, UnknownStore
+from brain.memory.unknowns import UnknownStore
 from shared.protocol import BrainMessage
 from shared.protocol.messages import QuestionAsk
 
@@ -45,6 +51,7 @@ log = logging.getLogger(__name__)
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 SLOW_CONTEXT_MS = 50.0
+_LEARNED = frozenset({"stored", "replaced", "confirmed"})
 
 
 class MemoryService:
@@ -59,27 +66,43 @@ class MemoryService:
         vault_dir: Path | None = None,
         note_interval_s: float = 300.0,
         note_min_new_events: int = 5,
+        question_answer_timeout_s: float = 20.0,
+        question_typed_timeout_s: float = 45.0,
+        question_max_turns: int = 2,
+        question_check_s: float = 1.0,
         clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._database = database
+        self._bus = bus
         self._events = bus.subscribe()
         self._send = send
         self._game = game
-        self._note_writer = note_writer
-        self._vault_dir = vault_dir
-        self._note_interval_s = note_interval_s
-        self._note_min_new_events = note_min_new_events
-        self._clock = clock
+        self._question_check_s = question_check_s
         self._facts = FactStore(database.conn, clock)
         self._sessions = SessionStore(database.conn, clock)
-        self._profile = ProfileStore(database.conn, clock)
         self._player = PlayerStore(database.conn, clock)
         self._unknowns = UnknownStore(database.conn, clock)
-        # A spoken answer only reaches memory through a note, so it brings the next note forward.
-        self._awaiting_answer = False
-        self._note_due = asyncio.Event()
+        self._watch = AnswerWatch(
+            monotonic, question_answer_timeout_s, question_typed_timeout_s, question_max_turns
+        )
+        self._notes = NoteFlow(
+            database,
+            game,
+            note_writer,
+            self,
+            vault_dir=vault_dir,
+            interval_s=note_interval_s,
+            min_new_events=note_min_new_events,
+            facts=self._facts,
+            sessions=self._sessions,
+            profile=ProfileStore(database.conn, clock),
+            unknowns=self._unknowns,
+        )
+        self._asking = Asking(
+            database, self._facts, game, self._watch, self._settle, self._notes.bring_forward
+        )
         self._session: Session | None = None
-        self._last_note_ts = 0.0
 
     @property
     def session(self) -> Session:
@@ -90,13 +113,16 @@ class MemoryService:
     async def start(self) -> Session:
         self._session = await self._database.run(lambda _: self._sessions.start(self._game))
         log.info("Memory session %s started for %s", self._session.id, self._game)
+        # Nobody is waiting on an answer from an earlier run, so its asked questions are let go.
+        await self._asking.drop_stale()
         return self._session
 
     async def run(self) -> None:
         try:
             async with asyncio.TaskGroup() as tasks:
                 tasks.create_task(self._consume())
-                tasks.create_task(self._note_loop())
+                tasks.create_task(self._notes.loop(self.session))
+                tasks.create_task(self._asking.loop(self._question_check_s))
         finally:
             # Shielded because this runs during cancellation and must reach the database.
             await asyncio.shield(self.finish())
@@ -104,10 +130,10 @@ class MemoryService:
     # --- Called by other tracks ---
     async def context(self, live_state: Mapping[str, str], query: str | None = None) -> str:
         started = time.perf_counter()
-        session_id = self.session.id
+        session_id, asked_id = self.session.id, self._watch.pending
         text = await self._database.run(
             lambda conn: render_context(
-                gather_context(conn, self._game, session_id, live_state, query)
+                gather_context(conn, self._game, session_id, live_state, query, asked_id=asked_id)
             )
         )
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -120,18 +146,19 @@ class MemoryService:
         await self._database.run(lambda _: self._sessions.log_turn(session_id, "partner", text))
 
     async def take_question(self) -> QuestionAsk | None:
-        def take(_: object) -> QuestionAsk | None:
-            question = self._facts.next_question(self._game)
-            if question is None:
-                return None
-            self._facts.mark_asked(question.id)
-            return QuestionAsk(
-                question_id=str(question.id), text=question.text, options=question.options
-            )
+        """Marks it asked and starts waiting for the answer. None while one is still waited on."""
+        return await self._asking.take()
 
-        asked = await self._database.run(take)
-        self._awaiting_answer = self._awaiting_answer or asked is not None
-        return asked
+    async def release_question(self, question_id: str) -> None:
+        """The director couldn't say it, so it goes back in the queue."""
+        await self._asking.release(question_id)
+
+    async def answer_question(
+        self, question_id: int | None, answer: str, correction: str | None = None
+    ) -> RememberResult | None:
+        """None as the id means the question just asked. `correction` is the right value after a
+        "No". A question dropped as unanswered can still be answered."""
+        return await self._asking.answer(question_id, answer, correction)
 
     async def wonder(self, subject: str, attribute: str, text: str) -> Question | None:
         session_id = self.session.id
@@ -140,16 +167,43 @@ class MemoryService:
         )
 
     async def remember(
-        self, subject: str, attribute: str, value: str, source: Source, confidence: float
+        self,
+        subject: str,
+        attribute: str,
+        value: str,
+        source: Source,
+        confidence: float,
+        *,
+        tentative: bool = False,
     ) -> RememberResult:
+        """`tentative` is for an inference rather than a reading: stored unconfirmed, no question.
+        Raises ValueError for empty text or an out-of-range confidence."""
         session_id = self.session.id
         result = await self._database.run(
             lambda _: self._facts.remember(
-                self._game, subject, attribute, value, source, confidence, session_id
+                self._game,
+                subject,
+                attribute,
+                value,
+                source,
+                confidence,
+                session_id,
+                tentative=tentative,
             )
         )
-        await self._announce(result)
+        await self._settle(result)
         return result
+
+    async def forget(self, subject: str, attribute: str) -> int:
+        """Closes the current values for this exact key without asking anything, and returns how
+        many. A guess can't bring a forgotten value back; only the player can."""
+        closed = await self._database.run(
+            lambda _: self._facts.forget(self._game, subject, attribute)
+        )
+        if closed:
+            log.info("Forgot %s / %s: %s", subject, attribute, [fact.value for fact in closed])
+            await self._announce(RememberResult("replaced", closed=closed))
+        return len(closed)
 
     async def current_fact(self, subject: str, attribute: str) -> Fact | None:
         found = await self._database.run(
@@ -158,9 +212,17 @@ class MemoryService:
         return found[0] if found else None
 
     async def load_settings(self, model: type[ModelT]) -> ModelT:
-        return await self._database.run(lambda _: self._player.load_settings(model))
+        loaded = await self._database.run(lambda _: self._player.load_settings(model))
+        # brain/app.py loads settings right after start(), so this is how memory first learns
+        # whether replies will be spoken or typed.
+        self._watch.follow(loaded)
+        return loaded
 
-    # --- Bus and slow loop ---
+    async def check_question(self) -> bool:
+        """Drops the question being waited on if its time is up. Returns whether it did."""
+        return await self._asking.check()
+
+    # --- Bus and loops ---
     async def _consume(self) -> None:
         while True:
             event = await self._events.get()
@@ -180,29 +242,32 @@ class MemoryService:
                 await self._database.run(
                     lambda _: self._sessions.log_event(session_id, event.name, event.data)
                 )
+            case PlayerStartedSpeaking():
+                self._watch.reply_started()
             case PlayerSpeech():
                 await self._database.run(
                     lambda _: self._sessions.log_turn(session_id, "player", event.transcript)
                 )
-                if self._awaiting_answer:
-                    self._awaiting_answer = False
-                    self._note_due.set()
+                await self._asking.turn_ended()
             case QuestionAnswered():
-                await self._answer(event)
+                await self._asking.answer_event(event.question_id, event.answer)
             case SettingsChanged():
                 await self._database.run(lambda _: self._player.save_settings(event.settings))
+                self._watch.follow(event.settings)
 
-    async def _answer(self, event: QuestionAnswered) -> None:
-        try:
-            question_id = int(event.question_id)
-        except ValueError:
-            log.warning("Ignoring answer to invalid question id %r", event.question_id)
-            return
-        result = await self._database.run(
-            lambda _: self._facts.answer_question(question_id, event.answer)
-        )
-        if result is not None:
-            await self._announce(result)
+    async def _settle(self, result: RememberResult) -> None:
+        """Shows what changed, and tells the director when a fact became current."""
+        await self._announce(result)
+        fact = result.fact
+        if fact is not None and result.outcome in _LEARNED:
+            self._bus.publish(
+                FactLearned(
+                    subject=fact.subject,
+                    attribute=fact.attribute,
+                    source=fact.source,
+                    outcome=result.outcome,
+                )
+            )
 
     async def _announce(self, result: RememberResult) -> None:
         toast = toast_for(result)
@@ -214,72 +279,9 @@ class MemoryService:
             # The fact is already saved, so a dropped socket only costs the visible notice.
             log.exception("Couldn't send memory toast")
 
-    async def _note_loop(self) -> None:
-        while True:
-            try:
-                await asyncio.wait_for(self._note_due.wait(), self._note_interval_s)
-                min_events: int | None = 1
-            except TimeoutError:
-                min_events = None
-            self._note_due.clear()
-            try:
-                await self.flush_note(min_events=min_events)
-            except Exception:
-                log.exception("Failed to write a session note")
-
     async def flush_note(self, kind: NoteKind = "rolling", min_events: int | None = None) -> bool:
         """Writes a note if enough has happened. Returns whether one was written."""
-        session_id = self.session.id
-        since = self._last_note_ts
-        events = await self._database.run(lambda _: self._sessions.events_since(session_id, since))
-        required = self._note_min_new_events if min_events is None else min_events
-        if len(events) < required or not events:
-            return False
-
-        def read_inputs(_: object) -> tuple[str, str | None, list[Question]]:
-            previous = self._sessions.latest_note(session_id)
-            brief = self._profile.get(self._game).brief
-            questions = self._unknowns.open_questions(self._game, MAX_OPEN_QUESTIONS_IN_PROMPT)
-            return brief, previous.body if previous else None, questions
-
-        brief, previous, questions = await self._database.run(read_inputs)
-        # The model call happens outside the database worker so it can't hold up other queries.
-        draft = await self._note_writer.write(brief, previous, events, kind, questions)
-        from_ts, to_ts = events[0].ts, events[-1].ts
-        await self._database.run(
-            lambda _: self._sessions.add_note(session_id, kind, draft.body, from_ts, to_ts)
-        )
-        self._last_note_ts = to_ts
-        await self._apply_draft(draft, {question.id for question in questions})
-        if self._vault_dir is not None:
-            await export_quietly(self._database, self._vault_dir, self._game)
-        return True
-
-    async def _apply_draft(self, draft: NoteDraft, open_ids: set[int]) -> None:
-        # Answers go first so a matching drafted fact confirms the answer rather than disputing it.
-        for answer in draft.answers:
-            # Model output is untrusted, so it can only settle questions it was actually shown.
-            if answer.question_id not in open_ids:
-                log.warning("Ignoring drafted answer to question %s", answer.question_id)
-                continue
-            result = await self._database.run(
-                lambda _, a=answer: self._facts.answer_question(a.question_id, a.answer)
-            )
-            if result is not None:
-                await self._announce(result)
-        for fact in draft.facts:
-            await self._remember_drafted(fact.subject, fact.attribute, fact.value, fact.confidence)
-        for unknown in draft.unknowns:
-            await self.wonder(unknown.subject, unknown.attribute, unknown.question)
-
-    async def _remember_drafted(
-        self, subject: str, attribute: str, value: str, confidence: float
-    ) -> None:
-        try:
-            await self.remember(subject, attribute, value, "player", confidence)
-        except ValueError:
-            # Model output is untrusted, so one bad fact shouldn't discard the rest of the note.
-            log.warning("Rejected a drafted fact: %r %r", subject, attribute, exc_info=True)
+        return await self._notes.flush(self.session, kind, min_events)
 
     async def finish(self) -> None:
         """Saves whatever's left, writes the recap and closes the session."""

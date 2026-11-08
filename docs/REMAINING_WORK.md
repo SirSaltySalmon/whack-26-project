@@ -6,24 +6,59 @@ The inputs, outputs and plug-in points of everything still to build. Each work p
 - **Read first:** [CLAUDE.md](../CLAUDE.md) for the rules that must hold, and [DECISIONS.md](DECISIONS.md) for why things are the way they are.
 - **What to test:** [TEST_PLAN.md](TEST_PLAN.md). This page doesn't repeat its test lists.
 
-Names, signatures and numbers marked as starting values are proposals. If you find a better shape, change it here in the same commit. Anything else on this page describes existing code, checked on 2026-11-07.
+Names, signatures and numbers marked as starting values are proposals. If you find a better shape, change it here in the same commit. Anything else on this page describes existing code, checked again on 2026-11-08 at 01:15 against `main` and its uncommitted working tree, plus `origin/wp4-wp5-readers` and the local `perf/voice-path-stalls`.
 
 ## Status
+
+**No. The build is not done, and nothing has been proven live over a game.**
 
 | WP | What | Closes | Priority | Track | Needs first |
 |---|---|---|---|---|---|
 | [WP0](#wp0-shared-contract) | Shared types and file splits | Lets the rest run in parallel | **Done** | Shared | Nothing |
-| [WP1](#wp1-test-fakes-and-tests) | Fakes and the tests in the test plan | `CLAUDE.md` testing rule | **Done**, apart from WP8's tests | All | WP0 |
+| [WP1](#wp1-test-fakes-and-tests) | Fakes and the tests in the test plan | `CLAUDE.md` testing rule | **Done**, including WP8's tests | All | WP0 |
 | [WP2](#wp2-test-tooling) | Typed turns, overlay demo | Testing with no mic | **Done** | Shared, 1 | WP0 |
-| [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | **Done** | 2 | WP0 |
-| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | **Built**, not yet run live. Scene matching skipped | 2 | WP0 |
-| [WP5](#wp5-learner) | Game brief, regions, reader specs | Must-have 3 | **Built**, not yet run live | 4 | WP0, works with WP4 |
-| [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | Required | 3 | WP0 |
-| [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | Required | All | Keys, a game |
-| [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | Required | 1, 3, 4 | WP0 |
-| [Conditional](#conditional-work) | Only if a test or a decision calls for it | — | As needed | Various | Varies |
+| [WP3](#wp3-recorder-and-replay) | Recorder and replay | Must-have 8 | **Done.** The reader-event replay check waits on the WP4 merge | 2 | WP0 |
+| [WP4](#wp4-compiled-readers) | Compiled readers | Must-have 3 | **Built,** on `wp4-wp5-readers` with `main` merged in. First live run rejected the bars; full-bar calibration added. Not yet on `main` | 2 | WP0 |
+| [WP5](#wp5-learner) | Regions and reader specs. The brief is separate | Must-have 3 | **Regions: built,** on that same branch, and they use main's brief. **Brief: done** on `main` | 4 | WP0, works with WP4 |
+| [WP6](#wp6-barks) | Pre-generated bark audio | 300 ms bark budget | **Done** in code and unit tests. The live 300 ms and barge-in checks are not run | 3 | WP0 |
+| [WP7](#wp7-measurements-and-decisions) | Measurements and team decisions | Unproven items | **Not done** | All | Keys, a game |
+| [WP8](#wp8-reading-the-open-wiki-page) | Answering from the open wiki page | Must-have 6, trusted reads | **Done** in code and unit tests. Stage 1's live page checks are not run | 1, 3, 4 | WP0 |
+| [WP9](#wp9-frame-to-voice-latency) | Measure latency from the frame, not the event | Honest numbers for "reacts as it happens" | **Not started** | 2, 3 | The WP4 merge, for the reader half |
+| [WP10](#wp10-rewind) | Answer "what just happened?" from the last few seconds | The prompt's "over before you could type a prompt" | **Not started.** If time before freeze | Shared, 2 | Nothing |
+| [WP11](#wp11-proof-benchmarks-and-evals) | Latency report, loop-stall watch, accuracy evals | Numbers for the pitch, and regression checks | **Not started** | All | WP9, a live run |
+| [Conditional](#conditional-work) | Only if a test or a decision calls for it | — | **Don't start** | Various | Varies |
 
-Must-haves 1, 2, 4, 5, 6 and 7 are wired but haven't run live, so WP7 and the test plan's live checks are what prove them.
+Must-haves 1, 2, 4, 5, 6 and 7 are wired on `main` but haven't run live. Must-have 3 (learned regions, then local readers) is the unmerged branch. WP7 and the test plan's Stages 1-3 are what prove the wired ones.
+
+## Before feature freeze
+
+Written 2026-11-08 at 01:00 and checked again at 01:15. None of the steps below have landed. Freeze is about 04:30 and the deadline about 07:30. The prompt is incident.io's: an agent that reacts to a live feed as it happens, with personality.
+
+**Why this order:** on `main`, every game reaction comes from the Haiku observer. It reports every 1.3 s, two reports must agree, and each takes 1.6-2.7 s, so confirmed events are about 2.4 s old before the talker or TTS start. That's the "answer after the fact" the prompt describes. The local readers that fix it are on `origin/wp4-wp5-readers` and are not merged. Nothing has run live over the game.
+
+1. **Commit or set aside the uncommitted work on `main` first.** It is the 2026-11-08 decision (spoken questions, player memory tools, the text box, mic off). It is not committed, and it edits files both merges also edit: `CLAUDE.md`, this file, `docs/DECISIONS.md`, `docs/TEST_PLAN.md`, `brain/memory/service.py`, `brain/config.py`, `brain/perception/observation.py`, `shared/protocol/messages.py` and `overlay/src/renderer/App.tsx`. Merging into this dirty tree will conflict.
+2. **Push `perf/voice-path-stalls`, then merge it.** It is one local commit (`17cee42`), not on origin, and not in `main`. It stops 1.7-2 s event-loop freezes after each note, `point_at` and `think_hard`. Conflicts: `brain/memory/service.py`, `brain/tests/test_llm.py`, and `CLAUDE.md`.
+3. **Merge `origin/wp4-wp5-readers`** (WP4 and the region half of WP5). Five commits, not in `main`. On `main`, `brain/perception/readers.py` is a 17-line stub and `brain/learner/learner.py` is a 5-line stub. Conflicts: `CLAUDE.md`, `brain/__main__.py`, `brain/app.py`, this file, and `brain/learner/brief.py`, which both sides added, so Track 4 picks one. Main's brief is the one in [WP5](#wp5-learner). Regenerate `protocol.generated.ts` and `schema.json` with `gen:protocol` rather than merging them by hand. Then run the four checks under [Done means](#rules-for-every-work-package).
+4. **[WP9](#wp9-frame-to-voice-latency),** so the live run measures the right thing.
+5. **Run the test plan's Stages 1-3 over Terraria** with `--record` and the log saved, as [WP11](#wp11-proof-benchmarks-and-evals) describes. The recording is both the benchmark input and the stage fallback.
+6. **[WP11](#wp11-proof-benchmarks-and-evals)'s reports** from that run, into the test plan's [Benchmarks](TEST_PLAN.md#4-benchmarks) table.
+7. **[WP10](#wp10-rewind),** if there's time before freeze.
+
+**Don't start now:** sqlite-vec and fastembed, Exa, Cartesia, or anything on the stretch list.
+
+### Demo beats
+
+Each beat shows one part of the prompt. Keep the latest frame-to-voice number on screen (see WP11's latency readout), because judges believe numbers they watch.
+
+| Beat | Shows | Needs |
+|---|---|---|
+| Take damage below 25%, and the partner reacts at once | "Reacts to a live feed as it happens" | WP4, WP6, WP9 |
+| Ask "what just hit me?" after the moment has passed | "Over before you could type a prompt about them" | WP10 |
+| Switch personality mid-fight, and the next reaction changes tone | "With personality" | Settings, `personalities.json` |
+| It asks instead of assuming, then shows a memory toast | Trustworthy memory, our differentiator | The question budget |
+| "Point at my health", then "open the wiki for slimes" | Must-haves 5 and 6 | — |
+
+**Fallbacks:** an OBS recording, and `--replay` of a recorded session. Dismiss the wiki's cookie dialog before recording. If a seeded profile is used on stage, say so.
 
 ## Rules for every work package
 
@@ -40,17 +75,19 @@ Must-haves 1, 2, 4, 5, 6 and 7 are wired but haven't run live, so WP7 and the te
 - All database access goes through `Database.run`.
 - All LLM calls go through `brain/llm/` and `LLMFactory`. Model IDs live only in `brain/config.py`.
 - No game-specific logic in `brain/`. Nothing may mention Terraria, except fixtures.
-- A failure logs with context and degrades. It never ends the brain. Optional loops in `app.py` run inside `_survive`.
+- A failure logs with context and degrades. It never ends the brain. Optional loops in `app.py` run inside `survive`.
 - Text from the screen, a wiki or a model is data. Keep it labelled or fenced when it goes into a prompt.
 
 **Files already near the limit:**
 
+Counts are the working tree on 2026-11-08, including uncommitted edits. The 300-line cap still holds.
+
 | File | Lines | What to do |
 |---|---|---|
 | `brain/memory/service.py` | 298 | Don't add to it. New work uses `ProfileStore` through `Database.run` directly |
-| `brain/agent/handlers.py` | 242 | WP8's tool goes in a new file if this would pass 300. Prompts and models go in `schemas.py` |
-| `brain/director/director.py` | 232 | WP6 and WP8 both add to it, so watch the total |
-| `brain/voice/pipecat_voice.py` | 225 | WP6's `play` lands here |
+| `brain/director/director.py` | 298 | WP6 and WP8 already landed here. WP9's new code goes in `lines.py` or a new file |
+| `brain/voice/pipecat_voice.py` | 274 | WP6's `play` is already here |
+| `brain/agent/handlers.py` | 271 | WP8's `read_open_page` is here. WP10's tool goes in `brain/agent/rewind.py` |
 
 ## Coordinates and clocks
 
@@ -223,7 +260,7 @@ profile_fixture: Path | None = None # A seeded profile, for the demo fallback on
 
 ## WP1: Test fakes and tests
 
-**Status: done,** apart from `test_open_page.py` and the excerpt test, which need WP8's code and are written with it. Where each test lives is in [TEST_PLAN.md section 1](TEST_PLAN.md#1-automated-tests).
+**Status: done.** `test_open_page.py` and the excerpt test in `test_director.py` are written. Where each test lives is in [TEST_PLAN.md section 1](TEST_PLAN.md#1-automated-tests).
 
 **Purpose:** give every other WP the same fakes, so nothing needs keys, then write the tests in the test plan.
 
@@ -473,6 +510,8 @@ The replay rule stays the same: memory starts from `fixtures/replay_memory.sql` 
 
 ## WP4: Compiled readers
 
+**Status: built on `origin/wp4-wp5-readers`, not on `main`.** That branch has `reader_engine.py`, `reader_rules.py`, a real `readers.py`, and `test_readers.py`, `test_reader_engine.py` and `test_reader_rules.py`. On `main`, `brain/perception/readers.py` is still the stub protocol below, and nothing publishes reader events. Merge it before treating this section as existing code. Scene matching was the first cut and is not on that branch.
+
 **Purpose:** read HUD values locally, with no model, for reactions under a second. The Haiku observer stays as the source for everything readers don't cover.
 
 **Files:** rewrite `brain/perception/readers.py`. New `brain/perception/reader_engine.py`. The stub's `Reader` protocol has no callers, so it can change.
@@ -569,7 +608,11 @@ Cut this first if behind. Whole-frame hashes won't work, because the world scrol
 
 ## WP5: Learner
 
-**Purpose:** work out where a game's HUD is, by vision, and store that as data. The game brief is written at startup instead, by `brain/game_setup.py`.
+**Status: split.** The brief is done on `main`, and not in the shape below. `brain/game_setup.py`'s `ensure_brief` calls `ask_brief` in `brain/learner/brief.py` once per game. The deep model names the game and writes at most 60 words from its own knowledge, with no wiki lookup, and it never overwrites a brief. `UNKNOWN` writes nothing.
+
+Regions, reader specs, validation and the seeded profile are on `origin/wp4-wp5-readers` with WP4, not on `main`. `brain/learner/learner.py` on `main` is still the stub. `wp4-wp5-readers` has `main` merged in and kept main's brief: the learner no longer writes one.
+
+**Purpose:** work out where a game's HUD is, by vision, and store that as data. The brief below is the old shape. It is kept so the merge can see what the branch was aiming at.
 
 **Files:** rewrite `brain/learner/learner.py`. New `brain/learner/regions.py` and `brain/learner/validate.py`.
 
@@ -694,7 +737,9 @@ tasks.create_task(_survive("Learner", learner.run()))   # Live only, never on re
 
 ## WP6: Barks
 
-**Purpose:** speak a short line within 300 ms of an event by skipping the model and TTS. Today filler lines and reactions go through live TTS, and reactions also go through the talker.
+**Status: done in code and unit tests.** `BarkBank`, `ElevenLabsSynth` and `PipecatVoice.play` are on `main`. The director plays a bark for a mapped event and for the `looking` filler, and falls back to the talker when none is ready. `test_barks.py` covers the cache, the voice folders and `get` doing no I/O. Not measured: event to bark under 300 ms, and a barge-in stopping one. Those are live checks, in WP7 and WP11. `Latency: event to bark` also starts too late, which is [WP9](#wp9-frame-to-voice-latency).
+
+**Purpose:** speak a short line within 300 ms of an event by skipping the model and TTS. Filler lines and reactions used to go through live TTS, and reactions also through the talker.
 
 **Files:** `brain/voice/barks.py`, which so far only holds `Bark`. Also `brain/voice/pipecat_voice.py`, `brain/director/director.py` and `brain/app.py`. `brain/director/rules.py` is already done: WP0 added `PlayBark` and `bark_events`, and `decide` uses them.
 
@@ -755,6 +800,8 @@ class BarkBank:
 
 ## WP7: Measurements and decisions
 
+**Status: not done.** None of the rows below have a recorded result. They need keys and, for the last ones, a game.
+
 Each of these produces a value that goes in one place.
 
 | Task | Input | Output goes in | Decides |
@@ -774,7 +821,9 @@ Each of these produces a value that goes in one place.
 
 ## WP8: Reading the open wiki page
 
-**Purpose:** let the partner answer from the wiki page the player has open, without a wiki fetch or a vision call, and usually with one Flash-Lite call instead of two. Today `lookup_wiki` only fetches a page's intro and infobox, and the window is masked, so the rest of an open page is out of reach. The decision is in [DECISIONS.md](DECISIONS.md).
+**Status: done in code and unit tests, not proven on a real page.** `OpenPage`, `page_match.py`, `page.read` / `page.content`, `read_open_page` and the overlay's isolated-world reader are on `main`. `test_open_page.py` and `test_the_open_page_excerpt_reaches_player_turns_and_never_reactions` cover the done-when list except the Stage 1 checks against a real wiki page. `executeJavaScriptInIsolatedWorld` is what `pageGuard.ts` calls, and it has not been run on a sandboxed `<webview>` over a game. Whether `innerText` still works while the window is minimized is also unchecked.
+
+**Purpose:** let the partner answer from the wiki page the player has open, without a wiki fetch or a vision call, and usually with one Flash-Lite call instead of two. `lookup_wiki` only fetches a page's intro and infobox, and the window is masked, so the rest of an open page would otherwise be out of reach. The decision is in [DECISIONS.md](DECISIONS.md).
 
 **Decided:** rendered text rather than raw HTML, the game's discovered wiki only, and local matching plus a tool.
 
@@ -928,6 +977,82 @@ tasks.create_task(_survive("Open page", open_page.run()))
 
 **Done when:** the tests in the [test plan](TEST_PLAN.md) pass, and the Stage 1 page checks work against a real wiki page.
 
+## WP9: Frame-to-voice latency
+
+**Status: not started.** `GameEvent` has no `frame_ts`. The observer passes a frame time into the tracker, and that time is not copied onto the event.
+
+**Purpose:** measure from the moment something shows on screen, which is what the prompt judges. `Latency: event to bark` starts at `GameEvent.ts`, which `Event` sets when the event is published (`brain/events.py`). For observer events that leaves out the seconds spent noticing, and it stops when audio is queued, not played (`brain/director/lines.py`). An "under 300 ms" figure from it would be true but misleading.
+
+**Files:** `brain/events.py`, `brain/perception/observer.py`, `brain/perception/tracker.py`, `brain/perception/reader_engine.py` (after the WP4 merge), `brain/director/rules.py`, `brain/director/lines.py` and `brain/voice/pipecat_voice.py`. **`brain/director/director.py` is at 298 lines,** so new code goes in `lines.py` or a new file.
+
+| | |
+|---|---|
+| **Input** | The capture time of the frame that showed the event, `Frame.ts`. It's `time.monotonic()`, like `Event.ts` |
+| **Event** | `GameEvent` gains `frame_ts: float \| None = None`. It's internal, not protocol, so nothing is regenerated |
+| **Observer** | The first frame of the agreeing streak, since that's when the change was first visible. If the tracker can't easily keep that, use the confirming frame and note that the number under-counts by one observer interval |
+| **Readers** | The `ts` of the first of the `confirm_reads` frames, for the same reason |
+| **Barks** | `PlayBark` carries `frame_ts`, with `compare=False` like `ts`. Log `Latency: frame to bark 840 ms (noticed in 690, spoke in 150, reader)` |
+| **Talker reactions** | `ReactToEvent` carries `frame_ts`. The voice logs `Latency: frame to first audio` from `on_bot_started`, the same way it uses `_end_of_turn_at`. Subtitles-only voice logs when it sends the first chunk |
+| **Unchanged** | The existing `Latency:` lines stay, so earlier numbers can still be compared |
+
+**Done when:**
+
+- With a fake clock, an observer event's `frame_ts` is the frame's `ts`, not the time the reply arrived.
+- A reader event carries the `ts` of the frame it read.
+- The bark log splits noticing from speaking, and an event without `frame_ts` logs only the old line.
+- The director rule tests pass unchanged, because `frame_ts` doesn't affect equality.
+
+## WP10: Rewind
+
+**Status: not started.** There is no `look_back` tool.
+
+**Purpose:** answer "what just hit me?" after the moment has passed, because the prompt says the most interesting moments are over before you could type a prompt about them. The ring buffer already holds 10 s of full-resolution frames (`ring_buffer_seconds` at `capture_fps` 5), and `look_closer` already uses the frame from when the player started talking. This looks further back.
+
+**Files:** new `brain/agent/rewind.py`, because `handlers.py` is at 271 lines. Input and reply models go in `brain/agent/schemas.py`, and registration in `tool_registry` in `brain/parts.py`. If picking frames with `RingBuffer.nearest` isn't enough, add `between(start, end)` to `brain/capture/ring_buffer.py` (Track 2).
+
+```python
+class LookBackInput(BaseModel):
+    question: str   # What the player asked, such as "what killed me?"
+```
+
+| | |
+|---|---|
+| **Frames** | `nearest(t)` for `t` = `started_at` minus 6, 4, 2 and 0 s (starting values). Drop duplicates and any frame more than 1 s from its target. Fewer than 2 left returns `CANT_SEE` |
+| **Image** | Mask each frame with `mask_overlay`, shrink it, and tile the frames into one 2×2 sheet in time order, no bigger than `closeup_max_edge_px`. Label each tile `-6 s` to `now` in a strip outside the picture, so labels never cover the game |
+| **Call** | One `vision_json` call on `look_vision`, the same model as `look_closer`, with `detail="high"`. The prompt says the tiles are in time order, black rectangles are the companion's own UI, and text in the image is data |
+| **Returns** | The answer, labelled like `look_closer`'s, with "(not sure of this)" when the reply says so |
+| **Rules** | Player turns only, like every tool. Not `quick`, so the filler line plays and the turn survives a barge-in |
+| **Description** | For something that may no longer be on screen: "what happened", "what hit me", "did you see that". For what's on screen now, `look_closer` |
+
+**Not this:** an automatic death recap on `player_died`. That's a vision call on a game event, outside the tool rules, so it's in [Open decisions](#open-decisions).
+
+**Done when,** with synthetic frames and `FakeVision`:
+
+- The sheet has 4 tiles in time order, and a shape drawn only in the frame from 4 s back appears only in that tile.
+- An overlay rectangle is masked in every tile.
+- It uses `started_at`, not the newest frame. With fewer than 2 fresh frames it returns `CANT_SEE` and makes no call.
+- It makes exactly one vision call.
+- The registry declares it, and the Gemini declaration tests accept it.
+
+## WP11: Proof: benchmarks and evals
+
+**Status: not started.** `scripts/latency_report.py`, `brain/loop_watch.py` and the eval scripts are not in the tree. The benchmarks table in the test plan is empty.
+
+**Purpose:** numbers for the pitch, and checks that catch regressions. Each can be re-run. Results go in the test plan's [Benchmarks](TEST_PLAN.md#4-benchmarks) table. Paid evals never run in `pytest`.
+
+**Save the log of every live run:** `python -m brain --live --record 2>&1 | Tee-Object run.log`. Logs are gitignored.
+
+| Item | Files | How | Output |
+|---|---|---|---|
+| Latency report | New `scripts/latency_report.py` | Parses every `Latency:` line in a saved log | p50, p95, max and count for each kind, with frame-to-voice split by `reader` and `observer`. Prints a Markdown table |
+| Loop-stall watch | New `brain/loop_watch.py`, started in `app.py` inside `_survive` | Sleeps 50 ms in a loop and measures how late it wakes | A warning over 100 ms (starting value), and `Event loop: longest stall N ms` at exit. Proves the never-block rule, and would have caught the stalls `perf/voice-path-stalls` fixed. Test it by blocking the loop with `time.sleep` |
+| Reader replay benchmark | None expected | Record a session where health falls below 25%. Save the profile with `scripts/export_profile.py`, then replay twice with `PROFILE_FIXTURE`, `--exit-when-done` and `--write-messages` | One `health_low` from `reader`, its frame-to-bark time, and no difference between the runs under `compare_replay.py`. Free and keyless, so re-run it after any perception change. If `PROFILE_FIXTURE` doesn't load in a replay, fix that first |
+| Observer eval | New `scripts/eval_observer.py`, labels in `data/eval/observer.json` (gitignored, because they're screenshots) | About 40 screenshots from `save_screenshots.py`, labelled for danger, screen type and health | Accuracy per field, precision and recall for elevated danger, and the two-frame filter's false-alarm rate. Makes the one-off figures in `tracker.py` repeatable. A few cents |
+| Tool-choice eval | New `scripts/eval_tools.py` | About 20 requests, each with the tool it should use, or none. Takes the first tool call of one turn and runs nothing | Accuracy for `talker_model`, which answers Stage 1's "picks tools sensibly". About 20 free-tier calls |
+| Pointer eval | `scripts/check_pointing.py` over labelled screenshots | Whether each labelled point sits inside the returned box | Hit rate for `vision_model` |
+| Soak | A 30-minute live run with the log saved | The latency report and loop-stall watch, plus memory use and calls a minute against `rpm_by_model` | Longest stall, memory growth, cost a minute |
+| Latency readout (optional) | New Control Center tab, `overlay/src/renderer/control/tabs/latency/`, found automatically | The Control Center already reads the brain's output lines (`brainProcess.ts`), so it filters the `Latency:` lines. No protocol change | The last few frame-to-voice values on screen during the demo |
+
 ## Conditional work
 
 Build these only if a test or decision calls for one. Each has the same no-keys rule.
@@ -1012,29 +1137,28 @@ Also unbuilt but not needed for the demo: memory consolidation and profile clean
 
 ## Plugging it all in
 
-**Suggested order:**
+**Where things stand.** WP0-WP3, WP6 and WP8 are wired on `main`. The brief is wired through `ensure_brief`, not `GameLearner`. WP4 and the region half of WP5 are the unmerged branch. Then WP9, the live run, WP11, and WP10 if there's time.
 
 ```
-WP0 ─┬─► WP1 (start right away, grows as others land)
-     ├─► WP2 ─► test plan Stages 0-2 ─► WP7
-     ├─► WP3 ─► record sessions ─► use them to test WP4 and WP5
-     ├─► WP4 ◄─► WP5 (agree through profile_schema.py, build against fakes)
-     ├─► WP6
-     └─► WP8
+done on main: WP0 WP1 WP2 WP3 WP6 WP8, and the brief
+still to merge: WP4 and WP5 regions  (origin/wp4-wp5-readers)
+then: WP9 → Stages 1-3 → WP11, and WP10 if time
 ```
 
 **What** `brain/app.py` **gains:**
 
-| WP | New objects | New tasks |
-|---|---|---|
-| WP2 | — | `typed_turns(bus)`, with `--type` |
-| WP3 | `SessionRecorder`, or `ReplayLoop` and `ScriptedTalker` | `recorder.run()` with `--record`. `ReplayLoop` takes `CaptureLoop`'s place |
-| WP4 | `ReaderEngine` | `readers.run()`. Also `live_state` in `talker_context`, and `suppressed_events` on the observer |
-| WP5 | `GameLearner` | `learner.run()`, live only |
-| WP6 | `BarkBank` | `bank.prepare(voice_id)`. Also `barks=` and `bark_events=` on the `Director` |
-| WP8 | `OpenPage` | `open_page.run()`, live only. Also `page_excerpt=` on the `Director` |
+| WP | New objects | New tasks | On `main`? |
+|---|---|---|---|
+| WP2 | — | `typed_turns(bus)`, with `--type` | Yes |
+| WP3 | `SessionRecorder`, or `ReplayLoop` and `ScriptedTalker` | `recorder.run()` with `--record`. `ReplayLoop` takes `CaptureLoop`'s place | Yes. Construction is in `brain/replay/wiring.py` |
+| WP4 | `ReaderEngine` | `readers.run()`. Also `live_state` in `talker_context`, and `suppressed_events` on the observer | No. On the readers branch |
+| WP5 | `GameLearner` | `learner.run()`, live only | Regions: no. Brief: `ensure_brief`, live only |
+| WP6 | `BarkBank` | `bank.prepare(voice_id)`. Also `barks=` and `bark_events=` on the `Director` | Yes. Built in `brain/parts.py` |
+| WP8 | `OpenPage` | `open_page.run()`, live only. Also `page_excerpt=` on the `Director` | Yes |
+| WP10 | — | None. `look_back` joins the registry in `brain/parts.py`, live only like the other tools | No |
+| WP11 | — | `loop_watch()`, inside `survive` | No |
 
-`app.py` is about 250 lines after WP3. If this pushes it past 300, move object construction into `brain/assembly.py`.
+`app.py` is 248 lines. Object construction already lives in `brain/parts.py` and `brain/control_wiring.py`. Optional loops run inside `survive`, not `_survive`.
 
 **GameEvent names in use.** Add new ones here. They must describe any game.
 
@@ -1057,5 +1181,6 @@ The director keys off `danger_started`, `danger_high` and `danger_ended` for its
 
 | Question | Default if nobody decides | Who |
 |---|---|---|
-| Is the recorded mic needed at all? | Recorded only with `--record`, and first to cut | Track 2 |
+| Is the recorded mic needed at all? | **Decided:** it isn't. Transcripts and mood are recorded as events. `audio.wav` was cut | Track 2, in WP3 |
 | Does the demo rely on readers, or is the observer enough if readers fail on Terraria? | Observer, and say that readers are what make it faster | Team, after Stage 3 |
+| Should `player_died` trigger an automatic "what got you" recap? It's a vision call on a game event, which the tool rules don't allow | No. WP10's rewind runs only when the player asks | Team |

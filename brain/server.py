@@ -14,6 +14,8 @@ from brain.events import (
     EventBus,
     OverlayConnected,
     PageContentReceived,
+    PlayerSpeech,
+    PlayerStartedSpeaking,
     QuestionAnswered,
     SettingsChanged,
 )
@@ -24,6 +26,7 @@ from shared.protocol.messages import (
     OverlayReady,
     OverlayRects,
     PageContent,
+    PlayerText,
     QuestionAnswer,
     Rect,
     Settings,
@@ -160,6 +163,8 @@ class OverlayLink:
                 )
             case SettingsUpdate():
                 await self.apply_settings(message.settings)
+            case PlayerText():
+                await self._typed_turn(message.text)
             case PageContent():
                 self._bus.publish(
                     PageContentReceived(
@@ -172,6 +177,17 @@ class OverlayLink:
                         truncated=message.truncated,
                     )
                 )
+
+    async def _typed_turn(self, text: str) -> None:
+        transcript = " ".join(text.split())
+        if not transcript:
+            return
+        log.info("Player (typed in overlay): %s", transcript)
+        # The same pair of events speech sends, so a typed turn barges in and is answered alike.
+        self._bus.publish(PlayerStartedSpeaking())
+        # Real voice never sends these together, so subscribers get a tick between them here too.
+        await asyncio.sleep(0)
+        self._bus.publish(PlayerSpeech(transcript=transcript))
 
     async def apply_settings(self, settings: Settings) -> None:
         """From the overlay's settings card or the Control Center. Both hear the new state."""

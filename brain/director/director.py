@@ -15,10 +15,10 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 
 from brain.agent.tools import ToolRegistry, TurnContext
-from brain.agent.turn import run_turn
-from brain.director.context import gather_context, open_page_excerpt
+from brain.director.context import gather_context, player_context
 from brain.director.lines import Lines, play_bark
 from brain.director.personalities import PersonalityBook, load_personalities
+from brain.director.questions import Questions
 from brain.director.rules import (
     Action,
     AskQuestion,
@@ -26,24 +26,32 @@ from brain.director.rules import (
     CancelSpeech,
     DirectorState,
     GiveAdvice,
+    PartnerSpoke,
     PlayBark,
     ReactToEvent,
     Say,
     SetVoice,
     decide,
 )
-from brain.director.talker import ADVICE_PROMPT, SKIP, event_prompt, reply
+from brain.director.talker import ADVICE_PROMPT, event_prompt
+from brain.director.turns import (
+    TIP_QUERY,
+    Persona,
+    player_reply,
+    talker_reply,
+    tip_reply,
+    tip_tools,
+)
 from brain.events import Event, EventBus, Tick
-from brain.llm.base import LLMEmptyResponseError, LLMUnavailableError, TextLLM, ToolLLM
+from brain.llm.base import TextLLM, ToolLLM
 from brain.voice.barks import BarkBank
 from brain.voice.pipeline import Voice
-from shared.protocol import BrainMessage
 from shared.protocol.messages import QuestionAsk
 
 log = logging.getLogger(__name__)
 
 TICK_INTERVAL_S = 5.0
-# How long an answer that took a tool waits for the player to stop talking before it's dropped.
+# How long an answer that took a tool, or a question, waits for the player to stop talking.
 ANSWER_WAIT_S = 10.0
 SPEAK_RETRY_S = 0.5
 
@@ -64,15 +72,19 @@ class Director:
         tools: ToolRegistry | None = None,
         personalities: PersonalityBook | None = None,
         take_question: Callable[[], Awaitable[QuestionAsk | None]] | None = None,
-        send: Callable[[BrainMessage], Awaitable[None]] | None = None,
+        release_question: Callable[[str], Awaitable[None]] | None = None,
         question_gap_s: float = 90.0,
         question_quiet_s: float = 20.0,
-        advice_gap_s: float = 300.0,
-        advice_quiet_s: float = 30.0,
+        advice_gap_s: float = 180.0,
+        advice_quiet_s: float = 20.0,
+        advice_first_s: float = 90.0,
+        advice_after_learning_s: float = 15.0,
         page_excerpt: Callable[[str], str | None] | None = None,
         barks: BarkBank | None = None,
         voice_id: Callable[[], str | None] = lambda: None,
         bark_events: Mapping[str, str] | None = None,
+        # Stamps ticks and spoken lines, so they share a clock with the events the rules see.
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._events = bus.subscribe()
         self._voice = voice
@@ -86,15 +98,17 @@ class Director:
         self._tools = tools
         self._personalities = personalities or load_personalities()
         self._lines = Lines(self._personalities, personality, voice_id, barks)
-        self._take_question = take_question
-        self._send = send
+        self._questions = Questions(take_question, release_question)
         self._page_excerpt = page_excerpt
+        self._clock = clock
         events = self._personalities.event_lines if bark_events is None else bark_events
         self._state = DirectorState(
             question_gap_s=question_gap_s,
             question_quiet_s=question_quiet_s,
             advice_gap_s=advice_gap_s,
             advice_quiet_s=advice_quiet_s,
+            advice_first_s=advice_first_s,
+            advice_after_learning_s=advice_after_learning_s,
             bark_events=events,
         )
         self._slot: asyncio.Task[None] | None = None
@@ -115,11 +129,18 @@ class Director:
         # Not published on the bus: only the rules care, and every subscriber would have to skip it.
         while True:
             await asyncio.sleep(TICK_INTERVAL_S)
-            self._handle(Tick())
+            self._handle(Tick(ts=self._clock()))
 
     def _handle(self, event: Event) -> None:
+        if isinstance(event, Tick) and self._busy():
+            # A tick only brings up questions and tips, which a busy slot would skip, and deciding
+            # one would spend its budget on nothing. The next tick tries again.
+            return
         for action in decide(event, self._state):
             self._dispatch(action)
+
+    def _busy(self) -> bool:
+        return self._slot is not None and not self._slot.done()
 
     def _dispatch(self, action: Action) -> None:
         match action:
@@ -129,7 +150,7 @@ class Director:
                     return
                 self._cancel_slot()
             case AskTalker():
-                if self.checking and self._slot is not None and not self._slot.done():
+                if self.checking and self._busy() and self._slot is not None:
                     self._slot = asyncio.create_task(self._after(self._slot, action))
                     return
                 self._cancel_slot()
@@ -140,7 +161,7 @@ class Director:
                 self._background.add(task)
                 task.add_done_callback(self._background.discard)
             case _:
-                if self._slot is not None and not self._slot.done():
+                if self._busy():
                     log.debug("Busy speaking; skipped %s", action)
                     return
                 self._slot = asyncio.create_task(self._perform_safely(action))
@@ -165,7 +186,8 @@ class Director:
     async def _perform(self, action: Action) -> None:
         match action:
             case Say():
-                await self._voice.say(action.text)
+                if await self._voice.say(action.text):
+                    self._note_line()
             case AskTalker():
                 if self._agent is not None and self._tools is not None:
                     await self._player_turn(action, self._agent, self._tools)
@@ -176,11 +198,12 @@ class Director:
             case PlayBark():
                 await self._play_bark(action)
             case AskQuestion():
-                await self._ask_question()
+                # Held like an answer: the player may be mid-sentence, and a question is worth it.
+                await self._questions.ask(lambda text: self._speak(text, ANSWER_WAIT_S))
             case GiveAdvice():
                 # Hints off means the player wants to find things out themselves.
                 if self._proactive():
-                    await self._talk(ADVICE_PROMPT, query="progress goal next")
+                    await self._advise()
             case SetVoice():
                 await self._voice.set_voice(action.voice_id)
                 # This task is already off the speech slot, so generating can take its time.
@@ -188,111 +211,85 @@ class Director:
             case CancelSpeech():
                 self._cancel_slot()
 
+    def _note_line(self) -> None:
+        # The quiet stretch before a question or tip counts from lines really said, not attempted.
+        self._handle(PartnerSpoke(ts=self._clock()))
+
+    async def _said(self, text: str) -> None:
+        self._note_line()
+        # Only what was really accepted goes into memory, or the partner would remember saying it.
+        if self._on_spoken:
+            await self._on_spoken(text)
+
+    def _persona(self) -> Persona:
+        name = self._personality()
+        return Persona(name, self._personalities.tone(name), self._max_words, self._proactive())
+
     async def _play_bark(self, action: PlayBark) -> None:
         bark = self._lines.bark(action.kind)
         if bark is None:
             # Not generated yet, no ElevenLabs key, or no such line: react the slow way instead.
             await self._talk(event_prompt(action.event, action.data), query=action.event)
-        elif await play_bark(self._voice, bark, action.event, action.ts) and self._on_spoken:
-            await self._on_spoken(bark.text)
+        elif await play_bark(self._voice, bark, action.event, action.ts):
+            await self._said(bark.text)
 
-    async def _speak(self, text: str, wait_s: float = 0.0) -> None:
-        """Says it, waiting up to wait_s for the player to stop talking first."""
+    async def _speak(self, text: str, wait_s: float = 0.0) -> bool:
+        """Says it, waiting up to wait_s for the player to stop talking first. True if said."""
         deadline = time.monotonic() + wait_s
         while not await self._voice.say(text):
             if time.monotonic() >= deadline:
                 if wait_s:
                     log.info("Player kept talking; dropped: %s", text)
-                return
+                return False
             await asyncio.sleep(SPEAK_RETRY_S)
-        # Only what was really accepted goes into memory, or the partner would remember saying it.
-        if self._on_spoken:
-            await self._on_spoken(text)
+        await self._said(text)
+        return True
 
     async def _player_turn(self, action: AskTalker, agent: ToolLLM, tools: ToolRegistry) -> None:
         started = time.monotonic()
-        context = await gather_context(self._context, action.transcript)
-        # Player turns only. _talk never gets this, so page text can't reach a game-event reaction.
-        excerpt = open_page_excerpt(self._page_excerpt, action.transcript)
-        if excerpt:
-            context = f"{context}\n\n{excerpt}" if context else excerpt
-        name = self._personality()
+        context = await player_context(self._context, self._page_excerpt, action.transcript)
 
         async def looking() -> None:
             self.checking = True
             # The result takes seconds, and silence would read as not having heard them.
             text, bark = self._lines.next("looking")
-            await (self._voice.play(bark) if bark else self._voice.say(text))
+            if await (self._voice.play(bark) if bark else self._voice.say(text)):
+                self._note_line()
 
         try:
-            await self._run_player_turn(action, agent, tools, started, context, name, looking)
-        finally:
-            self.checking = False
-
-    async def _run_player_turn(
-        self,
-        action: AskTalker,
-        agent: ToolLLM,
-        tools: ToolRegistry,
-        started: float,
-        context: str,
-        name: str,
-        looking: Callable[[], Awaitable[None]],
-    ) -> None:
-        try:
-            text = await run_turn(
+            text = await player_reply(
                 agent,
                 tools,
                 action.transcript,
-                name,
-                self._personalities.tone(name),
-                self._max_words,
-                context,
                 TurnContext(action.started_at),
+                self._persona(),
+                context,
                 looking,
                 self._lines.text("done"),
-                hints=self._proactive(),
+                lambda: self._lines.text("unavailable"),
+                started,
             )
-        except (LLMUnavailableError, LLMEmptyResponseError) as exc:
-            log.warning("Player turn unavailable: %s", exc)
-            text = self._lines.text("unavailable")
-        except Exception:
-            # A vendor error of any kind still gets an answer rather than silence.
-            log.exception("Player turn failed")
-            text = self._lines.text("unavailable")
-        log.info("Latency: player turn took %.0f ms", (time.monotonic() - started) * 1000)
-        if text:
-            # After a tool, the player may well be talking while they wait, so hold the answer.
-            await self._speak(text, ANSWER_WAIT_S if self.checking else 0.0)
-        else:
-            log.warning("Player turn produced no reply for: %s", action.transcript)
+            if text:
+                # After a tool, the player may well be talking while they wait, so hold the answer.
+                await self._speak(text, ANSWER_WAIT_S if self.checking else 0.0)
+        finally:
+            self.checking = False
 
-    async def _ask_question(self) -> None:
-        if self._take_question is None:
-            return
-        question = await self._take_question()
-        if question is None:
-            return
-        # Shown either way, because take_question has already marked it asked.
-        if self._send is not None:
-            await self._send(question)
-        await self._speak(question.text)
+    async def _advise(self) -> None:
+        tools = tip_tools(self._tools)
+        if self._agent is None or tools is None:
+            # Replays have no agent, and a tip that can't point is still worth saying.
+            return await self._talk(ADVICE_PROMPT, query=TIP_QUERY)
+        context = await gather_context(self._context, TIP_QUERY)
+        text = await tip_reply(self._agent, tools, self._persona(), context)
+        if text:
+            await self._speak(text)
 
     async def _talk(self, prompt: str, query: str) -> None:
         if self._talker is None:
             log.warning("No talker LLM configured; ignoring: %s", prompt)
             return
         context = await gather_context(self._context, query)
-        name = self._personality()
-        text = await reply(
-            self._talker,
-            prompt,
-            name,
-            self._max_words,
-            context,
-            self._personalities.tone(name),
-            hints=self._proactive(),
-        )
-        # Only the advice prompt offers SKIP, but no prompt should ever have it said aloud.
-        if text and text.strip(" .!").upper() != SKIP:
+        text = await talker_reply(self._talker, prompt, self._persona(), context)
+        if text:
             await self._speak(text)

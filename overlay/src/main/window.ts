@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { BrowserWindow, ipcMain, screen } from "electron";
 import {
+  IPC_END_TYPING,
   IPC_READ_PAGE,
   IPC_REQUEST_TYPING,
   IPC_SET_MOUSE_CAPTURE,
@@ -76,6 +77,13 @@ function wireInput(win: BrowserWindow): void {
     if (event.sender !== win.webContents) return;
     win.setFocusable(true);
     win.focus();
+  });
+  ipcMain.on(IPC_END_TYPING, (event) => {
+    if (event.sender !== win.webContents) return;
+    // On Windows this alone drops focus, and Windows hands the foreground to the next window down,
+    // which is the game while it's in front. Elsewhere it keeps focus, so blur explicitly.
+    win.setFocusable(false);
+    if (win.isFocused()) win.blur();
   });
   // Clicking back into the game ends typing, and the overlay goes back to never taking focus.
   win.on("blur", () => win.setFocusable(false));

@@ -9,8 +9,9 @@ import re
 from brain.config import Settings
 
 PARTS: dict[str, str] = {
-    "anthropic": "every Claude call: no screen watching; close looks and deep thinking use Gemini",
-    "gemini": "every Gemini call: no replies, tools or progress guesses",
+    "anthropic": "every Claude call: by default the talker, vision and screen watching; deep "
+    "thinking falls back to Gemini",
+    "gemini": "every Gemini call: by default only the fallback for deep thinking",
     "observer": "Haiku watching the screen, and the progress guesses it wakes",
     "scout": "guessing the player's progress from their gear",
     "learner": "learning where the HUD is: readers still run from a saved or seeded profile",

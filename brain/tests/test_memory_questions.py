@@ -207,18 +207,26 @@ def test_unknown_question_is_refused_with_a_warning(
     assert "999" in caplog.text
 
 
-@pytest.mark.parametrize("settle", ["answer", "drop"])
-def test_closed_question_is_refused(
-    store: FactStore, caplog: pytest.LogCaptureFixture, settle: str
-) -> None:
+def test_answered_question_is_refused(store: FactStore, caplog: pytest.LogCaptureFixture) -> None:
     question = remember(store, "mage", "observed", 0.3).question
     assert question is not None
-    if settle == "answer":
-        store.answer_question(question.id, "yes")
-    else:
-        store.drop_question(question.id)
+    store.answer_question(question.id, "yes")
     assert store.answer_question(question.id, "no") is None
     assert str(question.id) in caplog.text
+
+
+def test_a_dropped_question_can_still_be_answered(
+    store: FactStore, conn: sqlite3.Connection
+) -> None:
+    # The player may come back to a question they let pass.
+    question = remember(store, "mage", "observed", 0.3).question
+    assert question is not None
+    assert store.drop_question(question.id) is True
+    assert store.drop_question(question.id) is False
+    result = store.answer_question(question.id, "ranger")
+    assert result is not None and result.outcome == "replaced"
+    assert current_values(store) == ["ranger"]
+    assert conn.execute("SELECT status FROM questions").fetchone()[0] == "answered"
 
 
 def test_empty_answer_leaves_the_question_open(store: FactStore) -> None:

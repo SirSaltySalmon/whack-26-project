@@ -106,6 +106,20 @@ class QuestionAnswered(Event):
 
 
 @dataclass(frozen=True)
+class FactLearned(Event):
+    """Memory stored, replaced or confirmed a current fact about the player or playthrough.
+
+    Lets the director's rules react to the partner learning something, such as where the player is
+    up to. Published by memory; strings rather than memory types so this module stays standalone.
+    """
+
+    subject: str
+    attribute: str
+    source: str  # "player", "observed" or "wiki"
+    outcome: str  # "stored", "replaced" or "confirmed"
+
+
+@dataclass(frozen=True)
 class SettingsChanged(Event):
     """The player changed a setting. Typed loosely so this module stays free of the protocol."""
 

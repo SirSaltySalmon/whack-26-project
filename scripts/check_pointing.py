@@ -1,4 +1,4 @@
-"""Tests Gemini's pointing on a real screenshot. Uses one request of free-tier quota.
+"""Tests the vision model's pointing (vision_model in config) on a real screenshot. One request.
 
 Usage: python scripts/check_pointing.py <screenshot.png> "the player's health" [out.png]
 Open the output image and check that the box lands on the target. Don't use a screenshot with

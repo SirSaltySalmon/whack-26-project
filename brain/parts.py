@@ -13,7 +13,9 @@ from brain.control import ControlLink
 from brain.director.personalities import PersonalityBook
 from brain.events import EventBus
 from brain.learner.progress import ProgressScout
+from brain.learner.questions import planned_progress_question
 from brain.llm.base import LLMUnavailableError
+from brain.llm.claude import ClaudeClient
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
 from brain.memory.db import Database
@@ -31,7 +33,7 @@ from brain.voice.barks import BarkBank, ElevenLabsSynth
 log = logging.getLogger(__name__)
 
 
-def make_talker(factory: LLMFactory) -> GeminiClient | None:
+def make_talker(factory: LLMFactory) -> ClaudeClient | GeminiClient | None:
     try:
         return factory.talker()
     except LLMUnavailableError as exc:
@@ -81,6 +83,7 @@ def make_progress_scout(
     buffer: RingBuffer,
     link: OverlayLink,
     memory: MemoryService,
+    database: Database,
 ) -> ProgressScout | None:
     if is_off(settings, "scout"):
         log.warning("Not guessing the player's progress: turned off for this run")
@@ -101,6 +104,8 @@ def make_progress_scout(
         max_calls=settings.progress_max_vision_calls,
         retry_gap_s=settings.progress_retry_gap_s,
         recheck_s=settings.progress_recheck_s,
+        # The game's own planned question beats one drafted from a single frame.
+        planned_question=lambda: planned_progress_question(database, settings.game_title),
     )
 
 

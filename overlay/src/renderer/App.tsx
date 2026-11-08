@@ -5,8 +5,8 @@ import { isWebUrl } from "../lib/web.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { CardWindow } from "./components/CardWindow.tsx";
 import { DebugRegions } from "./components/DebugRegions.tsx";
+import { ChatBox } from "./components/ChatBox.tsx";
 import { Pointer, type PointerCommand } from "./components/Pointer.tsx";
-import { QuestionPrompt } from "./components/QuestionPrompt.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
 import { Subtitles } from "./components/Subtitles.tsx";
 import { Toasts } from "./components/Toasts.tsx";
@@ -31,7 +31,6 @@ import {
   defaultTextFrame,
   defaultWebFrame,
   minimizedTabPosition,
-  questionPlacement,
   TEXT_CARD_LIMITS,
 } from "./logic/layout.ts";
 
@@ -55,6 +54,7 @@ export function App() {
   const feed = useCompanionFeed();
   const avatars = useAvatars();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [settingsFrame, setSettingsFrame] = useState(() =>
     defaultSettingsFrame(viewport),
   );
@@ -185,6 +185,7 @@ export function App() {
         onFrameEnd={savedAvatarFrame.save}
         onOpenWiki={reopenWiki}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenChat={link.connected ? () => setChatOpen(true) : null}
       />
 
       {cards.map((card) => {
@@ -252,23 +253,16 @@ export function App() {
         />
       )}
 
-      {feed.question && (
-        <QuestionPrompt
-          question={feed.question}
-          placement={questionPlacement(avatarFrame, viewport)}
-          onAnswer={(answer) => {
-            if (feed.question) {
-              link.socket?.send({
-                type: "question.answer",
-                question_id: feed.question.question_id,
-                answer,
-              });
-            }
-            feed.dismissQuestion();
-          }}
-          onDismiss={feed.dismissQuestion}
-        />
-      )}
+      <ChatBox
+        open={chatOpen}
+        pinned={feed.settings?.settings.mic_enabled === false}
+        connected={link.connected}
+        avatar={avatarFrame}
+        viewport={viewport}
+        onOpen={() => setChatOpen(true)}
+        onClose={() => setChatOpen(false)}
+        onSend={(turn) => link.socket?.send(turn)}
+      />
 
       <Toasts toasts={feed.toasts} onDone={feed.dismissToast} />
       <Subtitles line={feed.subtitle} />

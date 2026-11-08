@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 
+import pytest
+
 from brain.director.director import Director
 from brain.director.rules import AskTalker, ReactToEvent
-from brain.director.talker import build_system, cap_words, reply
+from brain.director.talker import ADVICE_PROMPT, SKIP, build_system, cap_words, is_skip, reply
 from brain.events import EventBus
 from brain.llm.base import LLMUnavailableError
 from brain.memory.context import CONTEXT_PREAMBLE
@@ -138,3 +140,19 @@ def test_a_long_requested_answer_is_kept_whole_up_to_the_cap() -> None:
     long_answer = " ".join(["word"] * 60) + "."
     assert cap_words(long_answer, 100) == long_answer
     assert len(cap_words(" ".join(["word"] * 150), 100).split()) == 100
+
+
+def test_the_tip_prompt_never_asks_and_grounds_the_tip_in_what_memory_knows() -> None:
+    # Questions have their own budget and timeout, and a tip that asked would dodge both.
+    assert "?" not in ADVICE_PROMPT and "Don't ask" in ADVICE_PROMPT
+    for section in ("PLAYER", "GAME", "NOW"):
+        assert section in ADVICE_PROMPT
+    assert "don't guess" in ADVICE_PROMPT and SKIP in ADVICE_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("text", "skips"),
+    [("SKIP", True), ("skip.", True), (" Skip! ", True), ("Skip the boss for now.", False)],
+)
+def test_only_a_bare_skip_counts_as_skipping(text: str, skips: bool) -> None:
+    assert is_skip(text) is skips

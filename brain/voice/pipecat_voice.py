@@ -14,10 +14,15 @@ Without headphones the mic hears the speakers and the partner interrupts itself.
 (VOICE_HALF_DUPLEX=true) has EchoGate feed Flux silence while the partner talks, at the cost of
 barge-in.
 
+With the mic off in settings, EchoGate feeds Flux silence all the time, and any turn Flux still
+reports is dropped, so speech starts no turn and no barge-in. The partner still talks and reacts,
+and typed turns reach the bus from the overlay without passing through here.
+
 Without ElevenLabs keys it still listens: transcripts and mood keep flowing, and replies go to
 subtitles only.
 """
 
+import asyncio
 import logging
 import time
 import uuid
@@ -38,6 +43,7 @@ from brain.events import (
     PlayerSpeech,
     PlayerSpeechPartial,
     PlayerStartedSpeaking,
+    SettingsChanged,
 )
 from brain.server import OverlayLink
 from brain.voice.barks import Bark, split_pcm
@@ -45,6 +51,7 @@ from brain.voice.pipeline import SubtitleOnlyVoice
 from brain.voice.processors import EchoGate, SpokenOutputTap, TurnBridge
 from brain.voice.self_echo import SelfEcho
 from brain.voice.sentiment import Mood, MoodTracker
+from brain.voice.style import style_values
 from shared.protocol.messages import AvatarState, BrainMessage, SubtitleChunk
 
 log = logging.getLogger(__name__)
@@ -71,6 +78,8 @@ class PipecatVoice:
         self._half_duplex = settings.voice_half_duplex
         self._echo_tail_s = settings.voice_echo_tail_ms / 1000
         self._bot_stopped_at: float | None = None
+        # What check_mic last saw, so a change is acted on and logged once.
+        self._mic_was_on = True
         if self._half_duplex:
             log.info("Half-duplex voice: mic muted while the partner talks; no barge-in")
 
@@ -79,6 +88,9 @@ class PipecatVoice:
         voice_id = link.settings.voice_id or settings.elevenlabs_voice_id
         speaks = settings.elevenlabs_api_key is not None and bool(voice_id)
         self._speaks = speaks
+        self._style: str = link.settings.voice_style
+        # Subscribed now, so a style the Control Center sends on connect isn't missed.
+        self._settings_events = bus.subscribe()
         transport = LocalAudioTransport(
             LocalAudioTransportParams(
                 audio_in_enabled=True,
@@ -111,6 +123,7 @@ class PipecatVoice:
                 settings=ElevenLabsTTSService.Settings(
                     model=settings.tts_model,
                     voice=voice_id,
+                    **style_values(self._style),
                 ),
             )
             processors += [tts, transport.output(), SpokenOutputTap(self)]
@@ -161,10 +174,32 @@ class PipecatVoice:
             delta = ElevenLabsTTSService.Settings(voice=voice_id)
             await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
 
+    async def set_style(self, style: str) -> None:
+        """Applies from the next line spoken: Pipecat opens a new audio context with them."""
+        if style == self._style:
+            return
+        self._style = style
+        log.info("Voice style: %s", style)
+        if self._speaks:
+            delta = ElevenLabsTTSService.Settings(**style_values(style))
+            await self._worker.queue_frame(TTSUpdateSettingsFrame(delta=delta))
+
+    async def _follow_style(self) -> None:
+        while True:
+            event = await self._settings_events.get()
+            if isinstance(event, SettingsChanged):
+                style = getattr(event.settings, "voice_style", None)
+                if isinstance(style, str):
+                    await self.set_style(style)
+
     async def run(self) -> None:
         runner = WorkerRunner(handle_sigint=False)  # brain/__main__.py owns Ctrl+C
         await runner.add_workers(self._worker)
-        await runner.run()
+        styles = asyncio.create_task(self._follow_style(), name="Voice style")
+        try:
+            await runner.run()
+        finally:
+            styles.cancel()
 
     async def send(self, message: BrainMessage) -> None:
         try:
@@ -182,7 +217,7 @@ class PipecatVoice:
 
     def on_partial_transcript(self, text: str) -> None:
         text = text.strip()
-        if not text or text == self._last_partial:
+        if not text or text == self._last_partial or not self.mic_on():
             return
         self._last_partial = text
         now = time.monotonic()
@@ -208,7 +243,25 @@ class PipecatVoice:
         self.bot_speaking = False
         self._bot_stopped_at = time.monotonic()
 
+    def mic_on(self) -> bool:
+        """The player's setting, read live so turning it off takes effect on the next frame."""
+        return self._link.settings.mic_enabled
+
+    async def check_mic(self) -> None:
+        """Acts on the player turning the mic on or off. EchoGate calls this for every frame."""
+        on = self.mic_on()
+        if on == self._mic_was_on:
+            return
+        self._mic_was_on = on
+        log.info("Mic turned %s in settings", "on" if on else "off")
+        if not on and self.user_speaking:
+            # The end of this turn will be dropped, and until then say() would refuse every line.
+            self.user_speaking = False
+            await self.send(AvatarState(state="idle"))
+
     def mic_muted(self) -> bool:
+        if not self.mic_on():
+            return True
         if not self._half_duplex:
             return False
         if self.bot_speaking:
@@ -220,6 +273,10 @@ class PipecatVoice:
     def _register_turn_events(self, stt: DeepgramFluxSTTService) -> None:
         @stt.event_handler("on_start_of_turn")
         async def _on_start(_service: DeepgramFluxSTTService, _transcript: str) -> None:
+            if not self.mic_on():
+                # Audio Flux had before the mic went off: no barge-in, and no "listening".
+                log.debug("Mic off; ignored a start of turn")
+                return
             self.user_speaking = True
             self._end_of_turn_at = None
             self._last_partial = ""
@@ -237,6 +294,11 @@ class PipecatVoice:
 
     async def on_end_of_turn(self, transcript: str) -> None:
         self.user_speaking = False
+        if not self.mic_on():
+            # They turned the mic off mid-sentence, so the half they said isn't a turn. No
+            # avatar change either: check_mic already reset it, and it may be talking now.
+            log.info("Mic off; dropped the rest of a turn: %s", transcript.strip())
+            return
         await self.send(AvatarState(state="idle"))
         transcript = transcript.strip()
         if not transcript:

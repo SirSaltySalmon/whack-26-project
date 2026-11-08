@@ -9,6 +9,29 @@ from dataclasses import dataclass
 # The overlay's own window, which is never the game.
 _NEVER_THE_GAME = frozenset({"electron"})
 
+# Apps the player passes through on the way to the game: where they started the brain, the
+# desktop, launchers and the usual tools. Spotting the game skips them when they come to the
+# front. Lowercase, matched against AppWindow.process.
+NOT_A_GAME = _NEVER_THE_GAME | {
+    # Terminals and editors
+    "terminal", "iterm2", "warp", "ghostty", "alacritty", "kitty", "wezterm-gui",
+    "windowsterminal", "cmd", "powershell", "pwsh", "conhost", "openconsole",
+    "code", "code - insiders", "cursor", "zed", "pycharm", "pycharm64", "idea64", "sublime_text",
+    # Desktops and system UI
+    "finder", "dock", "system settings", "systemsettings", "explorer", "searchhost",
+    "startmenuexperiencehost", "shellexperiencehost", "textinputhost", "lockapp",
+    "applicationframehost", "taskmgr", "activity monitor",
+    # Browsers, chat, recording and launchers
+    "chrome", "google chrome", "msedge", "microsoft edge", "firefox", "safari", "arc", "brave",
+    "discord", "slack", "obs", "obs64", "obs studio",
+    "steam", "steam helper", "steamwebhelper", "epicgameslauncher", "battle.net", "galaxyclient",
+    "claude", "github desktop",
+}  # fmt: skip
+
+
+def is_not_a_game(app: "AppWindow") -> bool:
+    return app.process.strip().lower() in NOT_A_GAME
+
 
 @dataclass(frozen=True)
 class AppWindow:

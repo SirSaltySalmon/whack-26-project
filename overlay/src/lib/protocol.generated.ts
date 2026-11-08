@@ -54,9 +54,11 @@ export type QuestionId = string;
 export type Text2 = string;
 export type Type8 = "question.ask";
 export type Personalities = string[];
+export type MicEnabled = boolean;
 export type Personality = string;
 export type Proactive = boolean;
 export type VoiceId = string | null;
+export type VoiceStyle = "expressive" | "classic";
 export type Type9 = "settings.state";
 export type Id = string;
 export type Name = string;
@@ -131,7 +133,7 @@ export type Personalities1 = string[];
 export type ProtocolVersion1 = number;
 export type Voices1 = VoiceOption[];
 export type Overlay =
-  OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent;
+  OverlayReady | OverlayRects | CardClosed | CardNavigated | QuestionAnswer | SettingsUpdate | PageContent | PlayerText;
 export type DisplayScale = number;
 export type Height1 = number;
 export type ProtocolVersion2 = number;
@@ -157,6 +159,8 @@ export type Truncated = boolean;
 export type Type27 = "page.content";
 export type Url1 = string;
 export type VisibleText = string;
+export type Text8 = string;
+export type Type28 = "player.text";
 
 /**
  * Exists only so one JSON Schema document can describe every direction.
@@ -225,6 +229,10 @@ export interface MemoryToast {
   text: Text1;
   type?: Type7;
 }
+/**
+ * No longer sent: questions are spoken, and the reply is heard or typed like any other turn.
+ * Kept so an older overlay or recording still validates.
+ */
 export interface QuestionAsk {
   options?: Options;
   question_id: QuestionId;
@@ -238,9 +246,11 @@ export interface SettingsState {
   voices?: Voices;
 }
 export interface Settings {
+  mic_enabled?: MicEnabled;
   personality?: Personality;
   proactive?: Proactive;
   voice_id?: VoiceId;
+  voice_style?: VoiceStyle;
 }
 export interface VoiceOption {
   id: Id;
@@ -429,4 +439,11 @@ export interface PageContent {
   type?: Type27;
   url: Url1;
   visible_text: VisibleText;
+}
+/**
+ * A turn the player typed in the overlay. The brain handles it exactly like speech.
+ */
+export interface PlayerText {
+  text: Text8;
+  type?: Type28;
 }

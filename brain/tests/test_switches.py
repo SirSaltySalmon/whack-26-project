@@ -43,8 +43,8 @@ def test_turning_off_anthropic_drops_only_its_key() -> None:
     assert settings.gemini_api_key is not None
     with pytest.raises(LLMUnavailableError):
         LLMFactory(settings).observer()
-    # Close looks fall back to Gemini rather than going away.
-    assert LLMFactory(settings).closeup() is not None
+    # Deep thinking falls back to Gemini rather than going away.
+    assert LLMFactory(settings).deep() is not None
 
 
 def test_turning_off_voice_drops_the_mic_and_speech_keys() -> None:

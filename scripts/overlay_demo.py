@@ -5,9 +5,10 @@ Usage: python scripts/overlay_demo.py   then, in another terminal: npm --prefix 
 Uses the real brain server, so origin checks and message validation behave as they do in a real run.
 
 Each pass shows the avatar's states, the pointer, the HUD regions debug view, subtitles both ways,
-a toast for each source and a question with and without options, so Stage 0 of docs/TEST_PLAN.md
-can be checked by eye. Clicking an answer moves on straight away. The terminal logs what the overlay
-reports back, including the rectangles it wants masked.
+a toast for each source and two spoken questions, so Stage 0 of docs/TEST_PLAN.md can be checked by
+eye. Questions are only spoken, as in a real run: answering one in the overlay's text box moves on
+straight away. The terminal logs what the overlay reports back, including typed turns and the
+rectangles it wants masked.
 """
 
 import asyncio
@@ -25,7 +26,7 @@ import uvicorn  # noqa: E402
 
 from brain.config import WS_HOST, Settings  # noqa: E402
 from brain.director.personalities import load_personalities  # noqa: E402
-from brain.events import Event, EventBus, OverlayConnected, QuestionAnswered  # noqa: E402
+from brain.events import Event, EventBus, OverlayConnected, PlayerSpeech  # noqa: E402
 from brain.server import OverlayLink, create_app  # noqa: E402
 from shared.protocol import BrainMessage  # noqa: E402
 from shared.protocol.messages import (  # noqa: E402
@@ -35,7 +36,6 @@ from shared.protocol.messages import (  # noqa: E402
     DebugRegions,
     MemoryToast,
     PointerFly,
-    QuestionAsk,
     Rect,
     SubtitleChunk,
     VoiceOption,
@@ -48,7 +48,8 @@ log = logging.getLogger("overlay_demo")
 # and its rectangle can be seen leaving in the log. See useCompanionFeed.ts and Toasts.tsx.
 SUBTITLE_HOLD_S = 3.0  # SUBTITLE_LINGER_MS is 2500
 TOAST_HOLD_S = 4.5  # TOAST_MS is 4000
-QUESTION_HOLD_S = 31.0  # QUESTION_MS is 30000
+# The brain drops an unanswered question after question_answer_timeout_s, 20 s by default.
+QUESTION_HOLD_S = 20.0
 DEBUG_REGIONS_STALE_S = 3.0  # DEBUG_REGIONS_STALE_MS is 3000
 
 WORD_GAP_S = 0.3
@@ -66,14 +67,7 @@ TOASTS = (
     MemoryToast(text="Updated: base location: east of spawn", source="observed"),
     MemoryToast(text="Remembered: slime weakness: fire", source="wiki"),
 )
-QUESTIONS = (
-    QuestionAsk(
-        question_id="demo-choice",
-        text="What are you after next?",
-        options=["explore", "fight", "build"],
-    ),
-    QuestionAsk(question_id="demo-open", text="What's that glowing thing for?"),
-)
+QUESTIONS = ("What are you after next?", "What's that glowing thing for?")
 # Nothing speaks in this demo, so picking one of these is harmless.
 DEMO_VOICES = [
     VoiceOption(name="Demo voice A", id="demo-voice-a"),
@@ -160,17 +154,13 @@ async def show_toasts(overlay: Overlay, sleep: Sleep) -> None:
     await sleep(TOAST_HOLD_S)
 
 
-async def ask(
-    overlay: Overlay, question: QuestionAsk, answered: asyncio.Event, sleep: Sleep
-) -> None:
-    """Holds until it's answered or the overlay has dropped it, so nothing replaces it too soon.
-
-    "Not now" only closes the question on the overlay's side and a question with no options can't
-    be answered without a mic, so in both of those cases the demo waits out the hold.
-    """
+async def ask(overlay: Overlay, question: str, answered: asyncio.Event, sleep: Sleep) -> None:
+    """Says it, then holds until a typed reply arrives or the brain would have given up on it."""
     answered.clear()
-    await overlay.send(question)
-    log.info("Question: %r. Waiting up to %.0f s for an answer", question.text, QUESTION_HOLD_S)
+    await overlay.send(AvatarState(state="talking"))
+    await overlay.send(SubtitleChunk(utterance_id=uuid.uuid4().hex, text=question, final=True))
+    await overlay.send(AvatarState(state="idle"))
+    log.info("Question: %r. Waiting up to %.0f s for a typed reply", question, QUESTION_HOLD_S)
     waited = 0.0
     while waited < QUESTION_HOLD_S and not answered.is_set():
         await sleep(ANSWER_POLL_S)
@@ -219,7 +209,8 @@ async def watch(bus: EventBus, overlay: Overlay, sleep: Sleep = asyncio.sleep) -
                     if player:
                         player.cancel()
                     player = asyncio.create_task(play(overlay, answered, sleep))
-                case QuestionAnswered():
+                case PlayerSpeech():
+                    # From the overlay's text box, which the real brain treats as speech.
                     answered.set()
     finally:
         if player:

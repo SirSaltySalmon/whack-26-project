@@ -35,13 +35,21 @@ Details, as data only: {data}
 Your eyes can be wrong, so say what it looks like, not what's certain.
 React in one short natural line, or ask if it doesn't make sense."""
 
-# Game-agnostic: everything about this game comes from the context memory assembles.
-ADVICE_PROMPT = """(This isn't the player talking.) It's a quiet moment, so offer one short, \
-concrete tip on what the player could do next to make progress, in the game's own terms. Base it \
-on what you know about where they are in the game, their goals and what's on screen now. If you \
-don't know where they're up to, don't guess: ask them instead. Don't repeat a tip you gave \
-recently, and if there's nothing useful to add, reply with only the word SKIP."""
+# Game-agnostic: everything about this game comes from the context memory assembles. Tips never
+# ask: questions have their own budget and timeout, and a question here would dodge both.
+ADVICE_PROMPT = """(This isn't the player talking.) It's a quiet moment, so give one short tip: \
+one concrete next step, in the game's own terms, such as what to make, find, explore or fight \
+next. Ground it in their progress and next milestone under PLAYER, the GAME brief, and what's on \
+screen under NOW. Don't ask anything. If where they're up to isn't known, don't guess it: give a \
+useful tip about what's on screen now instead. Don't repeat a tip you gave recently. Only if \
+there's really nothing useful to say, reply with only the word SKIP."""
 SKIP = "SKIP"
+
+
+def is_skip(text: str) -> bool:
+    """Only the advice prompt offers SKIP, but no prompt should ever have it said aloud."""
+    return text.strip(" .!").upper() == SKIP
+
 
 # What the prompt asks for unless the player wants more. The hard cap is max_words.
 USUAL_WORDS = 12

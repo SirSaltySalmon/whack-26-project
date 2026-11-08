@@ -1,8 +1,9 @@
-"""Claude client: screen reports and close looks (VisionLLM), and deep reasoning (TextLLM)."""
+"""Claude client: screen reports, close looks and pointing (VisionLLM), talker replies and deep
+reasoning (TextLLM), and player turns with tools (ToolLLM)."""
 
 import logging
 from base64 import standard_b64encode
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, Literal
 
 import anthropic
@@ -13,7 +14,9 @@ from brain.llm.base import (
     LLMUnavailableError,
     RateLimiter,
     SchemaT,
+    ToolDeclaration,
 )
+from brain.llm.claude_tools import ClaudeToolChat
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ class ClaudeClient:
         limiter: RateLimiter,
         effort: Effort = "low",
         timeout_s: float = 10.0,
+        think: bool = True,
     ) -> None:
         self._model = model
         # No retries: a retried frame arrives too late to describe what's on screen now, and a
@@ -52,6 +56,8 @@ class ClaudeClient:
         self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=0, timeout=timeout_s)
         self._limiter = limiter
         self._effort = effort
+        # Off for the talker: thinking costs time on the voice path.
+        self._think = think
 
     def _acquire(self) -> None:
         if not self._limiter.try_acquire():
@@ -68,7 +74,11 @@ class ClaudeClient:
         return None
 
     async def stream_text(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
-        """For reasoning, so thinking stays on and effort sets how much."""
+        """With thinking on, effort sets how much; with it off, this is a fast plain reply."""
+        if not self._think:
+            async for text in self._stream_fast(system, prompt, max_tokens):
+                yield text
+            return
         self._acquire()
         try:
             async with self._client.beta.messages.stream(
@@ -91,6 +101,64 @@ class ClaudeClient:
             raise unavailable from exc
         if message.stop_reason in ("refusal", "max_tokens"):
             log.warning("%s stopped early: %s", self._model, message.stop_reason)
+
+    async def _stream_fast(self, system: str, prompt: str, max_tokens: int) -> AsyncIterator[str]:
+        # No server-side fallback: Haiku has none, and the talker would rather stay quiet.
+        self._acquire()
+        try:
+            async with self._client.messages.stream(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                thinking={"type": "disabled"},
+                output_config={"effort": "low"},
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+                message = await stream.get_final_message()
+        except anthropic.APIStatusError as exc:
+            unavailable = self._unavailable(exc)
+            if unavailable is None:
+                raise
+            raise unavailable from exc
+        if message.stop_reason in ("refusal", "max_tokens"):
+            log.warning("%s stopped early: %s", self._model, message.stop_reason)
+
+    def tool_chat(
+        self, system: str, tools: Sequence[ToolDeclaration], max_tokens: int
+    ) -> ClaudeToolChat:
+        return ClaudeToolChat(self, system, tools, max_tokens)
+
+    async def create_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        system: str,
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+        allow_tools: bool,
+    ) -> Any:
+        """Tools run in our own loop, so the director can cancel them and every call is logged."""
+        self._acquire()
+        try:
+            message = await self._client.messages.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                thinking={"type": "disabled"},
+                output_config={"effort": "low"},
+                tools=tools,
+                tool_choice={"type": "auto"} if allow_tools else {"type": "none"},
+                messages=messages,
+            )
+        except anthropic.APIStatusError as exc:
+            unavailable = self._unavailable(exc)
+            if unavailable is None:
+                raise
+            raise unavailable from exc
+        if message.stop_reason == "refusal":
+            raise LLMEmptyResponseError(f"{self._model} refused a tool turn")
+        return message
 
     async def vision_json(
         self,

@@ -4,6 +4,7 @@ import type { State } from "../../lib/protocol.generated.ts";
 import { useFrameGesture } from "../hooks/useFrameGesture.ts";
 import { useHovered } from "../hooks/useHovered.ts";
 import type { AvatarLook } from "../logic/avatars.ts";
+import { CHAT_OFFLINE_HINT } from "../logic/chat.ts";
 import {
   AVATAR_LIMITS,
   moveFrame,
@@ -46,6 +47,8 @@ interface AvatarProps {
   /** Reopens the wiki window. Null when there's nothing to reopen. */
   onOpenWiki: (() => void) | null;
   onOpenSettings(): void;
+  /** Opens the chat box. Null while the brain is away: the button stays, disabled, to say why. */
+  onOpenChat: (() => void) | null;
 }
 
 /**
@@ -60,6 +63,7 @@ export function Avatar({
   onFrameEnd,
   onOpenWiki,
   onOpenSettings,
+  onOpenChat,
 }: AvatarProps) {
   const startMove = useFrameGesture({
     frame,
@@ -108,7 +112,18 @@ export function Avatar({
           </button>
         )}
         <button
-          className="avatar-settings"
+          className="avatar-button avatar-chat"
+          data-interactive
+          type="button"
+          title={onOpenChat ? "Type to your partner" : CHAT_OFFLINE_HINT}
+          aria-label="Type to your partner"
+          disabled={onOpenChat === null}
+          onClick={onOpenChat ?? undefined}
+        >
+          ⌨
+        </button>
+        <button
+          className="avatar-button avatar-settings"
           data-interactive
           type="button"
           title="Settings"

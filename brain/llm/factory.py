@@ -29,12 +29,21 @@ class LLMFactory:
             raise LLMUnavailableError("GEMINI_API_KEY isn't set")
         return GeminiClient(model, key.get_secret_value(), self._limiter(model), thinking)
 
-    def talker(self) -> GeminiClient:
-        # Thinking costs time on the voice path.
-        return self._build(self._settings.talker_model, types.ThinkingLevel.MINIMAL)
+    def _fast(self, model: str, thinking: types.ThinkingLevel) -> ClaudeClient | GeminiClient:
+        """The vendor follows the model's name, so switching back is a config change."""
+        if not model.startswith("claude"):
+            return self._build(model, thinking)
+        key = self._settings.anthropic_api_key
+        if key is None:
+            raise LLMUnavailableError("ANTHROPIC_API_KEY isn't set")
+        return ClaudeClient(model, key.get_secret_value(), self._limiter(model), think=False)
 
-    def vision(self) -> GeminiClient:
-        return self._build(self._settings.vision_model, types.ThinkingLevel.LOW)
+    def talker(self) -> ClaudeClient | GeminiClient:
+        # Thinking costs time on the voice path.
+        return self._fast(self._settings.talker_model, types.ThinkingLevel.MINIMAL)
+
+    def vision(self) -> ClaudeClient | GeminiClient:
+        return self._fast(self._settings.vision_model, types.ThinkingLevel.LOW)
 
     def observer(self) -> ClaudeClient:
         model = self._settings.observer_model

@@ -19,6 +19,11 @@ Report only what is visible in this one frame. Never infer what happened before 
 player intends. If something isn't clearly visible and readable, use null and add the field's name \
 to "unsure". A wrong value is worse than null.
 
+Use a specific name for an enemy, boss, item, character or place only when that name is written on \
+screen. Otherwise describe it in plain words from how it looks, such as "a large eye-like boss" or \
+"a sword", even if you think you recognize it. The image is small, so similar things are easy to \
+mix up, and a wrong name misleads the companion far more than a plain description.
+
 Fields:
 - screen_type: gameplay (the game world, with no large panel covering it), menu (title screen, \
 options, lists of saves or worlds, credits, pause or settings panels, even over a game world), \
@@ -36,10 +41,10 @@ enemy health aren't player health.
   medium: the player is fighting. Signs include projectiles, damage numbers, attack effects, or \
 enemies labelled with health.
   high: a boss or a boss health bar, many enemies at once, or fighting with low health.
-- threats: visible enemies or hazards, using their on-screen names when written. Only list what's \
-clearly hostile or harmful. Friendly or idle characters, ambient wildlife, weather and speech \
-bubbles aren't threats. Empty if none.
-- selected_item: the held or selected item's name, only if it's written on screen.
+- threats: visible enemies or hazards, by their on-screen names when written, else in plain \
+words. Only list what's clearly hostile or harmful. Friendly or idle characters, ambient wildlife, \
+weather and speech bubbles aren't threats. Empty if none.
+- selected_item: the held or selected item's name, only if it's written on screen. Otherwise null.
 - menu_title: the heading of the open menu or panel, only if written. Not the game's logo.
 - location: the visible environment in a few plain words, or null.
 - on_screen_text: up to 3 short pieces of text that matter most, such as objectives, warnings or \
