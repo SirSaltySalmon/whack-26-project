@@ -109,37 +109,37 @@ export function defaultTextFrame(viewport: Size, stackIndex: number): Frame {
 /** Tall enough that opening settings shows every choice, including the voices at the bottom. */
 export function defaultSettingsFrame(viewport: Size): Frame {
   return clampFrame(
-    { ...defaultTextFrame(viewport, 0), height: 290 },
+    { ...defaultTextFrame(viewport, 0), height: 346 },
     viewport,
   );
 }
 
-export interface QuestionPlacement {
-  left: number;
-  bottom: number;
-}
+/** Must match .chat-box and .chat-pill in companion.css; layout.test.ts checks. */
+export const CHAT_BOX_SIZE: Size = { width: 300, height: 34 };
+export const CHAT_PILL_SIZE: Size = { width: 132, height: 28 };
+const CHAT_GAP = 8;
 
-const QUESTION_WIDTH = 300; // Keep equal to .question's width in companion.css.
-const QUESTION_GAP = 12;
-// A question grows upward from its bottom edge, and its height depends on its text. This fits three
-// lines of text and two rows of buttons.
-const QUESTION_ROOM = 160;
-
-/** Beside the character, on whichever side has room, so it reads as the character asking. */
-export function questionPlacement(
+/**
+ * Beside the character, on whichever side has room, level with its feet, so typing reads as talking
+ * to it. The space above the character belongs to the minimized wiki tab.
+ */
+export function chatPosition(
   avatar: Frame,
+  size: Size,
   viewport: Size,
-): QuestionPlacement {
-  const right = avatar.x + avatar.width + QUESTION_GAP;
-  const fitsRight = right + QUESTION_WIDTH <= viewport.width;
-  const level = viewport.height - avatar.y - avatar.height;
-  return {
-    left: fitsRight
+): { x: number; y: number } {
+  const right = avatar.x + avatar.width + CHAT_GAP;
+  // The side is chosen for the open box, so the pill opens in place instead of jumping across the
+  // character, and either one hugs the character's edge.
+  const x =
+    right + CHAT_BOX_SIZE.width <= viewport.width
       ? right
-      : Math.max(0, avatar.x - QUESTION_GAP - QUESTION_WIDTH),
-    // Level with the character, unless that would lose the question's top off the screen.
-    bottom: Math.max(0, Math.min(level, viewport.height - QUESTION_ROOM)),
-  };
+      : avatar.x - CHAT_GAP - size.width;
+  const placed = clampFrame(
+    { ...size, x, y: avatar.y + avatar.height - size.height },
+    viewport,
+  );
+  return { x: placed.x, y: placed.y };
 }
 
 const TAB_SIZE: Size = { width: 180, height: 32 };

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from brain.config import Settings
 from brain.director.personalities import load_personalities
-from brain.events import EventBus, OverlayConnected, QuestionAnswered
+from brain.events import EventBus, OverlayConnected, PlayerSpeech
 from brain.server import OverlayLink, create_app
 from brain.tests.fakes import FakeOverlay
 from scripts.overlay_demo import (
@@ -29,7 +29,6 @@ from shared.protocol.messages import (
     CardShow,
     MemoryToast,
     PointerFly,
-    QuestionAsk,
     SettingsState,
     SubtitleChunk,
     VoiceOption,
@@ -38,7 +37,7 @@ from shared.protocol.messages import (
 # How long the overlay keeps each thing up. See useCompanionFeed.ts and Toasts.tsx.
 OVERLAY_SUBTITLE_LINGER_S = 2.5
 OVERLAY_TOAST_S = 4.0
-OVERLAY_QUESTION_S = 30.0
+BRAIN_QUESTION_TIMEOUT_S = Settings.model_fields["question_answer_timeout_s"].default
 
 
 class Clock:
@@ -81,8 +80,8 @@ def toasts(overlay: FakeOverlay) -> list[MemoryToast]:
     return [message for message in overlay.sent if isinstance(message, MemoryToast)]
 
 
-def questions(overlay: FakeOverlay) -> list[QuestionAsk]:
-    return [message for message in overlay.sent if isinstance(message, QuestionAsk)]
+def questions(overlay: FakeOverlay) -> list[SubtitleChunk]:
+    return [chunk for chunk in subtitles(overlay) if chunk.text in QUESTIONS]
 
 
 async def until(condition: Callable[[], bool]) -> None:
@@ -103,11 +102,16 @@ async def test_every_message_in_a_pass_survives_the_protocol_round_trip() -> Non
 async def test_a_pass_shows_every_part_of_the_overlay() -> None:
     overlay = await run_one_pass()
     kinds = {type(message) for message in overlay.sent}
-    assert kinds == {AvatarState, PointerFly, SubtitleChunk, MemoryToast, QuestionAsk}
+    assert kinds == {AvatarState, PointerFly, SubtitleChunk, MemoryToast}
+
+
+def spoken(overlay: FakeOverlay) -> list[SubtitleChunk]:
+    """Subtitles apart from the spoken questions."""
+    return [chunk for chunk in subtitles(overlay) if chunk.text not in QUESTIONS]
 
 
 async def test_word_chunks_then_an_empty_final_share_one_utterance() -> None:
-    chunks = subtitles(await run_one_pass())
+    chunks = spoken(await run_one_pass())
     words = chunks[:-1]
     assert len({chunk.utterance_id for chunk in words}) == 1
     assert [chunk.text for chunk in words[:-1]] == list(SPOKEN_WORDS)
@@ -116,7 +120,7 @@ async def test_word_chunks_then_an_empty_final_share_one_utterance() -> None:
 
 
 async def test_the_one_chunk_line_is_a_separate_utterance_with_all_its_text() -> None:
-    chunks = subtitles(await run_one_pass())
+    chunks = spoken(await run_one_pass())
     assert chunks[-1].text == WHOLE_LINE and chunks[-1].final
     assert chunks[-1].utterance_id != chunks[0].utterance_id
 
@@ -127,7 +131,7 @@ async def test_each_pass_uses_new_utterances_so_words_cant_join_an_old_line() ->
     answered = asyncio.Event()
     await one_pass(overlay, answered, clock.sleep)
     await one_pass(overlay, answered, clock.sleep)
-    assert len({chunk.utterance_id for chunk in subtitles(overlay)}) == 4
+    assert len({chunk.utterance_id for chunk in subtitles(overlay)}) == 8
 
 
 async def test_a_toast_appears_for_every_source() -> None:
@@ -138,35 +142,36 @@ async def test_a_toast_appears_for_every_source() -> None:
     }
 
 
-async def test_a_question_is_asked_with_options_and_another_without() -> None:
+async def test_questions_are_spoken_as_whole_lines() -> None:
     asked = questions(await run_one_pass())
-    assert [bool(question.options) for question in asked] == [True, False]
+    assert [chunk.text for chunk in asked] == list(QUESTIONS)
+    assert all(chunk.final for chunk in asked)
 
 
 async def test_the_next_subtitle_waits_for_the_finished_one_to_fade() -> None:
     overlay = await run_one_pass()
-    chunks = subtitles(overlay)
+    chunks = spoken(overlay)
     gap = overlay.when(chunks[-1]) - overlay.when(chunks[-2])
     assert gap >= OVERLAY_SUBTITLE_LINGER_S
 
 
 async def test_words_arrive_over_time_rather_than_all_at_once() -> None:
     overlay = await run_one_pass()
-    words = subtitles(overlay)[:-1]
+    words = spoken(overlay)[:-1]
     assert overlay.when(words[-1]) - overlay.when(words[0]) > 1.0
 
 
-async def test_toasts_have_left_before_the_question_appears() -> None:
+async def test_toasts_have_left_before_the_question_is_asked() -> None:
     overlay = await run_one_pass()
     assert overlay.when(questions(overlay)[0]) - overlay.when(toasts(overlay)[-1]) >= (
         OVERLAY_TOAST_S
     )
 
 
-async def test_an_unanswered_question_is_not_replaced_before_the_overlay_drops_it() -> None:
+async def test_an_unanswered_question_is_held_as_long_as_the_brain_waits() -> None:
     overlay = await run_one_pass()
     first, second = questions(overlay)
-    assert overlay.when(second) - overlay.when(first) >= OVERLAY_QUESTION_S
+    assert overlay.when(second) - overlay.when(first) >= BRAIN_QUESTION_TIMEOUT_S
 
 
 async def test_answering_moves_on_without_waiting_out_the_hold() -> None:
@@ -187,10 +192,10 @@ async def test_an_old_answer_cant_skip_the_next_question() -> None:
     answered = asyncio.Event()
     answered.set()
     await ask(TimedOverlay(clock), QUESTIONS[0], answered, clock.sleep)
-    assert clock.now >= OVERLAY_QUESTION_S
+    assert clock.now >= BRAIN_QUESTION_TIMEOUT_S
 
 
-async def test_connecting_starts_the_demo_and_an_answer_moves_it_on() -> None:
+async def test_connecting_starts_the_demo_and_a_typed_reply_moves_it_on() -> None:
     bus = EventBus()
     clock = Clock()
     overlay = TimedOverlay(clock)
@@ -200,10 +205,10 @@ async def test_connecting_starts_the_demo_and_an_answer_moves_it_on() -> None:
 
     await until(lambda: len(questions(overlay)) == 1)
     first = questions(overlay)[0]
-    bus.publish(QuestionAnswered(question_id=first.question_id, answer=first.options[0]))
+    bus.publish(PlayerSpeech(transcript="exploring"))
     await until(lambda: len(questions(overlay)) == 2)
 
-    assert overlay.when(questions(overlay)[1]) - overlay.when(first) < OVERLAY_QUESTION_S
+    assert overlay.when(questions(overlay)[1]) - overlay.when(first) < BRAIN_QUESTION_TIMEOUT_S
     watcher.cancel()
     with pytest.raises(asyncio.CancelledError):
         await watcher

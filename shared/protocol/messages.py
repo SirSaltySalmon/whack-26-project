@@ -27,6 +27,8 @@ class Settings(BaseModel):
     proactive: bool = True
     personality: str = "supportive"
     voice_id: str | None = None
+    # Off, the partner stops listening but keeps watching and talking; the player types instead.
+    mic_enabled: bool = True
 
 
 # --- Brain to overlay ---
@@ -92,6 +94,9 @@ class MemoryToast(BaseModel):
 
 
 class QuestionAsk(BaseModel):
+    """No longer sent: questions are spoken, and the reply is heard or typed like any other turn.
+    Kept so an older overlay or recording still validates."""
+
     type: Literal["question.ask"] = "question.ask"
     question_id: str
     text: str
@@ -159,6 +164,13 @@ class SettingsUpdate(BaseModel):
     settings: Settings
 
 
+class PlayerText(BaseModel):
+    """A turn the player typed in the overlay. The brain handles it exactly like speech."""
+
+    type: Literal["player.text"] = "player.text"
+    text: str = Field(min_length=1, max_length=500)
+
+
 class PageContent(BaseModel):
     """The wiki window's rendered text, in reply to page.read. Every field comes from a website, so
     treat all of it as untrusted data."""
@@ -194,7 +206,8 @@ OverlayMessage = Annotated[
     | CardNavigated
     | QuestionAnswer
     | SettingsUpdate
-    | PageContent,
+    | PageContent
+    | PlayerText,
     Field(discriminator="type"),
 ]
 

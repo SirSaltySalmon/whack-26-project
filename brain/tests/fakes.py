@@ -219,6 +219,10 @@ class FakeMemory:
         self.context_calls: list[tuple[dict[str, str], str | None]] = []
         self.facts: dict[tuple[str, str], Fact] = {}
         self.remembered: list[tuple[str, str, str, str, float]] = []
+        self.tentative_remembered: list[tuple[str, str]] = []
+        self.released: list[str] = []
+        self.answered: list[tuple[int | None, str, str | None]] = []
+        self.forgotten: list[tuple[str, str]] = []
 
     async def wonder(self, subject: str, attribute: str, text: str) -> object | None:
         self.wondered.append((subject, attribute, text))
@@ -227,6 +231,22 @@ class FakeMemory:
     async def take_question(self) -> QuestionAsk | None:
         self.questions_taken += 1
         return self._questions.popleft() if self._questions else None
+
+    async def release_question(self, question_id: str) -> None:
+        """The director couldn't say it, so it goes back in the queue."""
+        self.released.append(question_id)
+
+    async def answer_question(
+        self, question_id: int | None, answer: str, correction: str | None = None
+    ) -> RememberResult | None:
+        """None as the id means the question just asked."""
+        self.answered.append((question_id, answer, correction))
+        return RememberResult("replaced")
+
+    async def forget(self, subject: str, attribute: str) -> int:
+        """The player said a remembered value is wrong without saying what's right."""
+        self.forgotten.append((subject, attribute))
+        return 1 if self.facts.pop((subject, attribute), None) is not None else 0
 
     async def record_partner_turn(self, text: str) -> None:
         self.partner_turns.append(text)
@@ -239,10 +259,19 @@ class FakeMemory:
         return self.facts.get((subject, attribute))
 
     async def remember(
-        self, subject: str, attribute: str, value: str, source: Source, confidence: float
+        self,
+        subject: str,
+        attribute: str,
+        value: str,
+        source: Source,
+        confidence: float,
+        *,
+        tentative: bool = False,
     ) -> RememberResult:
         """Stores the latest value as given. The trust rules have their own tests."""
         self.remembered.append((subject, attribute, value, source, confidence))
+        if tentative:
+            self.tentative_remembered.append((subject, attribute))
         fact = Fact(
             len(self.remembered),
             None,
@@ -251,7 +280,7 @@ class FakeMemory:
             value,
             source,
             confidence,
-            tentative=confidence < 0.5,
+            tentative=tentative or confidence < 0.5,
             valid_from=time.time(),
         )
         self.facts[(subject, attribute)] = fact

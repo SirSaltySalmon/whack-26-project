@@ -29,13 +29,14 @@ Checked on 2026-11-07, with no keys or game:
 
 ### Found, and left for the team
 
-- **"Not now" tells the brain nothing.** It only closes the question on screen. A question that's been asked is never asked again, so a dismissed one stays open until a session note settles it. Decide if that's right. Fixing it needs a new protocol message.
+- **Questions are spoken now.** The popup and its "Not now" button are gone (decision of 2026-11-08). An unanswered question is dropped, and it is not asked again.
 - **A skipped reaction still uses up its budget.** `decide` runs before the speech slot is checked, so a reaction skipped because the partner is busy still starts the cooldown, and a skipped question still starts the question gap. It's harmless at these values, but it could look like a missed reaction when tuning.
 - **The wiki opens behind a cookie dialog.** The window's session is in memory, so wiki.gg should ask again on every launch. Dismiss it before recording a demo.
+- **`Latency: event to bark` leaves out the time spent noticing.** It starts when the event is published, not when its frame was captured, so observer events look seconds faster than they are. It also stops at queuing, not playback. [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) fixes this.
 
 ## 1. Automated tests
 
-All of these need no game, mic or paid calls. Everything the test plan listed is written, apart from WP8's tests below.
+All of these need no game, mic or paid calls. Everything the test plan listed is written, including WP8.
 
 | Area | Files in `brain/tests/` |
 |---|---|
@@ -52,19 +53,9 @@ All of these need no game, mic or paid calls. Everything the test plan listed is
 
 Overlay logic is tested beside its code, in `overlay/src/renderer/logic/*.test.ts`. Shared helpers are `fakes.py`, `director_rig.py`, `agent_rig.py`, `fake_gemini.py` and `replay_rig.py`, which writes small sessions to disk.
 
-### Still to write, with WP8
+### Written with WP8
 
-**`brain/tests/test_open_page.py`** (new)
-- `PlayerStartedSpeaking` sends `page.read` only when the page's hostname exactly matches the wiki's. `wiki.gg.example.com` must not match `wiki.gg`
-- A reply with an old `request_id`, or from a different host, is discarded
-- Navigating away drops the snapshot, and closing the card forgets the page
-- Matching: finds passages by word and prefix, prefers visible ones on a tie, stays under the cap and keeps page order
-- A transcript with no overlap sends nothing, and one that refers to the page sends the visible text
-- `read_open_page` gives the right text for each case: on the wiki, off the wiki, nothing open
-- Page text is never written to SQLite
-
-**`brain/tests/test_director.py`** (add)
-- The excerpt reaches player turns and never reaches `_talk`
+`brain/tests/test_open_page.py` and `test_the_open_page_excerpt_reaches_player_turns_and_never_reactions` in `test_director.py`. The Stage 1 checks against a real wiki page are still open.
 
 ## 2. Test tooling
 
@@ -103,9 +94,9 @@ Ticked items passed with the real brain and the built overlay, rendered offscree
 Any windowed game or app works for most of this. First read the real free-tier limits from AI Studio into `rpm_by_model`.
 - [ ] "hi" gets a plain reply with no tool call and no filler. This also proves Gemini accepts the tool declarations
 - [ ] "look up the Eye of Cthulhu" shows a card, with a filler line first
-- [ ] Once WP8 is built, with a wiki page open: a question it answers past the intro is answered in one Flash-Lite call, with no filler line
-- [ ] Once WP8 is built: "what does this say?" uses the part in view, including after scrolling and while minimized
-- [ ] Once WP8 is built: follow a link off the wiki, and the partner says it can't read that page. The log shows no read was requested
+- [ ] WP8 is built. With a wiki page open: a question it answers past the intro is answered in one Flash-Lite call, with no filler line
+- [ ] "what does this say?" uses the part in view, including after scrolling and while minimized
+- [ ] Follow a link off the wiki, and the partner says it can't read that page. The log shows no read was requested
 - [ ] "open the wiki page for slimes" opens the real site in the wiki window
 - [ ] "what am I holding?" uses `look_closer`, and the answer matches the screen
 - [ ] "point at my health" lands the pointer beside the target, at 100% and 150% scaling
@@ -123,7 +114,7 @@ Use headphones.
 - [ ] Interrupting a plain reply drops it. Talking during `look_closer` doesn't: the answer comes once you stop, and a card already shown stays up
 - [ ] `End of turn to first audio` is under 1 s for a plain reply. If not, stream by sentence and compare TTS models
 - [ ] Switching voice in settings changes the next line, and survives a restart (needs `VOICE_OPTIONS`)
-- [ ] A quiet stretch brings up a question. Answering by button or out loud shows a memory toast, and it doesn't ask during danger
+- [ ] A quiet stretch speaks a question. Answering out loud or in the text box shows a memory toast, and it doesn't ask during danger
 
 ### Stage 3: add `ANTHROPIC_API_KEY`, Terraria in borderless mode
 This also clears the items still unproven in `CLAUDE.md`.
@@ -142,9 +133,26 @@ This also clears the items still unproven in `CLAUDE.md`.
 - [ ] Replay that session twice with `--exit-when-done --write-messages`. `compare_replay.py` finds no difference between the two runs, or between either run and the recording's `messages.jsonl`
 - [ ] Replay with the overlay open: recorded pointers and cards appear, and subtitles show the recorded lines
 
+## 4. Benchmarks
+
+The numbers for the pitch, measured with [WP11](REMAINING_WORK.md#wp11-proof-benchmarks-and-evals)'s tools. Save the log of every live run with `python -m brain --live --record 2>&1 | Tee-Object run.log`, then run `python scripts/latency_report.py run.log`. Fill in a row each time you measure, with the date and the run's name.
+
+| Measure | Target | Result | Run |
+|---|---|---|---|
+| Frame to bark, reader events (WP9) | Under 1 s (starting target) | | |
+| Frame to first audio, observer events (WP9) | Report only. This is the slow path readers replace | | |
+| Event to bark | Under 300 ms (`CLAUDE.md`) | | |
+| End of turn to first audio | Under 1 s (`CLAUDE.md`) | | |
+| Player turn with a tool | Report only | | |
+| Longest event-loop stall in 30 minutes | Under 100 ms (starting target) | | |
+| Reader replay: two runs give the same messages | No difference | | |
+| Observer: precision and recall for elevated danger | Report only | | |
+| Two-frame filter: false alarms on calm scenes | `tracker.py` measured 2 of 160 | | |
+| Tool choice over about 20 requests | Report only | | |
+| Pointer hit rate | Report only | | |
+
 ## Known gaps these tests won't close
 
-These are out of scope for the wiring pass:
-- **Must-have 3:** learned regions and compiled readers don't exist, so confirmed events stay about 2.4 s old
-- **Game brief:** nothing writes it yet, so the talker's context has no game description
-- **Barks:** filler lines go through TTS instead of pre-generated audio, so the 300 ms bark budget isn't met yet
+- **Must-have 3:** learned regions and compiled readers are on `origin/wp4-wp5-readers`, not on `main`. Until that merges, confirmed events stay about 2.4 s old.
+- **Barks** are pre-generated, and the 300 ms budget is not measured. `Latency: event to bark` also starts when the event is published, which [WP9](REMAINING_WORK.md#wp9-frame-to-voice-latency) fixes.
+- **The game brief** is written on `main`. It still needs a check on a few real games.

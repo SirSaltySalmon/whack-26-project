@@ -31,6 +31,10 @@ class FakePipecatVoice:
         self.sent: list[Any] = []
         self.started = 0
         self.stopped = 0
+        self.mic_checks = 0
+
+    async def check_mic(self) -> None:
+        self.mic_checks += 1
 
     def mic_muted(self) -> bool:
         return self.muted
@@ -99,6 +103,16 @@ async def test_echo_gate_leaves_other_frames_alone() -> None:
     frame = TextFrame(text="hello")
     assert await _through(EchoGate(voice), frame) == [frame]  # type: ignore[arg-type]
     assert voice.mic_audio == []
+
+
+async def test_echo_gate_checks_the_mic_setting_on_every_mic_frame() -> None:
+    # So turning the mic off takes effect within a frame, with no settings plumbing of its own.
+    voice = FakePipecatVoice()
+    gate = EchoGate(voice)  # type: ignore[arg-type]
+    for _ in range(3):
+        await _through(gate, _mic_frame())
+    await _through(gate, TextFrame(text="hello"))
+    assert voice.mic_checks == 3
 
 
 async def test_turn_bridge_passes_on_partial_transcripts() -> None:

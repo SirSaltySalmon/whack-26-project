@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   AVATAR_ASPECT,
   AVATAR_LIMITS,
+  CHAT_BOX_SIZE,
+  CHAT_PILL_SIZE,
+  chatPosition,
   clampFrame,
   defaultAvatarFrame,
   defaultSettingsFrame,
   minimizedTabPosition,
   moveFrame,
-  questionPlacement,
   resizeFrame,
   WEB_CARD_LIMITS,
+  type Size,
 } from "./layout.ts";
 
 const screen = { width: 1920, height: 1080 };
@@ -87,66 +91,59 @@ test("the minimized tab sits above the character, or below at the top of the scr
   assert.ok(minimizedTabPosition({ ...frame, y: 0 }, screen).y > 400);
 });
 
-test("a question goes to the right of the character when there's room", () => {
-  assert.equal(questionPlacement(frame, screen).left, 412);
+const box = CHAT_BOX_SIZE;
+const pill = CHAT_PILL_SIZE;
+
+test("the chat box goes to the right of the character when there's room", () => {
+  assert.deepEqual(chatPosition(frame, box, screen), { x: 408, y: 466 });
 });
 
-test("a question goes to the left when the right has no room", () => {
-  assert.equal(questionPlacement({ ...frame, x: 1620 }, screen).left, 1308);
+test("the chat box goes to the left when the right has no room", () => {
+  assert.equal(chatPosition({ ...frame, x: 1620 }, box, screen).x, 1312);
 });
 
-test("a question that only just fits on the right stays there", () => {
-  // 1308 + 300 (character) + 12 (gap) + 300 (question) is exactly the screen's width.
-  assert.equal(questionPlacement({ ...frame, x: 1308 }, screen).left, 1620);
-  assert.equal(questionPlacement({ ...frame, x: 1309 }, screen).left, 997);
+test("a chat box that only just fits on the right stays there", () => {
+  // 1312 + 300 (character) + 8 (gap) + 300 (box) is exactly the screen's width.
+  assert.equal(chatPosition({ ...frame, x: 1312 }, box, screen).x, 1620);
+  assert.equal(chatPosition({ ...frame, x: 1313 }, box, screen).x, 1005);
 });
 
-test("a question beside a character on the left edge goes to its right", () => {
-  assert.equal(questionPlacement({ ...frame, x: 0 }, screen).left, 312);
+test("the pill takes the open box's side, so opening it doesn't jump across the character", () => {
+  // The pill alone would fit on the right here; the open box wouldn't.
+  const avatar = { ...frame, x: 1400 };
+  assert.equal(chatPosition(avatar, pill, screen).x, 1400 - 8 - pill.width);
+  assert.equal(chatPosition(avatar, box, screen).x, 1400 - 8 - box.width);
 });
 
-test("with no room on either side a question stops at the screen's left edge", () => {
-  const narrow = { width: 700, height: 1080 };
-  assert.equal(questionPlacement({ ...frame, x: 313 }, narrow).left, 1);
-  assert.equal(questionPlacement({ ...frame, x: 312 }, narrow).left, 0);
-  assert.equal(questionPlacement({ ...frame, x: 100 }, narrow).left, 0);
+test("the chat box and pill sit level with the character's feet", () => {
+  assert.equal(chatPosition(frame, box, screen).y, 500 - box.height);
+  assert.equal(chatPosition(frame, pill, screen).y, 500 - pill.height);
 });
 
-test("a question lines up with the bottom of the character", () => {
-  assert.equal(questionPlacement(frame, screen).bottom, 580);
-  assert.equal(questionPlacement({ ...frame, y: 680 }, screen).bottom, 0);
-});
-
-test("a character hanging below the screen can't push a question off it", () => {
+test("a character hanging below the screen can't push the chat box off it", () => {
   // Frames can run off the bottom for a moment, if the screen shrinks before they're clamped.
-  assert.equal(questionPlacement({ ...frame, y: 900 }, screen).bottom, 0);
+  const { y } = chatPosition({ ...frame, y: 900 }, box, screen);
+  assert.equal(y, screen.height - box.height);
 });
 
-test("a small character at the top still leaves a question room to grow upward", () => {
-  // A question is anchored by its bottom edge, so lining up with this one would lose its top.
-  const small = { x: 0, y: 0, width: 75, height: 100 };
-  assert.equal(questionPlacement(small, screen).bottom, 920);
-  // The character's edge is used again as soon as it's low enough.
-  assert.equal(questionPlacement({ ...small, y: 60 }, screen).bottom, 920);
-  assert.equal(questionPlacement({ ...small, y: 61 }, screen).bottom, 919);
-});
-
-test("a screen too short for a question keeps it on the bottom edge", () => {
-  const short = { width: 1920, height: 100 };
-  const small = { x: 0, y: 0, width: 75, height: 100 };
-  assert.equal(questionPlacement(small, short).bottom, 0);
-});
-
-test("the default character gets a question to its right, level with it", () => {
-  assert.deepEqual(questionPlacement(defaultAvatarFrame(screen), screen), {
-    left: 186,
-    bottom: 24,
+test("the default character gets the chat box to its right, at its feet", () => {
+  assert.deepEqual(chatPosition(defaultAvatarFrame(screen), box, screen), {
+    x: 182,
+    y: 1022,
   });
 });
 
-test("a question stays on screen, and off the character when it can, wherever that is", () => {
-  const questionWidth = 300;
-  const gap = 12;
+const overlaps = (
+  a: { x: number; y: number } & Size,
+  b: { x: number; y: number } & Size,
+): boolean =>
+  a.x < b.x + b.width &&
+  b.x < a.x + a.width &&
+  a.y < b.y + b.height &&
+  b.y < a.y + a.height;
+
+test("the chat stays on screen, and off the character and wiki tab when it can, wherever they are", () => {
+  const gap = 8;
   for (const size of [
     { width: 75, height: 100 },
     { width: 150, height: 200 },
@@ -155,28 +152,61 @@ test("a question stays on screen, and off the character when it can, wherever th
     for (let x = 0; x <= screen.width - size.width; x += 37) {
       for (let y = 0; y <= screen.height - size.height; y += 53) {
         const avatar = { ...size, x, y };
-        const { left, bottom } = questionPlacement(avatar, screen);
-        const label = JSON.stringify(avatar);
+        const tab = {
+          ...minimizedTabPosition(avatar, screen),
+          width: 180,
+          height: 32,
+        };
+        for (const chat of [box, pill]) {
+          const placed = { ...chatPosition(avatar, chat, screen), ...chat };
+          const label = JSON.stringify({ avatar, chat });
 
-        assert.ok(left >= 0, label);
-        assert.ok(left + questionWidth <= screen.width, label);
-        assert.ok(bottom >= 0, label);
-        assert.ok(screen.height - bottom >= 160, label);
+          assert.ok(placed.x >= 0 && placed.y >= 0, label);
+          assert.ok(placed.x + chat.width <= screen.width, label);
+          assert.ok(placed.y + chat.height <= screen.height, label);
 
-        const roomOnLeft = x >= questionWidth + gap;
-        const roomOnRight =
-          x + size.width + gap + questionWidth <= screen.width;
-        if (roomOnLeft || roomOnRight) {
-          const overlaps = left < x + size.width && x < left + questionWidth;
-          assert.equal(overlaps, false, label);
+          const roomOnRight = x + size.width + gap + box.width <= screen.width;
+          const roomOnLeft = x >= chat.width + gap;
+          if (roomOnRight || roomOnLeft) {
+            assert.equal(overlaps(placed, avatar), false, label);
+            assert.equal(overlaps(placed, tab), false, label);
+          }
         }
       }
     }
   }
 });
 
+/** The width and height companion.css gives a class, from every rule that names it. */
+function cssSize(className: string): Size {
+  const css = readFileSync(
+    new URL("../companion.css", import.meta.url),
+    "utf-8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "");
+  const declarations = css.split("}").flatMap((rule) => {
+    const [selectors = "", body = ""] = rule.split("{");
+    const names = selectors.split(",").map((selector) => selector.trim());
+    return names.includes(`.${className}`)
+      ? body.split(";").map((declaration) => declaration.trim())
+      : [];
+  });
+  // startsWith skips min-width and max-width.
+  const px = (property: string): number =>
+    Number(
+      declarations
+        .find((declaration) => declaration.startsWith(`${property}:`))
+        ?.match(/(\d+)px/)?.[1],
+    );
+  return { width: px("width"), height: px("height") };
+}
+
+test("the chat sizes used for placement match the CSS", () => {
+  assert.deepEqual(cssSize("chat-box"), CHAT_BOX_SIZE);
+  assert.deepEqual(cssSize("chat-pill"), CHAT_PILL_SIZE);
+});
+
 test("settings open tall enough for every row, but never past the screen", () => {
-  assert.equal(defaultSettingsFrame(screen).height, 290);
+  assert.equal(defaultSettingsFrame(screen).height, 346);
   const short = { width: 800, height: 200 };
   const frame = defaultSettingsFrame(short);
   assert.ok(frame.y + frame.height <= short.height);

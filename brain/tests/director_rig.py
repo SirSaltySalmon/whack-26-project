@@ -86,11 +86,17 @@ class Rig:
         barks: BarkBank | None = None,
         voice_id: str | None = None,
         advice_gap_s: float = 0.0,  # Off unless a test is about advice
+        advice_quiet_s: float = 20.0,
+        advice_first_s: float = 90.0,
+        advice_after_learning_s: float = 15.0,
     ) -> None:
         self.bus = EventBus()
         self.voice = voice or FakeVoice()
         self.overlay = FakeOverlay()
         self.spoken: list[str] = []
+        # The director's clock reads the latest published event's time, so a line it says lands
+        # on the same timeline as the events a test publishes.
+        self.now = time.monotonic()
         self.director = Director(
             self.bus,
             self.voice,
@@ -102,14 +108,18 @@ class Rig:
             tools=ToolRegistry(tools),
             personalities=BOOK,
             take_question=memory.take_question if memory else None,
-            send=self.overlay.send,
+            release_question=memory.release_question if memory else None,
             question_gap_s=gap_s,
             question_quiet_s=quiet_s,
             advice_gap_s=advice_gap_s,
+            advice_quiet_s=advice_quiet_s,
+            advice_first_s=advice_first_s,
+            advice_after_learning_s=advice_after_learning_s,
             page_excerpt=page_excerpt,
             barks=barks,
             voice_id=lambda: voice_id,
             bark_events=bark_events or {},
+            clock=lambda: self.now,
         )
 
     async def _on_spoken(self, text: str) -> None:
@@ -131,6 +141,7 @@ class Rig:
             await settle()
 
     async def publish(self, event: Event) -> None:
+        self.now = event.ts
         self.bus.publish(event)
         await settle()
 

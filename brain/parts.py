@@ -13,6 +13,7 @@ from brain.control import ControlLink
 from brain.director.personalities import PersonalityBook
 from brain.events import EventBus
 from brain.learner.progress import ProgressScout
+from brain.learner.questions import planned_progress_question
 from brain.llm.base import LLMUnavailableError
 from brain.llm.factory import LLMFactory
 from brain.llm.gemini import GeminiClient
@@ -77,6 +78,7 @@ def make_progress_scout(
     buffer: RingBuffer,
     link: OverlayLink,
     memory: MemoryService,
+    database: Database,
 ) -> ProgressScout | None:
     try:
         vision = factory.vision()
@@ -94,6 +96,8 @@ def make_progress_scout(
         max_calls=settings.progress_max_vision_calls,
         retry_gap_s=settings.progress_retry_gap_s,
         recheck_s=settings.progress_recheck_s,
+        # The game's own planned question beats one drafted from a single frame.
+        planned_question=lambda: planned_progress_question(database, settings.game_title),
     )
 
 

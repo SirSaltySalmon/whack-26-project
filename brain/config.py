@@ -98,9 +98,20 @@ class Settings(BaseSettings):
     # The question budget, so asking the player doesn't turn into nagging.
     question_gap_s: float = 90.0
     question_quiet_s: float = 20.0
+    # An asked question nobody answers is dropped for good: after this long with no reply started,
+    # or after this many player turns that don't answer it. Typed replies get longer.
+    question_answer_timeout_s: float = 20.0
+    question_typed_timeout_s: float = 45.0
+    question_max_turns: int = 2
+    # Game-specific questions drafted once per game from the brief, then asked when unknown.
+    planned_questions_max: int = 6
     # Unasked-for tips on what to do next, only with hints on. 0 turns them off.
-    advice_gap_s: float = 300.0
-    advice_quiet_s: float = 30.0
+    advice_gap_s: float = 180.0
+    advice_quiet_s: float = 20.0
+    # The first tip comes sooner than the gap, and sooner again once the partner learns where the
+    # player is up to.
+    advice_first_s: float = 90.0
+    advice_after_learning_s: float = 15.0
 
     # Names what memory is filed under. It's data, so the brain has no game-specific logic. Unset,
     # the deep model names the game from its window once, and games_path remembers it per app.

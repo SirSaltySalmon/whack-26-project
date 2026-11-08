@@ -1,8 +1,10 @@
-"""What the partner can do during a player turn: look closer, point, look things up, ask, think.
+"""What the partner can do during a player turn: look closer, point, look things up, ask, think,
+and set its memory straight.
 
-These only run on turns the player started, so nothing here can open a page or call vision by
-itself. Everything a tool returns goes back to the model labelled as data, because it can quote the
-screen, a wiki or a website.
+These run on turns the player started, so nothing here can open a page or call vision by itself.
+The one exception is a tip, which may point_at once (brain/director/turns.py). Everything a tool
+returns goes back to the model labelled as data, because it can quote the screen, a wiki or a
+website.
 """
 
 import asyncio
@@ -12,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from brain.agent.memory_tools import PlayerMemory, memory_tools
 from brain.agent.schemas import (
     DEEP_SYSTEM,
     LOOK_PROMPT,
@@ -58,7 +61,7 @@ class Overlay(Protocol):
     async def send(self, message: BrainMessage) -> None: ...
 
 
-class Unknowns(Protocol):
+class AgentMemory(PlayerMemory, Protocol):
     async def wonder(self, subject: str, attribute: str, text: str) -> object | None: ...
 
 
@@ -77,7 +80,7 @@ class AgentTools:
         overlay: Overlay,
         vision: Callable[[], VisionLLM],
         deep: Callable[[], TextLLM],
-        memory: Unknowns,
+        memory: AgentMemory,
         context: Callable[[str], Awaitable[str]],
         limits: AgentLimits,
         *,
@@ -113,7 +116,9 @@ class AgentTools:
                 Tool(
                     "point_at",
                     "Fly the pointer beside something on screen. Use when the player asks where "
-                    "something is or to be shown it.",
+                    "something is or to be shown it, or when you suggest something to do or "
+                    "somewhere to go that's likely on screen: a crafting station, an NPC, an item "
+                    "in the hotbar or inventory, ore, a door or an enemy.",
                     PointInput,
                     self._point_at,
                     VISION_TIMEOUT_S,
@@ -148,6 +153,7 @@ class AgentTools:
                     self._think_hard,
                     DEEP_TIMEOUT_S,
                 ),
+                *memory_tools(self._memory),
             ]
         )
 

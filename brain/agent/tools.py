@@ -7,7 +7,7 @@ an MCP server needs. Exposing these over MCP later only takes an adapter around 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -57,6 +57,21 @@ class ToolRegistry:
     def including(self, *tools: Tool) -> "ToolRegistry":
         return ToolRegistry([*self._tools.values(), *tools])
 
+    def only(self, *names: str) -> "ToolRegistry":
+        """Just these tools, for a turn the player didn't start, which mustn't get the rest."""
+        return ToolRegistry(tool for name, tool in self._tools.items() if name in names)
+
+    def once(self) -> "ToolRegistry":
+        """Each tool runs at most once, which bounds what an unasked-for turn can spend.
+
+        Call it per turn: the count lives in the registry it returns.
+        """
+        return ToolRegistry(_once(tool) for tool in self._tools.values())
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(self._tools)
+
     async def run(self, call: ToolCall, turn: TurnContext) -> str:
         """Always returns text. A failed tool is something the model can tell the player about."""
         tool = self._tools.get(call.name)
@@ -81,3 +96,18 @@ class ToolRegistry:
         except Exception:
             log.exception("Tool %s failed", call.name)
             return f"{call.name} failed."
+
+
+def _once(tool: Tool) -> Tool:
+    used = False
+
+    async def handler(arguments: Any, turn: TurnContext) -> str:
+        nonlocal used
+        # Set before awaiting, so two calls in one model step can't both get through.
+        if used:
+            log.info("Tool %s already ran this turn; not running it again", tool.name)
+            return f"{tool.name} already ran, so reply with what you have."
+        used = True
+        return await tool.handler(arguments, turn)
+
+    return replace(tool, handler=handler)

@@ -1,4 +1,7 @@
-"""What the director says besides plain replies: questions, barks, and how settings shape it."""
+"""What the director says besides plain replies: barks, and how settings shape it.
+
+Questions are in test_director_questions.py, and tips in test_director_advice.py.
+"""
 
 import asyncio
 from pathlib import Path
@@ -11,7 +14,6 @@ from brain.director.personalities import Personality, PersonalityBook
 from brain.director.talker import HINTS_OFF, HINTS_ON
 from brain.events import (
     GameEvent,
-    OverlayConnected,
     PlayerSpeech,
     PlayerStartedSpeaking,
     SettingsChanged,
@@ -20,74 +22,14 @@ from brain.llm.base import ToolCall, ToolStep
 from brain.tests.director_rig import DONE, LOOKING, TONE, Rig, Stuck, settle, until
 from brain.tests.fakes import (
     FakeBarkSynth,
-    FakeMemory,
     FakeTextLLM,
     FakeVoice,
     ScriptedToolLLM,
 )
 from brain.voice.barks import BarkBank
-from shared.protocol.messages import QuestionAsk
 from shared.protocol.messages import Settings as OverlaySettings
 
-QUESTION = QuestionAsk(question_id="q1", text="Where's your base?", options=["East", "West"])
 BARKS = {"danger_started": "danger"}
-
-
-async def test_a_question_is_shown_and_spoken() -> None:
-    memory = FakeMemory([QUESTION])
-    rig = Rig(memory=memory)
-    async with rig.running():
-        await rig.bring_up_a_question()
-    assert rig.overlay.sent == [QUESTION]
-    assert rig.voice.said == ["Brain connected.", QUESTION.text]
-    assert rig.spoken == [QUESTION.text]
-    assert memory.questions_taken == 1
-
-
-async def test_no_open_question_stays_quiet() -> None:
-    memory = FakeMemory([])
-    rig = Rig(memory=memory)
-    async with rig.running():
-        await rig.bring_up_a_question()
-    assert memory.questions_taken == 1  # It did ask memory, and memory had nothing.
-    assert rig.overlay.sent == []
-    assert rig.voice.said == ["Brain connected."]
-    assert rig.spoken == []
-
-
-async def test_a_question_is_still_shown_when_the_voice_drops_it() -> None:
-    # take_question has already marked it asked, so hiding it would lose it.
-    rig = Rig(voice=FakeVoice(accepts=False), memory=FakeMemory([QUESTION]))
-    async with rig.running():
-        await rig.bring_up_a_question()
-    assert rig.overlay.sent == [QUESTION]
-    assert rig.spoken == []
-
-
-async def test_with_nowhere_to_get_questions_it_stays_quiet(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    rig = Rig()
-    async with rig.running():
-        await rig.bring_up_a_question()
-    assert rig.overlay.sent == []
-    assert rig.voice.said == ["Brain connected."]
-    assert "Director action failed" not in caplog.text
-
-
-async def test_the_directors_own_ticker_brings_up_questions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("brain.director.director.TICK_INTERVAL_S", 0.001)
-    # With no gap between questions, a tick that lands on the greeting only delays the next try.
-    rig = Rig(memory=FakeMemory([QUESTION]), quiet_s=0.0, gap_s=0.0)
-    async with rig.running():
-        await rig.publish(OverlayConnected(display_scale=1.0))
-        for _ in range(200):
-            if rig.overlay.sent:
-                break
-            await asyncio.sleep(0.001)
-    assert rig.overlay.sent == [QUESTION]
 
 
 async def test_a_bark_with_no_bank_yet_falls_back_to_the_talker() -> None:

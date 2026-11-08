@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class EchoGate(FrameProcessor):
-    """Swaps mic audio for silence while the partner's voice may be in the room.
+    """Swaps mic audio for silence while the mic is off, or the partner's voice may be in the room.
 
     Silence rather than dropped frames, so Flux keeps a continuous stream and its timing holds.
     """
@@ -33,6 +33,7 @@ class EchoGate(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
+            await self._voice.check_mic()
             if self._voice.mic_muted():
                 frame = InputAudioRawFrame(
                     audio=bytes(len(frame.audio)),

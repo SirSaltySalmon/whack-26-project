@@ -13,8 +13,9 @@ from brain.memory.context import (
     fact_from_row,
     format_fact,
 )
+from brain.memory.fact_records import to_question
 from brain.memory.fts import to_match_query
-from brain.memory.models import Speaker, Turn
+from brain.memory.models import Question, Speaker, Turn
 
 log = logging.getLogger(__name__)
 
@@ -80,8 +81,10 @@ def gather_context(
     live_state: Mapping[str, str],
     query: str | None = None,
     limits: ContextLimits = DEFAULT_LIMITS,
+    asked_id: int | None = None,
 ) -> ContextInputs:
-    """`conn` must use `sqlite3.Row`, as `brain.memory.db.connect` sets up."""
+    """`conn` must use `sqlite3.Row`, as `brain.memory.db.connect` sets up. `asked_id` is the
+    question just asked and still waiting for an answer."""
     profile = conn.execute("SELECT brief FROM profile WHERE game = ?", (game,)).fetchone()
     note = conn.execute(
         "SELECT id, body FROM session_notes WHERE session_id = ?"
@@ -114,11 +117,18 @@ def gather_context(
             log.exception("Recall failed for session %s", session_id)
 
     # Newest first: the most recent gap is the one most likely to be about what's happening now.
+    # Only ones not yet asked: the one being asked shows under ASKED, and the rest were let go.
     unsure = conn.execute(
-        "SELECT text FROM questions WHERE status = 'open' AND (game = ? OR game IS NULL)"
-        " ORDER BY id DESC LIMIT ?",
+        "SELECT text FROM questions WHERE status = 'open' AND asked_at IS NULL"
+        " AND (game = ? OR game IS NULL) ORDER BY id DESC LIMIT ?",
         (game, limits.max_unsure),
     ).fetchall()
+    asked: Question | None = None
+    if asked_id is not None:
+        row = conn.execute(
+            "SELECT * FROM questions WHERE id = ? AND status = 'open'", (asked_id,)
+        ).fetchone()
+        asked = to_question(row) if row is not None else None
 
     return ContextInputs(
         game=game,
@@ -130,4 +140,5 @@ def gather_context(
         unsure=[row["text"] for row in unsure],
         recalled=recalled,
         turns=_recent_turns(conn, session_id, limits.max_turns),
+        asked=asked,
     )

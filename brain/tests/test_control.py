@@ -131,7 +131,12 @@ def test_context_preview_shows_what_the_talker_gets() -> None:
 def test_settings_from_the_control_center_reach_the_bus_and_come_back() -> None:
     rig = make()
     events = rig.bus.subscribe()
-    settings = {"proactive": False, "personality": "supportive", "voice_id": "v1"}
+    settings = {
+        "proactive": False,
+        "personality": "supportive",
+        "voice_id": "v1",
+        "mic_enabled": False,
+    }
     with rig.client.websocket_connect("/control") as socket:
         send(socket, {"type": "settings.update", "settings": settings})
         reply = socket.receive_json()

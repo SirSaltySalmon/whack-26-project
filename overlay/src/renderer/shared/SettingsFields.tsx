@@ -45,6 +45,7 @@ export function SettingsFields({
 }: SettingsFieldsProps) {
   const { settings, personalities, voices } = choices;
   const proactive = settings.proactive ?? true;
+  const micEnabled = settings.mic_enabled ?? true;
   return (
     <>
       <h3 className="settings-heading">Hints</h3>
@@ -58,6 +59,20 @@ export function SettingsFields({
           label="Just chat"
           on={!proactive}
           onClick={() => onChange({ ...settings, proactive: false })}
+        />
+      </div>
+      {/* Off, the partner still watches and talks; the player answers in the overlay's text box. */}
+      <h3 className="settings-heading">Microphone</h3>
+      <div className="settings-row">
+        <Choice
+          label="Listen"
+          on={micEnabled}
+          onClick={() => onChange({ ...settings, mic_enabled: true })}
+        />
+        <Choice
+          label="Type instead"
+          on={!micEnabled}
+          onClick={() => onChange({ ...settings, mic_enabled: false })}
         />
       </div>
       <h3 className="settings-heading">Personality</h3>
