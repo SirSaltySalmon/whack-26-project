@@ -185,7 +185,7 @@ class OverlayLink:
                     QuestionAnswered(question_id=message.question_id, answer=message.answer)
                 )
             case SettingsUpdate():
-                await self.apply_settings(message.settings)
+                await self.apply_settings(message.settings, "overlay")
             case PlayerText():
                 await self._typed_turn(message.text)
             case PageContent():
@@ -212,7 +212,7 @@ class OverlayLink:
         await asyncio.sleep(0)
         self._bus.publish(PlayerSpeech(transcript=transcript))
 
-    async def apply_settings(self, settings: Settings) -> None:
+    async def apply_settings(self, settings: Settings, source: str = "overlay") -> None:
         """From the overlay's settings card or the Control Center. Both hear the new state."""
         # The Control Center sends its saved choices on connect, and never saves these.
         kept = {
@@ -222,6 +222,11 @@ class OverlayLink:
         }
         if kept:
             settings = settings.model_copy(update=kept)
+        # Each change and its source, so a setting that seems to flip by itself can be traced.
+        before, after = self.settings.model_dump(), settings.model_dump()
+        changed = [f"{k}={str(after[k])[:60]}" for k in after if after[k] != before.get(k)]
+        if changed:
+            log.info("Settings from the %s: %s", source, ", ".join(changed))
         self.settings = settings
         await self.send(self.settings_state())
         self._bus.publish(SettingsChanged(settings=settings))

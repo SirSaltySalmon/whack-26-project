@@ -70,6 +70,7 @@ export type QuestionQuietS = number;
 export type Paused = boolean;
 export type Personality = string;
 export type Proactive = boolean;
+export type PushToTalk = boolean;
 export type VisionEnabled = boolean;
 export type VoiceId = string | null;
 export type VoiceStyle = "expressive" | "classic";
@@ -338,6 +339,7 @@ export interface Settings {
   paused?: Paused;
   personality?: Personality;
   proactive?: Proactive;
+  push_to_talk?: PushToTalk;
   vision_enabled?: VisionEnabled;
   voice_id?: VoiceId;
   voice_style?: VoiceStyle;

@@ -169,7 +169,7 @@ class ControlLink:
                     )
                 )
             case SettingsUpdate():
-                await self._overlay.apply_settings(message.settings)
+                await self._overlay.apply_settings(message.settings, "Control Center")
             case VoicePreview():
                 self._bus.publish(VoicePreviewRequested(text=message.text))
             case ControlShutdown():

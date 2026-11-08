@@ -1779,6 +1779,11 @@
           "title": "Proactive",
           "type": "boolean"
         },
+        "push_to_talk": {
+          "default": false,
+          "title": "Push To Talk",
+          "type": "boolean"
+        },
         "vision_enabled": {
           "default": true,
           "title": "Vision Enabled",

@@ -144,7 +144,7 @@ Keep these in a gitignored `.env`, and never hardcode keys.
 - `GAME_TITLE`: what memory, the learned profile and the wiki search are filed under. Unset, the deep model names the game from its app and window title once per app and `data/games.json` remembers it. If it's blank, every game shares an empty title.
 - Optional for testing: `DISABLE`, parts to turn off, such as `observer,tts` (see `brain/switches.py`). A blank key, such as `ANTHROPIC_API_KEY=`, counts as unset.
 - Optional: `EXA_API_KEY`, `CARTESIA_API_KEY`, `VOICE_OPTIONS` (JSON list of `{"name", "id"}`, the voices offered in settings)
-- Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX`, `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
+- Optional voice tuning: `STT_KEYTERMS` (JSON list), `VOICE_HALF_DUPLEX` (on from the start; the player's live "no headphones" setting does the same), `PUSH_TO_TALK_KEY` (held in push-to-talk mode: a key name such as `` ` `` (default), `f8` or `mouse4`; Windows only), `MIC_DEVICE_INDEX`, `SPEAKER_DEVICE_INDEX`
 
 ## Gotchas
 - **dxcam on the main dev machine:** `dxcam.create()` fails with `COMError -2005270524` (feature level not supported), so capture falls back to mss. Check this on the demo machine.
