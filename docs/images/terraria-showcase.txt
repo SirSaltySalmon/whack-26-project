@@ -1,0 +1,4 @@
+Manually scripted UI demonstration over a supplied Terraria screenshot.
+Rendered by the real overlay using its WebSocket protocol. Boxes and dialogue are authored, not live model output.
+World: Home Sweet Journey's Rest by TelBuilds.
+https://www.curseforge.com/terraria/maps/home-sweet-journeys-rest

@@ -1,0 +1,3 @@
+Manually scripted UI demonstration over a supplied gameplay screenshot.
+Rendered by the real overlay using its WebSocket protocol. Boxes and dialogue are authored, not live model output.
+HUD readings, attention, danger and voice-input text are manually supplied examples, not measurements.
