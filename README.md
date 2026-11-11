@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>An AI companion that watches your game, talks with you, and remembers your adventure.</strong><br>
-  Game-agnostic by design, with no game-specific logic or integrations.
+  Game-agnostic by design, with no game-specific logic or integrations. Only ~1s of latency and $0.02 / min.
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@ Purrtner sits alongside your game as a small desktop companion. Ask about someth
 
 We built it as a four-person hackathon project around a simple idea: a good gaming companion needs to understand both **what is happening now** and **what matters to this player**.
 
-Our hackathon testing covered **Terraria, Minecraft and Slay the Spire**. Game knowledge and learned HUD layouts are stored as data, so supporting another game does not require writing a game-specific integration. Accuracy depends on what is visible and how well the models interpret it.
+Our hackathon testing covered **Terraria, Minecraft, and Slay the Spire**. Game knowledge and learned HUD layouts are stored as data, so supporting another game does not require writing a game-specific integration. Accuracy depends on what is visible and how well the models interpret it.
 
 | Capability | What the player gets |
 | --- | --- |
@@ -28,11 +28,11 @@ Our hackathon testing covered **Terraria, Minecraft and Slay the Spire**. Game k
 | **Memory with provenance** | Player preferences and playthrough facts with sources, confidence and correction history. |
 | **On-screen pointing** | A pointer that flies to an object instead of leaving you guessing which one it means. |
 | **Wiki research** | Relevant pages in a movable, resizable in-game wiki window. |
-| **A companion you can tune** | Personalities, voices, avatars, visual themes and adjustable pacing for proactive comments. |
+| **A companion you can tune** | Personalities, voices, avatars, visual themes, and adjustable pacing for proactive comments. |
 
 
 ### Watching the live gameplay
-The debug view exposes the information behind a response: object boxes, a learned health region, the last voice input, the director's decision and the current attention level. Attention increases during danger and settles back down in quieter moments.
+The debug view exposes the information behind a response: object boxes, a learned health region, the last voice input, the director's decision, and the current attention level. Attention increases during danger and settles back down in quieter moments.
 
 ![Scripted Terraria danger scene with zombie outlines, low-health HUD reading, high attention, voice-input debug panel and an escape warning](docs/images/terraria-danger.png)
 
@@ -43,21 +43,21 @@ A player can ask which enchantment would help against a mob on screen. Purrtner 
 
 ### Remembering your playthrough
 
-Memory covers your goals, preferences and progress. Each fact keeps its source: **player**, **observed** or **wiki** along with confidence and a validity window. Player statements take priority; corrections close the previous fact rather than silently erasing it. Uncertain or conflicting information can become a question for the player.
+Memory covers your goals, preferences, and progress. Each fact keeps its source: **player**, **observed**, or **wiki**, along with confidence and a validity window. Player statements take priority; corrections close the previous fact rather than silently erasing it. Uncertain or conflicting information can become a question for the player.
 
-The Control Center lets you inspect facts, edit or forget them, review session notes and see the exact context a reply would receive. Recall supports keyword search and optional local semantic search.
+The Control Center lets you inspect facts, edit or forget them, review session notes, and see the exact context a reply would receive. Recall supports keyword search and optional local semantic search.
 
 ![Purrtner Memory dashboard showing source labels, confidence, a corrected base location and an assembled recall preview](docs/images/dashboard-memory.png)
 ### Make it your Purrtner
 
-Choose a personality, voice and avatar; switch between hints and conversation; and adjust how often the companion speaks up. Uploads support background removal, and the avatar can be moved and resized over the game.
+Choose a personality, voice, and avatar; switch between hints and conversation; and adjust how often the companion speaks up. Uploads support background removal, and the avatar can be moved and resized over the game.
 
 ![Avatar picker with the built-in cat, custom uploads and background-removal controls](docs/images/dashboard-avatars.png)
 
 <details>
 <summary><strong>Explore the Control Center</strong></summary>
 
-The desktop dashboard brings together agent settings, pacing, API keys, memory, voices, avatars, latency and logs. You can browse saved memory while the partner is stopped.
+The desktop dashboard brings together agent settings, pacing, API keys, memory, voices, avatars, latency, and logs. You can browse saved memory while the partner is stopped.
 
 ![Control Center agent settings, including personality, microphone, memory search and live or recorded-session launch modes](docs/images/dashboard-agent.png)
 
@@ -67,7 +67,7 @@ The desktop dashboard brings together agent settings, pacing, API keys, memory, 
 
 ## How it works
 
-Two local processes share a typed WebSocket contract: a **Python brain** handles perception, conversation and memory, while an **Electron + React overlay** handles everything the player sees.
+Two local processes share a typed WebSocket contract: a **Python brain** handles perception, conversation, and memory, while an **Electron + React overlay** handles everything the player sees.
 
 ```mermaid
 flowchart LR
@@ -86,14 +86,15 @@ flowchart LR
 
 ### Engineering choices
 
-- **Control when to speak.** A deterministic director applies priorities, cooldowns and speech budgets. The language model generates the response; the director schedules it and handles interruptions.
-- **Use attention where it helps.** A rolling frame buffer supports close looks and looking back. Vision reports run at an adaptive cadence, while learned HUD readers can process regions locally. Consecutive observations must agree before a report is accepted.
+- **Control when to speak.** A deterministic director applies priorities, cooldowns, and speech budgets. The language model generates the response; the director schedules it and handles interruptions.
+- **Use attention where it helps.** Vision adaptively cascades framerate and resolution, with a rolling frame buffer that supports looking closer and looking back. Learned HUD readers can process regions locally to optimize data reads. Consecutive observations must agree before a report is accepted.
 - **Keep memory useful over time.** SQLite stores facts and Markdown session notes, with FTS5 search and optional local vector recall. Replies receive a small assembled context rather than the entire conversation history.
-- **Avoid visual feedback loops.** The overlay reports its element rectangles so capture can mask subtitles, cards and other UI before perception. The pointer sits beside its target to keep the target visible.
-- **Make failures reproducible.** Sessions can record frames, events and overlay messages for replay. Shared fakes let automated checks run without a game, microphone or paid API calls.
-- **Keep provider choices replaceable.** Model access lives behind one factory with per-model rate limits. Voice, capture and research providers have their own interfaces.
+- **Avoid visual feedback loops.** The overlay reports its element rectangles so capture can mask subtitles, cards, and other UI before perception. The pointer sits beside its target to keep the target visible.
+- **Make failures reproducible.** Sessions can record frames, events, and overlay messages for replay. Shared fakes let automated checks run without a game, microphone, or paid API calls.
+- **Keep provider choices replaceable.** Model access lives behind one factory with per-model rate limits. Voice, capture, and research providers have their own interfaces.
 
-During our demo usage, running costs were roughly **US$0.02 per minute**, and we spent **under £5 during development**. These are approximate figures from our team's use; model, voice and attention settings affect running costs.
+Practical use of AI ingesting video feeds for long gaming sessions requires incredible token efficiency. During our demo usage, running costs were roughly **US$0.02 per minute**, and we spent **under £5 during development**. These are approximate figures from our team's use; model, voice, and attention settings affect running costs.
+In addition, real-time support and natural conversations value speed above most. We optimized our pipeline for latency by restricting requests, and averaged only **1 second per response**.
 
 | Layer | Technologies |
 | --- | --- |
@@ -132,7 +133,7 @@ python scripts/overlay_demo.py
 npm.cmd --prefix overlay run dev
 ```
 
-The demo scripts the overlay's avatar, subtitles, pointer, cards and memory toasts. It does not run a live AI companion.
+The demo scripts the overlay's avatar, subtitles, pointer, cards, and memory toasts. It does not run a live AI companion.
 
 **Play with the live companion:** stop the demo server, configure your keys in `.env` or the Control Center, then choose **Live game → Start partner** and switch to a windowed or borderless game.
 
@@ -145,7 +146,7 @@ The demo scripts the overlay's avatar, subtitles, pointer, cards and memory toas
 
 Use headphones for voice interaction. Capture is limited to the focused game window, but live use sends game images and conversation data to the configured cloud providers. Replay recordings remain local and are excluded from Git.
 
-See the [full setup guide](docs/SETUP.md) for memory management, recording, replay, configuration and troubleshooting.
+See the [full setup guide](docs/SETUP.md) for memory management, recording, replay, configuration, and troubleshooting.
 
 ## Development
 
@@ -155,7 +156,7 @@ npm.cmd --prefix overlay test
 npm.cmd --prefix overlay run typecheck
 ```
 
-The checks cover director rules, memory authority and conflicts, coordinate conversion, overlay masking, replay and UI behavior. The commands above do not require live services.
+The checks cover director rules, memory authority and conflicts, coordinate conversion, overlay masking, replay, and UI behavior. The commands above do not require live services.
 
 | Directory | Responsibility |
 | --- | --- |
@@ -168,14 +169,14 @@ After changing the protocol, regenerate the TypeScript types with `npm.cmd --pre
 
 ## Project notes
 
-Purrtner is a hackathon prototype. Longer playthroughs, more game genres and broader hardware testing are the next steps; long-term reliability over hundreds of hours is still to be evaluated. Highlights and an achievement gallery are future ideas, not current features.
+Purrtner is a hackathon prototype. Next steps include longer playthroughs, more game genres, and broader hardware testing; long-term reliability over hundreds of hours still needs evaluation. Highlights and an achievement gallery are future ideas, not current features.
 
 - [Devpost submission](https://devpost.com/software/purrtner)
 - [Setup and usage](docs/SETUP.md)
 - [Architecture](docs/ARCHITECTURE.md) · [Design decisions](docs/DECISIONS.md)
 - [Test plan](docs/TEST_PLAN.md) · [Remaining work](docs/REMAINING_WORK.md)
 
-The furnished Terraria showcase uses [Home Sweet Journey's Rest by TelBuilds](https://www.curseforge.com/terraria/maps/home-sweet-journeys-rest). The Minecraft wiki window displays the [Smite article](https://minecraft.wiki/w/Smite).
+The furnished Terraria showcase uses [Home Sweet Journey's Rest by TelBuilds](https://www.curseforge.com/terraria/maps/home-sweet-journeys-rest). The Minecraft Wiki window displays the [Smite article](https://minecraft.wiki/w/Smite).
 
 ## License
 
